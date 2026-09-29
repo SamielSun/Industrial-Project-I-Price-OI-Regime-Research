@@ -15,24 +15,32 @@
 
 ### 0.1 进度表 ⭐
 
-> **编号**：`Phase 1–5` = 项目阶段；`Step 0–6` = §3 的数据流；**`P1.N` = Phase 1 内的实现顺序**。
+> **命名约定**：
+> · **Phase 1–5** —— 项目阶段（导师 note 的分期）
+> · **Step 0–6** —— §3 的数据流顺序（数据从哪来、到哪去）
+> · **脚本按作用命名**，不用编号（`build_candidate_pool.py`，不是 `p1_1_*.py`）
+>
+> 下表的「脚本」列就是文档里引用该步骤时用的名字。
 
-| 实现步骤 | 对应 | 产出 | 状态 |
+| Step | 脚本 | 产出 | 状态 |
 |---|---|---|---|
-| **P1.0** | —（地基，先于 §3 数据流） | `config.py` + `lib/schema.py`（数据契约） | ✅ **已完成** |
-| **P1.1** | Step 0–2 | **候选池名单** —— 枚举归档 → 硬过滤 → 下月频 klines → 算 PIT 排名 | 🔄 **进行中** |
-| P1.2 | Step 3 | 精筛下载：候选池合约的日频 metrics + 月频 mark/index/funding | ⬜ 未开始 |
-| P1.3 | Step 4 | 第 2 层 4 张规范化表 | ⬜ 未开始 |
-| P1.4 | Step 5 | `features_1h`（19 列密集网格） | ⬜ 未开始 |
-| P1.5 | Step 6 | universe 表 + D1 全部产出物（缺失报告、数据字典、校验和） | ⬜ 未开始 |
+| — | `config.py` · `lib/schema.py` | 设计参数 + 数据契约（地基，先于数据流） | ✅ **已完成** |
+| 0–2 | **`build_candidate_pool.py`** | **候选池名单**（枚举归档 → 硬过滤 → 拉 klines → PIT 排名） | ✅ **已完成**（296 个合约） |
+| 3 | `fetch_market_data.py` ⚠️ | 候选池合约的日频 metrics + 月频 mark/index/funding | ⬜ 未开始 |
+| 4 | `build_layer2.py` ⚠️ | 第 2 层 4 张规范化表 | ⬜ 未开始 |
+| 5 | `build_features.py` ⚠️ | `features_1h`（19 列密集网格） | ⬜ 未开始 |
+| 6 | `build_universe.py` ⚠️ | universe 表 + D1 全部产出物（缺失报告、数据字典、校验和） | ⬜ 未开始 |
 
-**Phase 1 完成 = P1.0–P1.5 全部完成。**
+⚠️ **Step 3–6 的脚本名是暂定**，写到那一步时可改。
 
-⚠️ **最大的时间开销在 P1.2 的下载**（约 85 万次请求 / 10 GB / 十几小时），
-不是写代码的时间。P1.1 的 2–3 小时是为了**大幅削减 P1.2 的下载范围**。
+**Phase 1 完成 = 上表全部 ✅。**
 
-> **说明**：P1.0 在早期文档里被称作"步骤 0"（现已统一为 `P1.0`）。
-> 它没有对应的 Step —— 它是先于 §3 数据流的**地基**。
+⚠️ **最大的时间开销在 Step 3 的下载**（候选池 296 个合约，约 10 GB），
+不是写代码的时间。`build_candidate_pool.py` 的 4 分钟是为了**大幅削减 Step 3 的下载范围**。
+
+**关于进度表的实测数字**：`build_candidate_pool.py` 实跑结果是
+893 → 858（硬过滤）→ 831（有数据）→ **候选池 296**，耗时 238 秒。
+细节见 §16.0。
 
 ---
 
@@ -80,7 +88,7 @@ https://s3-ap-northeast-1.amazonaws.com/data.binance.vision
 `exchangeInfo` 只保留当前挂牌 + 近期退市（约 130 天的 `SETTLING`），更早的会被移除。
 
 > **若用 `exchangeInfo` 当合约清单，就制造了幸存者偏差** —— 正是 PIT 设计要避免的那个。
-> **P1.1 的合约清单必须来自归档枚举，不来自 `exchangeInfo`。**
+> **`build_candidate_pool.py` 的合约清单必须来自归档枚举，不来自 `exchangeInfo`。**
 
 ### 1.2 ⚠️ 归档独有合约中的非加密资产（须剔除）
 
@@ -288,10 +296,10 @@ buffer_L          = 0         # 不用排名缓冲带
 | 商品 | `CLUSDT`（原油）`COPPERUSDT`（铜） |
 | 加密相关但为股权 | `COINUSDT`（Coinbase 股票） |
 
-**判据来源**：P1.1 须先做一次**归档枚举**（§1.1），把"归档有、`exchangeInfo` 无"的
+**判据来源**：`build_candidate_pool.py` 先做一次**归档枚举**（§1.1），把"归档有、`exchangeInfo` 无"的
 那批合约列出并逐个分类。**这份名单要落进 `config.py`**，与 `stablecoin_bases` 并列。
 
-⚠️ **待实施时确认**：上面只是实测采样，**完整名单要在 P1.1 枚举后确认**。
+⚠️ **待确认**：上面只是实测采样，**完整名单要在枚举后逐个分类确认**。
 
 
 ### 5.2 为什么不用「覆盖率粗筛」
@@ -309,7 +317,7 @@ buffer_L          = 0         # 不用排名缓冲带
 
 ⚠️ **上表的 283 等数字是【基于残缺种子池（658 个）】的估算，已作废。**
 现在正确的种子池是**归档枚举出的 893 个**（§1.1），候选池必然更大。
-**所有行数/体积/耗时估算都须在 P1.1 实跑后整体重算。**
+**所有行数/体积/耗时估算都须整体重算**（`build_candidate_pool.py` 已实跑，见 §16.0 的实测值）。
 本节保留旧表仅作量级参考。
 
 ---
@@ -633,32 +641,72 @@ os.replace(tmp, path)          # 加锁取快照后再写
 
 ---
 
-## 10. 磁盘布局
+## 10. 文件夹结构（冻结）
+
+### 10.1 项目根目录
+
+**方案：代码平铺在根目录，数据在根 `data/`（共享）。**
+
+```
+Industrial Programme I/
+│
+├─ config.py                     设计参数 + validate_sample_end（零外部依赖）
+├─ build_candidate_pool.py       Step 0–2：选出候选池合约
+├─ fetch_market_data.py          Step 3：候选池合约的日频/月频数据   ⬜ 待写
+├─ build_layer2.py               Step 4：4 张规范化表                 ⬜ 待写
+├─ build_features.py             Step 5：features_1h                  ⬜ 待写
+├─ build_universe.py             Step 6：universe 表 + D1 产出物      ⬜ 待写
+│
+├─ lib/
+│   ├─ __init__.py
+│   └─ schema.py                 Schema 契约 + validate() + 65 项自测
+│
+├─ data/                         全部产出（见 §10.2）
+├─ outputs/                      图表与报告（Phase 3+ 才用）
+│
+├─ PHASE1_GUIDANCE.md            本文件（Phase 1 的唯一依据）
+├─ DATA_RECON_2026-09-28.md      Phase 1 的数据侦察实测报告
+├─ research_archive/             规划期材料（课程、提交、文献、脚本、插图）
+├─ .vscode/ · .gitattributes · .gitignore
+└─ .git/                         版本控制
+```
+
+**为什么平铺、不按阶段分文件夹**：
+所有阶段**共享同一个 `data/`** —— `features_1h` 是 Phase 2–5 的输入。
+若按阶段分文件夹，Phase 2 就要写 `../phase1_data/data/...`，跨目录引用很脆。
+平铺后所有脚本读同一个 `data/`，路径一致。
+
+**`config.py` 放根目录而非 `phase1_*`**：它装的是**研究设计参数**
+（K、窗口、闸阈值），**Phase 2–5 也要用**。放阶段文件夹会暗示它只属 Phase 1。
+
+### 10.2 `data/` 内部
 
 ```
 data/
 │
 ├─ 00_config/                         构建元信息
-│   ├─ sample_end.json                {"sample_end": "...", "config_hash": "..."}
-│   └─ manifest.parquet               增量下载的唯一依据
+│   ├─ sample_end.json                {sample_end, config_snapshot, run_at, 各阶段计数}
+│   └─ manifest.parquet               逐文件下载状态（断点续传的唯一依据）
 │
 ├─ 01_layer2/                         4 张规范化源表（小时粒度）
-│   ├─ klines_1h/year=YYYY/chunk=YYYY-MM.parquet
-│   ├─ mark_index_1h/year=YYYY/chunk=YYYY-MM.parquet
-│   ├─ oi_1h/year=YYYY/chunk=YYYY-MM.parquet
-│   └─ funding/year=YYYY/chunk=YYYY-MM.parquet
+│   ├─ klines_1h/year=YYYY/chunk=YYYY-MM.parquet      ⬜ Step 4
+│   ├─ mark_index_1h/year=YYYY/chunk=YYYY-MM.parquet  ⬜ Step 4
+│   ├─ oi_1h/year=YYYY/chunk=YYYY-MM.parquet          ⬜ Step 4
+│   └─ funding/year=YYYY/chunk=YYYY-MM.parquet        ⬜ Step 4
 │
 ├─ 02_features/
-│   └─ features_1h/year=YYYY/chunk=YYYY-MM.parquet
+│   └─ features_1h/year=YYYY/chunk=YYYY-MM.parquet    ⬜ Step 5
 │
 └─ 03_reference/                      分析与审计用的参考表
-    ├─ master.parquet                  一币一行（893）
-    ├─ universe_eligibility.parquet    一币一行（约 283）
-    ├─ universe_membership.parquet     (symbol, date)
-    └─ member_changes.parquet          进/出记录
+    ├─ candidate_pool.csv             ✅ 已产出（296 个合约）
+    ├─ master.parquet                 一币一行（893）              ⬜ Step 3
+    ├─ universe_eligibility.parquet   一币一行                     ⬜ Step 6
+    ├─ universe_membership.parquet    (symbol, date)               ⬜ Step 6
+    └─ member_changes.parquet         进/出记录                    ⬜ Step 6
 ```
 
-**不保留 RAW 归档**（`oi_5m` 全量、zip 镜像均不存）。**不需要抽样验证步骤。**
+**不保留 RAW 归档**（zip 镜像、`oi_5m` 全量均不存）。**不需要抽样验证步骤。**
+下载缓存是**临时的**，用完即清（见 §16.0）。
 
 **`universe_*` 放 `03_reference/`**：其粒度是**日**（`(symbol, date)`）与**合约**（`symbol`），
 与 `features_1h` 的**小时**粒度不同，不能混放。
@@ -788,71 +836,82 @@ data/
 
 ---
 
-## 16. 自动校验（P1.0 落地）✅
+## 16. 自动校验（`config.py` + `lib/schema.py`）✅
 
 > **编号约定**（避免与项目阶段混淆）：
 > · **Phase 1–5** —— 项目阶段（导师 note 的分期）
 > · **Step 0–6** —— §3 的数据流顺序（数据从哪来、到哪去）
 > · **P1.N** —— Phase 1 内部的**实现顺序**（先写哪块代码）。`P1` = Phase 1，`N` = 第几块。
 >
-> **P1.0（本节）= 地基：`config.py` + `lib/schema.py`**，先于 §3 那六步的第一个网络操作。
-> 后续 **P1.1 = 下载层**（Step 2 算候选池的前提），P1.2 起对应 §3 的各步。
+> **地基 = `config.py` + `lib/schema.py`**，先于 §3 那六步的第一个网络操作。
+> 后续脚本按作用命名，见 §0.1 进度表。
 
-### 16.0 P1.1 下载层设计（已完成 grilling）✅
+### 16.0 候选池环节设计（已完成 grilling + 实跑验证）✅
 
-**范围：只有 `klines`。**
+**脚本名**：`build_candidate_pool.py`（按作用命名，不用 `p1_1_` 编号）
+**范围**：只有 `klines`。合约清单来自**归档枚举**（§1.1），实测 **893 个 USDT 永续**。
 
-合约清单来自**归档枚举**（§1.1），实测 **893 个 USDT 永续**。
+理由：这一步的产出**只是一个排名**，排名只用 `quote_volume`。
+mark/index/funding 归 `fetch_market_data.py`（只对候选池合约）；**premium 永不下载**。
 
-| | 请求（893 × 57） | 体积 |
-|---|---|---|
-| **只 klines（选定）** | **50,901** | **约 1.93 GB** |
-| 五源全含（否决） | 254,505 | 约 5.4 GB |
+#### 逐级过滤（实测）
 
-理由：Step 2 的产出**只是一个排名**，排名只用 `quote_volume`。
-mark/index/funding 归 Step 3（只对候选池合约）；**premium 永不下载**。
+| 级 | 数量 |
+|---|---|
+| 归档里的 USDT 永续 | **893** |
+| 硬过滤后（闸 0/1/5） | **858** |
+| 窗口内有数据 | **831** |
+| 待下载文件 | **19,431** |
+| **候选池（K=50 并集）** | **296** |
+| ★ 未取得 | 26 |
 
-**代码形态**：单脚本 `p1_1_candidate_pool.py`，下载部分写成**独立函数** ——
-Step 3 真需要时再提取成模块（只有一个调用方时不预设抽象）。
+**耗时 238 秒（4 分钟）。** 实测约 122 文件/秒 —— 侦察阶段测得的
+7.9 文件/秒（HEAD 探测）**低估了约 15 倍**。
 
-**Step 2 的三个操作**：
+**下载量远小于估算**：`19,431 / 831 ≈ 23.4 个月/合约`，而窗口有 57 个月
+—— 说明多数合约是 2024–2025 才上市的，没有全程数据。
+**原估「50,901 个文件 / 1.93 GB / 2 小时」作废，以实测为准。**
+
+#### 三个操作
+
 1. **枚举归档**（§1.1）→ 全部存在过的合约
-2. 硬过滤（§5 的闸 0/1/5）→ 剔非 USDT 本位、名称怪象、稳定币、代币化股票
-3. 下月频 klines → **过草稿闸 A/B** → 算 PIT 排名 → 产出候选池
+2. **硬过滤**（§5 的闸 0/1/5）→ 剔非 USDT 本位、名称怪象、稳定币、代币化股票
+3. **拉月频 klines → 过草稿闸 → 算 PIT 排名 → 取各月前 K 的并集**
 
-**⚠️ P1.1 只能做两条草稿闸**（其余需要 OI 数据，归 P1.2/P1.5）：
+#### ⚠️ 这一步只能做两条草稿闸
+
+其余需要 OI 数据，归后面的步骤：
 
 | 草稿闸 | 对应 | 判据 | 取值 |
 |---|---|---|---|
 | **A** | §5 闸 2（历史不足） | 到该月初为止，窗口内已有 ≥ N 个月数据 | `DRAFT_MIN_PRIOR_MONTHS = 1`（≈30 天） |
 | **B** | §5 闸 4（不流动） | 上一个月有效小时数 ≥ 24×15 | `360` 小时 |
 
-**两者都【故意宽松】—— 宁可多留。** P1.1 是**粗筛**：过严会误杀合法样本；
-过宽的代价只是 P1.2 多下一批，而 P1.5 会用完整五条闸再筛一次。
+**两者都【故意宽松】—— 宁可多留。** 这是**粗筛**：过严会误杀合法样本；
+过宽的代价只是后面多下一批，而 `build_universe.py` 会用完整五条闸再筛一次。
 
-**闸 3（OI 可靠性）需要 metrics 数据，P1.1 时还没下 → 必须留到 P1.5。**
-因此 P1.1 的产出是**候选池的下界**，不是最终成员集。
+**闸 3（OI 可靠性）需要 metrics 数据，此时还没下 → 必须留到 `build_universe.py`。**
+因此本步产出是**候选池的下界**，不是最终成员集。
 
 **无前视**：草稿闸 A/B 都只用该月【之前】的数据（§7.2）。
 
-**Step 2 的产出** —— 只有两个文件：
+#### 产出 —— 只有两个文件
 
 | 文件 | 内容 |
 |---|---|
 | `data/03_reference/candidate_pool.csv` | 候选池名单（一列 `symbol`） |
-| `data/00_config/manifest.parquet` | 逐文件状态，供断点续传 |
+| `data/00_config/manifest.parquet` | 逐文件下载状态，供断点续传 |
 
-**不产出 `master.parquet`** —— 它是 D1 产出（§12-e），但在 P1.2 才需要；
-现在产出只会多一个用不上的文件。`master` 的枚举结果已由 `manifest` 承载。
+**不产出 `master.parquet`** —— 它是 D1 产出（§12-e），但在 `fetch_market_data.py` 才用得上。
 
-**代码形态**：单脚本 `p1_1_candidate_pool.py`，下载部分写成**独立函数** ——
-Step 3 真需要时再提取成模块（只有一个调用方时不预设抽象）。
+#### 可用月份来自 S3 列表
 
-**可用月份来自 S3 列表**（`data/futures/um/monthly/klines/{sym}/1h/`），
-一次请求拿到全部月份 → **不需要逐月探测存在性**，且 `master` 的起止窗口免费得到。
-实测 893 个合约的枚举约 **5 分钟**。
+`data/futures/um/monthly/klines/{sym}/1h/` 一次请求拿到全部月份
+→ **不需要逐月探测存在性**，且 `master` 的起止窗口免费得到。
+实测 893 个合约的枚举约 **1 分钟**。
 
-**失败处理：统一落盘到 `manifest.parquet`，不新建文件**
+#### 失败处理：统一落盘到 `manifest.parquet`，不新建文件
+
 
 | 状态 | 含义 | 是否算缺失 |
 |---|---|---|
@@ -889,7 +948,7 @@ manifest 有失败记录   → 按状态处理（TTL 到期则重探）
 **运行摘要必须打印**（这是缺失报告可信度的前提）：
 
 ```
-========== P1.1 下载摘要 ==========
+========== build_candidate_pool 运行摘要 ==========
 klines 月频    尝试 36,480
   成功         36,4xx
   确认缺失      x        ← HTTP 404
@@ -927,7 +986,7 @@ python config.py         # validate_sample_end 行为 + Config frozen
 python -m lib.schema     # 65 项：round-trip / validate 放行 / validate 捕获 / 结构自检
 ```
 
-**两者退出码 0 = 全过。** 它们就是 **P1.0** 完成判据的可跑载体。
+**两者退出码 0 = 全过。** 它们就是地基（`config.py`+`schema.py`）完成判据的可跑载体。
 
 ### 16.3 `validate()` 检查什么
 

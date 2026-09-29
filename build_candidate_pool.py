@@ -1,26 +1,35 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-P1.1 —— 候选池（Phase 1 · Step 0–2）
+build_candidate_pool —— 选出「后面要为哪些合约下数据」
+
+它在 Phase 1 中的位置：Step 0–2（见 PHASE1_GUIDANCE.md §3 与 §0.1 进度表）。
 
 做什么
 ------
-决定「后面要为哪些合约下数据」。三步：
+  1. 枚举归档（S3 列表接口）→ 全部存在过的 USDT 永续合约
+  2. 硬过滤 → 剔非 USDT 本位、名称怪象、稳定币、代币化股票/商品
+  3. 拉月频 klines（只为读 quote_volume）→ 过草稿闸 → 逐月算流动性排名
+     → 取各月前 K → 并集 = 候选池
 
-  Step 0  枚举归档（S3 列表接口）→ 全部存在过的 USDT 永续
-  Step 1  硬过滤 → 剔稳定币、代币化股票/商品、非 USDT 本位、无数据
-  Step 2  逐月算「中位小时报价成交额」排名 → 取各月前 K → 并集 = 候选池
+为什么需要它
+------------
+Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，
+约 85 万次请求 / 10 GB。不先筛一遍就会对全部合约下，绝大部分是浪费。
+本脚本用几分钟的轻量下载，换掉后面大部分浪费。
 
-产出（只有两个文件）
---------------------
+产出
+----
   data/03_reference/candidate_pool.csv     候选池名单（一列 symbol）
-  data/00_config/manifest.parquet          下载状态（失败 + 成功），供断点续传
+  data/00_config/manifest.parquet          逐文件下载状态，供断点续传
 
-不产出 master.parquet —— 那是 P1.2 的事（现在产出只会多一个用不上的文件）。
+不产出 master.parquet —— 它是 D1 产出（§12-e），但在 P1.2 才用得上。
 
 用法
 ----
-  python p1_1_candidate_pool.py --sample-end 2026-08-31
+  python build_candidate_pool.py --sample-end 2026-08-31
+  python build_candidate_pool.py --sample-end 2026-08-31 --skip-download   # 只用缓存重算
+  P11_DATA_ROOT=/tmp/x python build_candidate_pool.py ... --subset A B C    # 冒烟/核验
 
 依据：PHASE1_GUIDANCE.md §1.1（枚举）、§5（五条闸）、§7（排名）、§16.0（下载参数）
 """
@@ -348,7 +357,7 @@ def draft_gate_ok(liq: dict[str, float], bars: dict[str, int],
 # ============================================================================
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="P1.1 候选池")
+    ap = argparse.ArgumentParser(description="选出候选池合约名单")
     ap.add_argument("--sample-end", required=True,
                     help="样本截止日，必须为月末日（如 2026-08-31）")
     ap.add_argument("--skip-download", action="store_true",
@@ -363,7 +372,7 @@ def main() -> int:
     all_months = month_list(cfg.sample_start[:7], args.sample_end[:7])
     smoke = bool(args.subset)
     log("=" * 74)
-    log(f"P1.1 候选池   sample_end={args.sample_end}   "
+    log(f"build_candidate_pool   sample_end={args.sample_end}   "
         f"窗口 {all_months[0]} .. {all_months[-1]}（{len(all_months)} 个月）"
         + ("   [冒烟模式：subset]" if smoke else ""))
     log(f"数据根目录: {DATA}")
@@ -497,7 +506,7 @@ def main() -> int:
     n_ok = sum(1 for s, ym in todo if cache_path(s, ym).exists())
     n_missing = len(todo) - n_ok
     log("\n" + "=" * 74)
-    log("P1.1 运行摘要")
+    log("运行摘要")
     log("=" * 74)
     log(f"  归档合约（USDT 结尾）   {len(usdt):>8,}")
     log(f"  硬过滤后               {len(kept):>8,}")
@@ -517,4 +526,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except cfg_mod.ConfigViolation as e:
+        # 参数错误不该甩 traceback —— 打清楚原因，退出码 2
+        print(f"\n参数校验失败：\n{e}", file=sys.stderr)
+        raise SystemExit(2)
