@@ -78,10 +78,32 @@ https://s3-ap-northeast-1.amazonaws.com/data.binance.vision
 **路径模板**
 
 ```
-月频  /data/futures/um/monthly/{source}/{SYM}/{SYM}-{interval}-{YYYY-MM}.zip
-日频  /data/futures/um/daily/{source}/{SYM}/{SYM}-{interval}-{YYYY-MM-DD}.zip
-      metrics 与 fundingRate 无 {interval} 段
+{CDN}/data/futures/um/{monthly|daily}/{source}/{SYM}/{interval}/{SYM}-{interval}-{period}.zip
+                                     ↑ 只有 4 个源有这一层         ↑ 只有这些源有
 ```
+
+| 源 | 有 `{interval}/` 层 | 完整路径（BTCUSDT，已实测） |
+|---|---|---|
+| `klines` | ✅ | `monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-03.zip` |
+| `markPriceKlines` | ✅ | `monthly/markPriceKlines/BTCUSDT/1h/BTCUSDT-1h-2023-03.zip` |
+| `indexPriceKlines` | ✅ | `monthly/indexPriceKlines/BTCUSDT/1h/BTCUSDT-1h-2023-03.zip` |
+| `premiumIndexKlines` | ✅ | 同形 |
+| **`metrics`** | ❌ | `daily/metrics/BTCUSDT/BTCUSDT-metrics-2023-03-01.zip` |
+| **`fundingRate`** | ❌ | `monthly/fundingRate/BTCUSDT/BTCUSDT-fundingRate-2023-03.zip` |
+
+⚠️ 有该层的 4 个源**必须有** —— 漏掉就 404（这一步极易漏）。
+⚠️ 无该层的 2 个源，**文件名里源名重复一次**（`BTCUSDT-metrics-…`、
+`BTCUSDT-fundingRate-…`），不是 `BTCUSDT-{period}.zip`。
+
+**归档实际存在的源**（S3 目录实测）：
+
+| 粒度 | 源 |
+|---|---|
+| `monthly` | `klines` · `markPriceKlines` · `indexPriceKlines` · `premiumIndexKlines` · **`fundingRate`** · `aggTrades` · `trades` · `bookTicker` |
+| `daily` | `klines` · `markPriceKlines` · `indexPriceKlines` · `premiumIndexKlines` · **`metrics`** · `aggTrades` · `trades` · `bookTicker` · `bookDepth` |
+
+- `monthly/metrics` **不存在**；`daily/fundingRate` **不存在**
+- `liquidationSnapshot` 在 `um` 下**完全不存在**；`bookTicker` 只覆盖约 316 个合约
 
 **「月频 / 日频」指文件的打包粒度，不是 bar 周期** —— 两者装的都是 1h bar。
 真正只有日频数据的只有 `metrics`。
@@ -113,8 +135,11 @@ bar1.open_time - bar0.close_time = 1 ms   # 相邻 bar 无缝
 
 ### 3.5 OI 快照网格
 
-- **288 个/天**，100% 落在 5 分钟网格（`00:00, 00:05, …, 23:55`）
-- **整点快照必然存在**
+实测（BTC / ETH / SOL / DOGE，跨 2021-12 / 2022-03 / 2023-06 / 2024-05 / 2026-06）**全部一致**：
+
+- 每日文件 **288 行数据 + 1 行表头**
+- 100% 落在 5 分钟网格（`00:00, 00:05, …, 23:55`，末行恒为 `23:55:00`）
+- 整点快照必然存在
 - `sum_open_interest` 是**时点存量值**（非区间累计量）
 - 发布延迟 **1–3 分钟** → 对「bar 收盘后决策」的设计**不构成前视**
 
@@ -125,11 +150,14 @@ bar1.open_time - bar0.close_time = 1 ms   # 相邻 bar 无缝
 | **OI 归档起点** | **BTC = `2020-09-01`；其余全部 = `2021-12-01`** |
 | **主样本** | **`2021-12-01` 起**。BTC 长历史只做独立单币附录，不吃进面板 |
 | `mark` / `index` / `klines` 时间戳 | **完全重合** → 可自由 join |
-| **月频 = 日频拼接** | **逐值完全相同** → 两源可混用 |
+| **月频 = 日频拼接** | **逐值完全相同**（抽 BTC 2023-03 的 4 个日文件，96 行逐字节相等） |
+| **月频 `fundingRate` 起点** | **`2020-01`** —— **早于** OI 起点，窗口内全程可用 |
+| 月频 `klines` 起点 | `2020-01`（BTC 80 个月） |
 | 月频文件**并非每月都齐** | 存在个别月份缺失 |
 | 文件**不可变** | 同文件两次下载 sha256 一致 |
 | `.CHECKSUM` | 各源均可得 |
 | `premiumIndexKlines` | **不用**：12 列中 8 列为 0 或常量 |
+| `fundingRate` 的 `calc_time` | **毫秒位不恒为 0**（实测 `…4400001` / `…8800016`）→ 只能按**整秒截断**，不能按毫秒对齐 |
 | `bookTicker` / `liquidationSnapshot` | **USDT 本位不存在**。去杠杆确认改用 **OI 单小时跌幅** + **已实现波动率** |
 
 ### 3.7 发布节奏（`Last-Modified` 实测）
