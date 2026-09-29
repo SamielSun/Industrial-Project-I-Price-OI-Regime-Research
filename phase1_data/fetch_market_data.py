@@ -224,14 +224,20 @@ def metrics_path(sym: str, day: str) -> str:
 
 
 def raw_out(src: str, sym_or_year: str) -> Path:
-    """raw 下落盘位置。月频一币一文件；日频按年一文件（避免 29.7 万个小文件）。"""
+    """raw 下落盘位置。月频一币一文件；日频按年一文件（避免 29.7 万个小文件）。
+
+    ⚠️ 文件名用【原始合约名】，不做百分号编码 —— quote_seg 是给 URL 用的。
+    在文件系统上编码会让 币安人生USDT 变成 symbol=%E5%B8%81...，可读性尽失，
+    而且任何按文件名反查合约的代码都要多一层解码。
+    """
     if src == DAILY_SOURCE:
         return RAW / src / f"year={sym_or_year}.parquet"
-    return RAW / src / f"symbol={quote_seg(sym_or_year)}.parquet"
+    return RAW / src / f"symbol={sym_or_year}.parquet"
 
 
 def cpath(src: str, sym: str, period: str) -> Path:
-    return CACHE / f"{src}__{quote_seg(sym)}__{period}.zip"
+    """缓存文件名。同样是【文件系统】，用原始合约名，不编码。"""
+    return CACHE / f"{src}__{sym}__{period}.zip"
 
 
 # ============================================================================

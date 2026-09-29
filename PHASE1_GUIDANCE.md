@@ -289,6 +289,13 @@ tmp = path + ".name" + ".part"; tmp.write_bytes(data); os.replace(tmp, path)
 若键里没有源名（只用 `{symbol}/{period}`），四个源会**共用同一个键**，
 后到的源会命中前一个源的缓存并把它当自己的数据 —— 静默的正确性灾难。
 
+**⚠️ 百分号编码只用于 URL，绝不可用于文件路径。**
+`quote_seg()` 是为 URL 服务的（中文合约名不编码会让 `urllib` 抛 `UnicodeEncodeError`）。
+若把它顺手用在落盘路径上，`币安人生USDT` 会变成
+`symbol=%E5%B8%81%E5%AE%89%E4%BA%BA%E7%94%9FUSDT.parquet` —— 可读性尽失，
+且任何按文件名反查合约的代码都要多一层解码。**文件系统用原始名字即可**，
+NTFS 完全支持 Unicode。实测踩过：两个源的文件被写成编码名。
+
 #### 5.3.1 一遍过：下载即解压，不要"先全下再统一转换"
 
 ```
