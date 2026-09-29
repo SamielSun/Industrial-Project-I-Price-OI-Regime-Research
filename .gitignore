@@ -16,6 +16,12 @@ venv/
 *.pkl
 *.log
 
+# ---- 核验与冒烟测试的临时目录/日志（P11_DATA_ROOT 重定向的产出）----
+_smoke/
+_mid/
+_*.log
+p11_full.log
+
 # ---- Office 临时锁文件 ----
 ~$*
 ~WRL*.tmp
