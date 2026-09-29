@@ -3,7 +3,7 @@
 """
 build_candidate_pool —— 选出「后面要为哪些合约下数据」
 
-它在 Phase 1 中的位置：Step 0–2（见 PHASE1_GUIDANCE.md §3 与 §0.1 进度表）。
+它在 Phase 1 中的位置：Step 0–2（见 PHASE1_GUIDANCE.md §1.1 进度表与 §4 流水线）。
 
 做什么
 ------
@@ -23,15 +23,15 @@ Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，
   data/03_reference/candidate_pool.csv     候选池名单（一列 symbol）
   data/00_config/manifest.parquet          逐文件下载状态，供断点续传
 
-不产出 master.parquet —— 它是 D1 产出（§12-e），但在 P1.2 才用得上。
+不产出 master.parquet —— 它是 D1 产出，且要等 Step 3 下载完才有内容。
 
 用法
 ----
-  python build_candidate_pool.py --sample-end 2026-08-31
-  python build_candidate_pool.py --sample-end 2026-08-31 --skip-download   # 只用缓存重算
-  P11_DATA_ROOT=/tmp/x python build_candidate_pool.py ... --subset A B C    # 冒烟/核验
+  python phase1_data/build_candidate_pool.py --sample-end 2026-08-31
+  python phase1_data/build_candidate_pool.py --sample-end 2026-08-31 --skip-download  # 只用缓存重算
+  P11_DATA_ROOT=/tmp/x python phase1_data/build_candidate_pool.py ... --subset A B C   # 冒烟/核验
 
-依据：PHASE1_GUIDANCE.md §1.1（枚举）、§5（五条闸）、§7（排名）、§16.0（下载参数）
+依据：PHASE1_GUIDANCE.md §3.1（枚举）、§6（五条闸与排名）、§5.3（下载参数）
 """
 
 from __future__ import annotations
@@ -53,26 +53,27 @@ from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # 项目根：config.py / lib/
 import config as cfg_mod                                     # noqa: E402
 
-# 注：本脚本不调用 lib.schema.validate() —— P1.1 只从 klines 里读 quote_volume，
-# 不构造任何齐备的 DataFrame。schema 契约从 P1.3（建第 2 层表）起强制。
+# 注：本脚本不调用 lib.schema.validate() —— 它只从 klines 里读 quote_volume，
+# 不构造任何齐备的 DataFrame。schema 契约从 Step 4（建第 2 层表）起强制。
 
 # ============================================================================
-# 常量（依据见 §16.0）
+# 常量（依据见 §5.3）
 # ============================================================================
 
 S3_API = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
 CDN = "https://data.binance.vision"
 
-CONCURRENCY = 32          # 实测 16→32 吞吐 6.25→7.90 文件/秒，已饱和
+CONCURRENCY = 32          # 实测 16→32 吞吐已饱和
 CONNECT_TIMEOUT = 15      # s
 READ_TIMEOUT = 45         # s；实测 max=45.8s 是极端长尾
 RETRIES = 3               # 合计最多 3 次尝试
 BACKOFF_BASE = 2          # 2^attempt 秒
 
-ROOT = Path(__file__).resolve().parent
+# 本脚本在 phase1_data/ 下，项目根是上一级
+ROOT = Path(__file__).resolve().parent.parent
 # 环境变量 P11_DATA_ROOT 可把全部产出重定向到别处（冒烟测试用，绝不污染正式产出）
 DATA = Path(os.environ.get("P11_DATA_ROOT", ROOT / "data"))
 CACHE_DIR = DATA / "00_config" / "_p11_cache"      # 原始 zip 暂存（断点续传靠它）
@@ -80,7 +81,7 @@ MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 
-# 闸 5：代币化股票 / 商品永续（§5.3）。**P1.1 首次运行后会打印候选名单供核对。**
+# 闸 5：代币化股票 / 商品永续（§6.1）。**首次运行后会打印候选名单供核对。**
 TOKENIZED_EQUITY_COMMODITY = {
     # 美股
     "AAPLUSDT", "ADBEUSDT", "ALABUSDT", "AMATUSDT", "AMDUSDT", "AMZNUSDT",
@@ -172,7 +173,7 @@ def enumerate_archive() -> tuple[set[str], set[str], dict]:
     syms = {n.rstrip("/").split("/")[-1] for n in names if n.rstrip("/").split("/")[-1]}
     log(f"        归档合约总数 {len(syms)}   耗时 {time.time()-t0:.1f}s")
 
-    # exchangeInfo：只为拿 base/quote/status 等元信息，不用它当合约清单（§1.1）
+    # exchangeInfo：只为拿 base/quote/status 等元信息，不用它当合约清单（§3.1）
     ex_url = "https://www.binance.com/fapi/v1/exchangeInfo"
     info = {s["symbol"]: s for s in json.loads(http(ex_url))["symbols"]
             if s.get("contractType") == "PERPETUAL"}
@@ -282,7 +283,7 @@ def download_one(sym: str, ym: str) -> tuple[str, str, str]:
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".zip.part")
     tmp.write_bytes(data)
-    os.replace(tmp, p)                       # 原子写（§9.5）
+    os.replace(tmp, p)                       # 原子写（§5.3）
     return sym, ym, "ok"
 
 
@@ -297,7 +298,7 @@ def read_quote_volumes(sym: str, ym: str) -> list[float] | None:
     lines = body.strip().split("\n")
     if not lines:
         return None
-    # 表头有无必须【逐文件检测】，不可按日期硬编码（§2.2）
+    # 表头有无必须【逐文件检测】，不可按日期硬编码（§3.3）
     first = lines[0].split(",", 1)[0].strip()
     rows = lines[1:] if not first.lstrip("-").replace(".", "").isdigit() else lines
     out = []
@@ -325,14 +326,14 @@ def build_monthly_stats(sym: str, months: list[str]) -> tuple[dict[str, float], 
 
 
 # ============================================================================
-# 草稿闸（P1.1 能做的两条）—— 其余需要 OI 数据，归 P1.2/P1.5
+# 草稿闸（本脚本能做的两条）—— 其余需要 OI 数据，归 Step 3 / Step 6
 #
-# §7 的排名是「对通过资格闸的合约排名」。P1.1 只有 klines，所以只能做：
+# §6.2 的排名是「对通过资格闸的合约排名」。本脚本只有 klines，所以只能做：
 #   草稿闸 A（对应闸 2「历史不足」）：到该月初为止，窗口内已有 >= N 个月数据
 #   草稿闸 B（对应闸 4「不流动」  ）：上一个月有效小时数 >= 24*15
 #
-# 两者都【故意宽松】（宁可多留）：P1.1 是粗筛，过严会误杀合法样本；
-# 过宽的代价只是 P1.2 多下一批，而 P1.5 会用完整五条闸再筛一次。
+# 两者都【故意宽松】（宁可多留）：本脚本是粗筛，过严会误杀合法样本；
+# 过宽的代价只是 Step 3 多下一批，而 Step 6 会用完整五条闸再筛一次。
 # 闸 3（OI 可靠性）与闸 5（代币化股票，已在 Step 1 处理）不在此。
 # ============================================================================
 
@@ -342,7 +343,7 @@ DRAFT_MIN_BARS_IN_PREV_MONTH = 24 * 15  # = 360 小时，对应闸 4 的「30 �
 
 def draft_gate_ok(liq: dict[str, float], bars: dict[str, int],
                   months: list[str], i: int) -> bool:
-    """草稿闸 A + B。只用到第 i 个月【之前】的数据 —— 无前视（§7.2）。"""
+    """草稿闸 A + B。只用到第 i 个月【之前】的数据 —— 无前视（§6.2）。"""
     if i < DRAFT_MIN_PRIOR_MONTHS:
         return False
     prior = sum(1 for m in months[:i] if m in liq)      # 闸 A
@@ -430,7 +431,7 @@ def main() -> int:
                         f"已用 {time.time()-t0:.0f}s")
         log(f"        首轮完成，耗时 {time.time()-t0:.0f}s  状态 {statuses}")
 
-        # 对未取得项补跑一轮（§16.0：把问题在同一次运行内解决）
+        # 对未取得项补跑一轮（§5.3：把问题在同一次运行内解决）
         retry = [(s, ym) for (s, ym) in todo if not cache_path(s, ym).exists()]
         if retry:
             log(f"        对 {len(retry)} 个未取得项补跑一轮…")
@@ -502,7 +503,7 @@ def main() -> int:
         "download_status": statuses if not args.skip_download else {},
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # ---- 运行摘要（§16.0：★ 未取得 绝不能算进缺失）----
+    # ---- 运行摘要（§8.3：★ 未取得 绝不能算进缺失）----
     n_ok = sum(1 for s, ym in todo if cache_path(s, ym).exists())
     n_missing = len(todo) - n_ok
     log("\n" + "=" * 74)
@@ -519,9 +520,9 @@ def main() -> int:
     log("=" * 74)
     log(f"  -> {CANDIDATE_POOL}")
     log(f"  -> {MANIFEST}")
-    log("\n  下一步（P1.2）需要你核对：")
+    log("\n  下一步（Step 3）需要你核对：")
     log("    · 候选池规模是否合理")
-    log("    · 代币化股票是否已全部剔除（见 §5.3 的名单，可能不全）")
+    log("    · 代币化股票是否已全部剔除（见 §6.1 的名单，可能不全）")
     return 0
 
 
