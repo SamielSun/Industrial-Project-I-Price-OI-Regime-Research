@@ -361,12 +361,21 @@ oi_change    用 OI(H)     vs OI(H-1h)             → 同样 [H-1h, H]   ✅
 
 ### 8.2 第 2 层：4 张规范化表
 
+> **权威定义在 `lib/schema.py`（`LAYER2_SCHEMAS`）。** 下表讲语义。
+
 | # | 表 | 主键 | 频率 | 源 | 列 |
 |---|---|---|---|---|---|
-| 1 | `klines_1h` | `(symbol, ts)` | 1h 原生 | `klines` 月频 | `ts_end`, OHLC, `volume`, `quote_volume`, `trades`, `taker_buy_volume`, `taker_buy_quote_volume` |
-| 2 | `mark_index_1h` | `(symbol, ts)` | 1h 原生 | `markPriceKlines` + `indexPriceKlines` | `ts_end`, `mark_close`, `index_close` |
-| 3 | `oi_1h` | `(symbol, ts)` | 5m→1h 对齐 | `metrics` 日频 | `ts_end`, `oi`, `oi_value`, `oi_missing` |
-| 4 | `funding` | `(symbol, ts_funding)` | 8h 事件 | `fundingRate` 月频 | `funding_rate`, `funding_interval_hours` |
+| 1 | `klines_1h` | `(symbol, ts)` | 1h 原生 | `klines` 月频 | `symbol`, `ts`, **`ts_end`**, OHLC, `volume`, `quote_volume`, `trades`, `taker_buy_volume`, `taker_buy_quote_volume` |
+| 2 | `mark_index_1h` | `(symbol, ts)` | 1h 原生 | `markPriceKlines` + `indexPriceKlines` | `symbol`, `ts`, **`ts_end`**, `mark_close`, `index_close` |
+| 3 | `oi_1h` | `(symbol, ts)` | 5m→1h 对齐 | `metrics` 日频 | `symbol`, `ts`, **`ts_end`**, `oi`, `oi_value`, `oi_missing` |
+| 4 | `funding` | `(symbol, ts_funding)` | 8h 事件 | `fundingRate` 月频 | `symbol`, `ts_funding`, `funding_rate`, `funding_interval_hours` |
+
+**第 2 层【都存 `ts_end`】**（= `ts + 1h`）。它是四条对齐语义的载体 ——
+区间终点 / OI 对齐时刻 / 决策时刻 / `funding` 的 join 键。
+不存的话 join 前要自己算，**算错一次偏 1 小时且不报错**。
+
+**第 2 层是【稀疏】的** —— 只存源里真实存在的行，不发明行。
+密集网格是 `features_1h` 的职责（`is_grid=True`）。
 
 **不存的源**：
 
@@ -378,27 +387,42 @@ oi_change    用 OI(H)     vs OI(H-1h)             → 同样 [H-1h, H]   ✅
 
 ### 8.3 `features_1h`
 
+> **权威定义在 `lib/schema.py`（`FEATURES_1H`）。** 下表讲**语义**（每列什么意思、
+> 单位、为什么），类型细节以代码为准。`python -m lib.schema` 会校验两者列名一致。
+
 **主键** `(symbol, ts)`　**分区** `year=YYYY/chunk=YYYY-MM.parquet`
 
-| # | 列 | 类型 | 单位 | 语义 |
-|---|---|---|---|---|
-| 1 | `symbol` | string | — | 合约 |
-| 2 | `ts` | datetime64[ns, UTC] | — | **bar 起点 `H`** |
-| 3 | `ts_end` | datetime64[ns, UTC] | — | `ts + 1h`；**区间终点 = OI 对齐时刻** |
-| 4–7 | `open` `high` `low` `close` | float64 | USDT | |
-| 8 | `volume` | float64 | 基础资产 | |
-| 9 | `quote_volume` | float64 | USDT | 流动性度量原料 |
-| 10 | `trades` | int64 | 笔 | |
-| 11 | `taker_buy_volume` | float64 | 基础资产 | |
-| 12 | `taker_buy_quote_volume` | float64 | USDT | |
-| 13 | **`oi`** | float64 | **张** | `OI(ts_end)` |
-| 14 | `oi_value` | float64 | USDT | 一致性校验用 |
-| 15 | `mark_close` | float64 | USDT | |
-| 16 | `index_close` | float64 | USDT | |
-| 17 | `funding_rate` | float64 | 小数 | **仅 `00/08/16` 非空** |
-| 18 | `funding_interval_hours` | int8 | 小时 | **仅结算时刻非空** |
-| 19 | `bar_missing` | bool | — | 该小时 kline 原始行不存在 |
-| 20 | `oi_missing` | bool | — | 该小时 OI 快照不存在 |
+<!-- COLUMNS:features_1h -->
+`symbol` `ts` `ts_end` `open` `high` `low` `close` `volume` `quote_volume`
+`trades` `taker_buy_volume` `taker_buy_quote_volume` `oi` `oi_value`
+`mark_close` `index_close` `funding_rate` `funding_interval_hours`
+`bar_missing` `oi_missing`
+<!-- /COLUMNS -->
+
+| # | 列 | 语义 |
+|---|---|---|
+| 1 | `symbol` | 合约 |
+| 2 | `ts` | **bar 起点 `H`** |
+| 3 | `ts_end` | `ts + 1h`；**区间终点 = OI 对齐时刻 = 决策时刻** |
+| 4–7 | `open` `high` `low` `close` | USDT |
+| 8 | `volume` | 基础资产 |
+| 9 | `quote_volume` | USDT；流动性度量原料 |
+| 10 | `trades` | 笔；源列名 `count`（改名） |
+| 11 | `taker_buy_volume` | 基础资产 |
+| 12 | `taker_buy_quote_volume` | USDT |
+| 13 | **`oi`** | `OI(ts_end)`，**张数**（源列 `sum_open_interest`） |
+| 14 | `oi_value` | USDT；一致性校验用（`oi_value/oi/close ≈ 1`） |
+| 15 | `mark_close` | USDT |
+| 16 | `index_close` | USDT |
+| 17 | `funding_rate` | 小数；**仅 `00/08/16` 非空** |
+| 18 | `funding_interval_hours` | 小时；**仅结算时刻非空** |
+| 19 | `bar_missing` | 该小时在 `klines_1h` 中无对应行 |
+| 20 | `oi_missing` | 该小时 OI 快照不存在 |
+
+**全部列使用 3 种语义类型**（`string` / `float64` / `timestamp`，见 `lib/schema.py`）
+—— 整数（`trades`、`funding_interval_hours`）**一律用 float64**：float64 精确表示
+到 2^53，而 `int8/int16/int32/int64` 不支持 NaN（实测 `TypeError`），
+用 float 反而消除了「该列是否可空」的类型选择问题。
 
 ```sql
 features_1h = klines_1h
@@ -652,3 +676,101 @@ data/
 | mark/index/klines 时间戳重合 | 三源月频 | 比对时间戳集合 |
 | 强平/bookTicker 不存在 | 多路径 HEAD | **必须带对照组** |
 | 表头有无的边界 | 多时代文件 | 检查首列是否为数字 |
+
+---
+
+## 16. 自动校验（步骤 0 落地）✅
+
+> **原则：文档讲语义，代码定类型。** schema 的权威定义在 `lib/schema.py`，
+> §8.2/§8.3 描述每列什么意思。自测校验两者列名一致。
+
+### 16.1 三个入口
+
+```bash
+python -c "import config; from lib import paths, schema, formatting"
+    # 判据 1：全部模块可导入
+
+python -m lib.schema
+    # schema 自测：round-trip / validate 放行 / validate 捕获 / 文档一致性 / 结构自检
+    # 退出码 0 = 全过
+
+python check_step0.py
+    # 步骤 0 完整验收：含上面的自测 + Config frozen + validate_sample_end 行为
+```
+
+### 16.2 `validate()` 检查什么
+
+```python
+from lib.schema import validate, get_schema
+validate(df, "features_1h")      # 失败抛 lib.exceptions.SchemaViolation
+```
+
+| # | 检查 | 挡住的静默错误 |
+|---|---|---|
+| 1 | 列名与**顺序**完全一致 | 列错位（源有表头/无表头混用） |
+| 2 | dtype 与语义类型一致 | 类型漂移 |
+| 3 | 标识列**非空** | NaT 在 join 时静默匹配不上，行无声消失 |
+| 4 | 主键**无重复** | 实测源文件存在完全一致的副本行 |
+| 5 | 主键**已排序** | 实测近期文件时间戳非单调 |
+| 6 | **无整列为空** | 整列解析失败（列名对、dtype 对，但全是 NaN） |
+| 7 | 标识列落在**整小时** | 毫秒/秒单位搞混 |
+| 8 | `ts_end − ts == 1h` | 同上，独立第二道 |
+| 9 | 标识列为 tz-aware **UTC** | naive datetime |
+
+**失败时一次报全部问题**，不是遇到第一个就停 —— 避免"修一处、重跑、又一处"。
+
+### 16.3 不归 `validate()` 管的
+
+跨列一致性与值域检查是**统计判断**（阈值需标定），与"结构契约"分开：
+
+```python
+from lib.formatting import consistency_oi_price, consistency_basis
+consistency_oi_price(df)   # oi_value / oi / close ≈ 1        （§6.3 c）
+consistency_basis(df)      # |premium_close − (mark/index − 1)| （§6.3 d）
+```
+
+另有两个输出工具：
+
+```python
+from lib.formatting import describe, null_summary, dedup_counts, gap_runs
+describe(df)        # 形状 / 列 / dtype / 非空率 / 样例
+null_summary(df)    # 逐列缺失，缺失最多的排前
+dedup_counts(...)   # 去重计数（§6.1「去重 + 记录」的载体）
+gap_runs(...)       # 逐日缺失 → 连续缺口区间（§12.1）
+```
+
+### 16.4 防漂移机制
+
+§8.3 有一个标记块：
+
+```
+<!-- COLUMNS:features_1h -->
+`symbol` `ts` `ts_end` ...
+<!-- /COLUMNS -->
+```
+
+`python -m lib.schema` **读取它并与代码比对**。任何一边改了列名/顺序而另一边没跟，
+自测立刻失败。**这条检查已用注入破坏验证过**（删列、换序、改 dtype、改主键均能捕获）。
+
+### 16.5 `manifest` 增量状态（承接 §9.4）
+
+`layer2_built_at` 是**单一时间戳**，因此**构建顺序是硬性要求**：
+
+```
+解析 mark ✓  →  解析 index ✓  →  合并  →  写 mark_index_1h parquet ✓
+                                          →  最后写 layer2_built_at
+```
+
+时间戳必须**最后写**，且失败时**不写**。若提前写，`mark` 成功而 `index` 失败时
+该文件会被标记为"已建"，**`index` 的数据永久丢失且不报错**。
+
+### 16.6 `manifest` 增列
+
+在 §9.3 的字段基础上增加一列：
+
+| 列 | 含义 |
+|---|---|
+| `dup_rows_removed` | 该文件解析时去除的重复行数（§6.1「去重 + 记录」） |
+
+**为何不用报告承载**：报告里已有 `partial_rows`（行数 < 288），而重复行是
+**行数 > 288**，语义不同不宜混类；且日志会随会话消失，这属应持久记录的源数据性质。
