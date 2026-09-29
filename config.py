@@ -21,7 +21,7 @@ from typing import Any, Sequence
 
 @dataclass(frozen=True)
 class Config:
-    """Phase 1 全部设计参数。frozen —— 实例化后不可修改。"""
+    """Phase 1 全部设计参数。"""
 
     # ---- 样本窗口 ----
     sample_start: str = "2021-12-01"
@@ -29,16 +29,13 @@ class Config:
 
     # ---- Universe 构造（§7）----
     K: int = 50
-    """成员数。实测：第 1 名与第 50 名流动性相差 168 倍。"""
+    """成员数"""
 
     liq_window_days: int = 30
-    """流动性窗口。实测月换手 18.9%（60 天为 13.0%，更稳但更滞后）。"""
+    """流动性计算窗口"""
 
     refresh_months: int = 1
-    """成员集刷新频率（月）。滞后不进事件研究的问题，噪声才进。"""
-
-    buffer_L: int = 0
-    """排名缓冲带宽度。实测效果弱（相对降 30%）且把成员数推到 55.3，故不用。"""
+    """成员集刷新频率（月）"""
 
     # ---- 四条资格闸（§5）----
     min_history_bars: int = 720
@@ -55,10 +52,7 @@ class Config:
     stablecoin_bases: tuple[str, ...] = (
         "USDC", "FDUSD", "TUSD", "BUSD", "DAI", "USDP", "SUSD", "USDD", "PYUSD", "EUR",
     )
-    """闸 1：按 base_asset 判定，不按符号字面。
-
-    注意 BTCUSDT / ETHUSDT 的 base 是 BTC / ETH，不是稳定币。
-    """
+    """闸 1：按 base_asset 判定，不按符号字面"""
 
     # ---- 路径与IO（非设计参数，但需集中管理）----
     parquet_compression: str = "zstd"

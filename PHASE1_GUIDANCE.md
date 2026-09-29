@@ -97,7 +97,7 @@ bar1.open_time - bar0.close_time = 1 ms    # 相邻 bar 无缝
 | 月频文件**并非每月都齐** | 实测 `2026-01` 的月频 klines 为 404 |
 | 文件**不可变** | 同文件两次下载 sha256 一致 |
 | `.CHECKSUM` | 三源均可得 |
-| `premiumIndexKlines` | **不用**：其 12 列中 8 列为 0 或常量；基差可由 `mark_close/index_close − 1` 近似（实测中位差 **1e-5**）。改为校验项（§6.3） |
+| `premiumIndexKlines` | **不用**：其 12 列中 8 列为 0 或常量；基差可由 `mark_close/index_close − 1` 近似（实测中位差 **1e-5**） |
 | `bookTicker` / `liquidationSnapshot` | **USDT 本位不存在**（多路径 + 对照组验证）。**不用强平数据** —— 去杠杆确认改用 **OI 单小时跌幅** + **已实现波动率**（§7.9） |
 
 ### 2.6 发布节奏（实测 `Last-Modified`）
@@ -245,9 +245,17 @@ buffer_L          = 0         # 不用排名缓冲带
 |---|---|---|
 | a | 每币每日 OI 行数 | 去重后 = 288；偏离即标记 |
 | b | 时间戳落格 | 应 100% 落在 5 分钟网格 |
-| c | **OI 价格一致性** | `oi_value / oi ÷ close ≈ 1`（`oi_value` 存在的意义） |
-| d | **基差一致性** | `\|premium_close − (mark_close/index_close − 1)\| > 1e-3` 即告警（实测最大 1.2e-3） |
-| e | 缺口报告 | 见 §9 |
+| c | 缺口报告 | 见 §12.1 |
+
+> **不做跨列一致性检查**（2026-09-29 决定）：曾考虑两条 ——
+> `oi_value/oi ÷ close ≈ 1` 与 `|premium_close − (mark/index − 1)| > 1e-3`。
+> **已取消**，因为：① 它们需要标定阈值，属统计判断而非结构契约；
+> ② `validate()` 的九条结构检查已经覆盖了会导致这两条失败的**根因**
+> （解析失败 → 整列为空 / dtype 错 / 时间戳非整点）。
+>
+> **推论**：`oi_value` 与 `premiumIndexKlines` **失去存在的理由** ——
+> 前者已从第 2 层与 `features_1h` 删除（§8.3）；后者保留为源清单里的登记
+> （标记"不用"），因为删掉它不会让下载变少，却会丢掉"该源存在且已实测"的记录。
 
 ---
 
@@ -367,7 +375,7 @@ oi_change    用 OI(H)     vs OI(H-1h)             → 同样 [H-1h, H]   ✅
 |---|---|---|---|---|---|
 | 1 | `klines_1h` | `(symbol, ts)` | 1h 原生 | `klines` 月频 | `symbol`, `ts`, **`ts_end`**, OHLC, `volume`, `quote_volume`, `trades`, `taker_buy_volume`, `taker_buy_quote_volume` |
 | 2 | `mark_index_1h` | `(symbol, ts)` | 1h 原生 | `markPriceKlines` + `indexPriceKlines` | `symbol`, `ts`, **`ts_end`**, `mark_close`, `index_close` |
-| 3 | `oi_1h` | `(symbol, ts)` | 5m→1h 对齐 | `metrics` 日频 | `symbol`, `ts`, **`ts_end`**, `oi`, `oi_value`, `oi_missing` |
+| 3 | `oi_1h` | `(symbol, ts)` | 5m→1h 对齐 | `metrics` 日频 | `symbol`, `ts`, **`ts_end`**, `oi`, `oi_missing` |
 | 4 | `funding` | `(symbol, ts_funding)` | 8h 事件 | `fundingRate` 月频 | `symbol`, `ts_funding`, `funding_rate`, `funding_interval_hours` |
 
 **第 2 层【都存 `ts_end`】**（= `ts + 1h`）。它是四条对齐语义的载体 ——
@@ -392,9 +400,9 @@ oi_change    用 OI(H)     vs OI(H-1h)             → 同样 [H-1h, H]   ✅
 
 **主键** `(symbol, ts)`　**分区** `year=YYYY/chunk=YYYY-MM.parquet`
 
-**20 列（顺序即契约）**：
+**19 列（顺序即契约）**：
 `symbol` `ts` `ts_end` `open` `high` `low` `close` `volume` `quote_volume`
-`trades` `taker_buy_volume` `taker_buy_quote_volume` `oi` `oi_value`
+`trades` `taker_buy_volume` `taker_buy_quote_volume` `oi`
 `mark_close` `index_close` `funding_rate` `funding_interval_hours`
 `bar_missing` `oi_missing`
 
@@ -410,13 +418,20 @@ oi_change    用 OI(H)     vs OI(H-1h)             → 同样 [H-1h, H]   ✅
 | 11 | `taker_buy_volume` | 基础资产 |
 | 12 | `taker_buy_quote_volume` | USDT |
 | 13 | **`oi`** | `OI(ts_end)`，**张数**（源列 `sum_open_interest`） |
-| 14 | `oi_value` | USDT；一致性校验用（`oi_value/oi/close ≈ 1`） |
-| 15 | `mark_close` | USDT |
-| 16 | `index_close` | USDT |
-| 17 | `funding_rate` | 小数；**仅 `00/08/16` 非空** |
-| 18 | `funding_interval_hours` | 小时；**仅结算时刻非空** |
-| 19 | `bar_missing` | 该小时在 `klines_1h` 中无对应行 |
-| 20 | `oi_missing` | 该小时 OI 快照不存在 |
+| 14 | `mark_close` | USDT |
+| 15 | `index_close` | USDT |
+| 16 | `funding_rate` | 小数；**仅 `00/08/16` 非空** |
+| 17 | `funding_interval_hours` | 小时；**仅结算时刻非空** |
+| 18 | `bar_missing` | 该小时在 `klines_1h` 中无对应行 |
+| 19 | `oi_missing` | 该小时 OI 快照不存在 |
+
+**不存的列**（源里有但不进表）：
+
+| 源列 | 理由 |
+|---|---|
+| `sum_open_interest_value` | 与 `oi × close` 冗余。曾因"供一致性校验"计划保留，该校验取消后失去理由 |
+| 4 个大户多空比字段 | 2022 全年大面积为空（§6.2） |
+| `ignore` | 实测恒为 0 |
 
 **全部列使用 3 种语义类型**（`string` / `float64` / `timestamp`，见 `lib/schema.py`）
 —— 整数（`trades`、`funding_interval_hours`）**一律用 float64**：float64 精确表示
@@ -728,9 +743,11 @@ validate(df, "features_1h")      # 失败抛 SchemaViolation
 
 ### 16.4 不归 `validate()` 管的
 
-跨列一致性（`oi_value/oi/close ≈ 1`、`|premium_close − (mark/index − 1)|`）
-与值域检查是**统计判断**（阈值需标定），属质量巡检而非结构契约。
-它们**尚未实现** —— 到步骤 4/5 真正需要时再写，见 §6.3。
+值域检查（如 `quote_volume >= 0`）是**统计判断**（阈值需标定），属质量巡检
+而非结构契约 —— **本设计不做**（§6.3）。
+
+`validate()` 的九条结构检查已覆盖会导致数值异常的**根因**
+（解析失败 → 整列为空 / dtype 错 / 时间戳非整点），故不再叠加值域检查。
 
 ### 16.5 `manifest` 增量状态（承接 §9.4）
 

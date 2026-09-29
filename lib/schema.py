@@ -173,8 +173,8 @@ SOURCE_SCHEMAS: dict[str, TableSchema] = {
         columns=_cols(
             ("create_time", "timestamp", "字符串格式，需按量级判断解析"),
             ("symbol", "string"),
-            ("sum_open_interest", "float64", "张数"),
-            ("sum_open_interest_value", "float64", "USDT 名义额"),
+            ("sum_open_interest", "float64", "张数 → 第 2 层的 oi"),
+            ("sum_open_interest_value", "float64", "USDT 名义额；与 oi×close 冗余，本项目不用"),
             ("count_toptrader_long_short_ratio", "float64", "2022 全年大面积为空；不存"),
             ("sum_toptrader_long_short_ratio", "float64", "同上；不存"),
             ("count_long_short_ratio", "float64", "同上；不存"),
@@ -234,7 +234,6 @@ LAYER2_SCHEMAS: dict[str, TableSchema] = {
             ("ts", "timestamp"),
             ("ts_end", "timestamp", "= ts + 1h；OI 快照取此整点"),
             ("oi", "float64", "← sum_open_interest（张数）"),
-            ("oi_value", "float64", "← sum_open_interest_value（USDT）"),
             ("oi_missing", "bool", "该整点的快照不存在"),
         ),
         primary_key=("symbol", "ts"), source_timestamp_col="ts",
@@ -271,8 +270,7 @@ FEATURES_1H = TableSchema(
         ("quote_volume", "float64", "流动性度量原料"),
         ("trades", "float64"),
         ("taker_buy_volume", "float64"), ("taker_buy_quote_volume", "float64"),
-        ("oi", "float64", "OI(ts_end)，单位：张"),
-        ("oi_value", "float64", "一致性校验用：oi_value/oi/close ≈ 1"),
+        ("oi", "float64", "OI(ts_end)，单位：张（← sum_open_interest）"),
         ("mark_close", "float64"), ("index_close", "float64"),
         ("funding_rate", "float64", "仅 00/08/16 非空"),
         ("funding_interval_hours", "float64", "仅结算时刻非空"),
@@ -334,8 +332,9 @@ def validate(
       8. ts_end - ts == 1h           同上，独立第二道
       9. 标识列为 tz-aware UTC       挡 naive datetime
 
-    【不在此处】：跨列一致性（oi_value/oi/close ≈ 1）与值域检查 —— 它们是
-    统计判断、阈值需标定，属质量巡检而非结构契约（§6.3）。
+    【不在此处】：值域与跨列一致性检查 —— 它们是统计判断、阈值需标定，
+    属质量巡检而非结构契约（§6.3 已决定不做）。上面九条已覆盖会导致数值
+    异常的根因（解析失败 → 整列为空 / dtype 错 / 时间戳非整点）。
     """
     if isinstance(schema, str):
         schema = get_schema(schema)
@@ -523,7 +522,8 @@ def _main() -> int:
     d = pd.concat([good, good], ignore_index=True)
     e = good.iloc[::-1].reset_index(drop=True)
     f = good.copy(); f["oi"] = f["oi"].astype("string")
-    g = good.drop(columns=["oi_value"])
+    # "缺列"用例：删掉一个下游表真正需要的列
+    g = good.drop(columns=["oi_missing"])
     h = good.copy(); h["ts_end"] = h["ts"] + pd.Timedelta(minutes=30)
     i = good.copy(); i["ts"] = i["ts"].dt.tz_localize(None)
 
