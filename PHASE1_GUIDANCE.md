@@ -21,16 +21,17 @@
 |---|---|---|---|
 | — | `config.py` · `lib/schema.py` | 设计参数 + 数据契约 | ✅ 已完成 |
 | 0–2 | `phase1_data/build_candidate_pool.py` | **候选池名单**（297 个合约） | ✅ 已完成 |
-| 3 | `phase1_data/fetch_market_data.py` | 候选池合约的日频 metrics + 月频 mark/index/funding | ⬜ 待写 |
+| 3 | `phase1_data/fetch_market_data.py` | **raw 数据**（1.12 GB / 1,192 个 parquet） | ✅ 已完成 |
 | 4 | `phase1_data/build_layer2.py` | 第 2 层 4 张规范化表 | ⬜ 待写 |
 | 5 | `phase1_data/build_features.py` | `features_1h`（19 列密集网格） | ⬜ 待写 |
 | 6 | `phase1_data/build_universe.py` | universe 表 + D1 全部产出物 | ⬜ 待写 |
 
-⚠️ Step 3–6 的脚本名可在那一步调整。
+⚠️ Step 4–6 的脚本名可在那一步调整。
 
 **Step 2 实测：19,431 个文件 / 240–287 秒 / 0 个未取得**（候选池 296 → **297**）。
 
-**最大的时间开销在 Step 3 的下载**（约 3.65 GB / 348,132 个文件），不是写代码的时间。
+**Step 3 实测：345,472 个文件 / 两轮共 111 分钟 / 0 个 `retry_exhausted`。**
+（首轮旧版写法 109 分钟；改进为"一遍过"后，增量只需 341 秒。见 §5.3）
 
 ---
 
@@ -117,8 +118,10 @@ https://s3-ap-northeast-1.amazonaws.com/data.binance.vision
 | **`fundingRate`** | ❌ | `monthly/fundingRate/BTCUSDT/BTCUSDT-fundingRate-2023-03.zip` |
 
 ⚠️ 有该层的 4 个源**必须有** —— 漏掉就 404（这一步极易漏）。
-⚠️ 无该层的 2 个源，**文件名里源名重复一次**（`BTCUSDT-metrics-…`、
-`BTCUSDT-fundingRate-…`），不是 `BTCUSDT-{period}.zip`。
+⚠️ `fundingRate` 的文件名里是**源名本身**，不是空、也不是 interval：
+`BTCUSDT-fundingRate-2023-03.zip`。写成 `BTCUSDT-2023-03.zip` 会**全部 404**
+—— 实测这样丢掉过 10,157 个文件。
+⚠️ `metrics` 同理：`BTCUSDT-metrics-2023-03-01.zip`。
 
 **归档实际存在的源**（S3 目录实测）：
 
@@ -279,8 +282,57 @@ stablecoin_bases  = ("USDC","FDUSD","TUSD","BUSD","DAI","USDP","SUSD","USDD","PY
 
 **缓存必须原子写**：
 ```python
-tmp = path + ".part"; tmp.write_bytes(data); os.replace(tmp, path)
+tmp = path + ".name" + ".part"; tmp.write_bytes(data); os.replace(tmp, path)
 ```
+
+**缓存文件名必须含源名。** 键用 `{source}__{symbol}__{period}.zip`。
+若键里没有源名（只用 `{symbol}/{period}`），四个源会**共用同一个键**，
+后到的源会命中前一个源的缓存并把它当自己的数据 —— 静默的正确性灾难。
+
+#### 5.3.1 一遍过：下载即解压，不要"先全下再统一转换"
+
+```
+✗ 两阶段   下载 → 全部落缓存 → 再逐个重新打开解压 → 落盘
+             41 分钟            60 分钟，且【无任何进度记录】
+
+✓ 一遍过   下载 → 就地解压 → 攒批 → 落盘 → 释放缓存 → 打进度戳
+                                                   ↑ 断点续传靠它
+```
+
+两阶段写法要读**两遍磁盘**，而且第二遍中断一次就要从头再来（实测 60 分钟）。
+一遍过把 zip 读一次就丢，并给每个文件打 `raw_written_at`：
+
+| | 两阶段 | 一遍过 |
+|---|---|---|
+| 磁盘读 | 2 遍 | **1 遍** |
+| 中断损失 | 从头重来（60 分钟） | **< 1 分钟** |
+| 缓存释放 | 需手动删 | **随进度自动，跑完为空** |
+| 幂等 | 未验证 | **SHA256 逐字节一致** |
+
+**打戳与删缓存必须走同一条路径。** 若某个分支打了戳却忘了删缓存，
+缓存会永久残留；若某分支删了却忘了打戳，下次会重复下载。
+实测踩过两次：先是"整组全 404 时 `buf_rows==0` 导致永不收尾"，
+再是"`ok` 但无整点行的文件打了戳却没删缓存"。
+
+#### 5.3.2 网络：DNS 污染与 VPN
+
+**实测：中国大陆网络下 `s3-ap-northeast-1.amazonaws.com` 的 DNS 被污染**
+（解析到 `130.211.15.150`，谷歌云段，TCP 443 超时）。`www.binance.com` 同样
+（`128.242.245.244`）。`data.binance.vision`（CloudFront）不受影响。
+
+| 环节 | 是否需要 VPN |
+|---|---|
+| **S3 枚举**（确定下载清单） | ✅ **需要** |
+| CDN 文件下载 | ❌ 不需要 |
+| 纯本地计算（Step 4–6） | ❌ 不需要 |
+
+**VPN 的代价（实测）**：CDN 吞吐 **140 → 89 文件/秒（慢 36%）**；
+并发 32 时约 13% 请求瞬时失败（重试可救）。
+
+**⚠️ VPN 下 S3 列表接口不稳定。** 同一个请求，时返回 22 个键、时返回 0 个键。
+实测因此静默丢掉了 1 个中文名合约（`币安人生USDT`）的全部数据。
+**应对**：枚举结果必须与"该合约是否已有数据"交叉验证；对单合约失败要能单独补抓，
+不能只依赖一次枚举。**中文名合约（百分号编码路径）尤其容易触发。**
 
 ---
 
