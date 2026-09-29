@@ -23,11 +23,58 @@
 | 数据源 | `data.binance.vision`（可达） |
 | REST API | `fapi.binance.com` **不可达**，本项目**不需要** |
 | **目录枚举** | ❌ **S3 列表 API 返回空** → 只能「按已知路径探测存在性」。**因此 `manifest` 是"远端有哪些文件"的唯一本地知识** |
-| 合约清单 | `www.binance.com/fapi/v1/exchangeInfo`（Python 可达，658 个 USDT 永续） |
+| 合约清单 | ⚠️ **必须用归档枚举**（§1.1），不用 `exchangeInfo` —— 后者只有 658 个，归档有 **893** 个 |
 | 依赖 | 全部用标准库 + `pandas` / `pyarrow` |
 
 **探测资源是否存在时，必须带对照组**（同批放入已知存在的路径）。否则无法区分
 "资源不存在"与"路径猜错"。
+
+### 1.1 ⭐ 目录枚举可用（2026-09-29 更正）🔬
+
+> **早先结论"目录枚举不可用"是错的。** 原因是端点用错了：
+> `data.binance.vision` 的根路径被**前端页面接管，返回 HTML**；
+> 真正的 S3 列表接口在**区域化端点**上。
+
+**可用的枚举端点（已实测，返回 XML）：**
+
+```
+https://s3-ap-northeast-1.amazonaws.com/data.binance.vision
+    ?list-type=2&prefix=<前缀>&delimiter=/&max-keys=1000
+    [&continuation-token=<上一页返回的 token>]
+```
+
+- 分页用 `<NextContinuationToken>` / `<IsTruncated>`
+- **用途**：枚举归档里**存在过**的全部合约。这是唯一能拿到**完整历史合约清单**的途径
+
+**为什么这很关键 —— `exchangeInfo` 不可靠：**
+
+| | 数量 |
+|---|---|
+| `exchangeInfo` 的 USDT 永续 | 658 |
+| **归档里的 USDT 永续** | **893** |
+| 归档有、`exchangeInfo` 无 | **241** ← 加上就完全不同了 |
+| `exchangeInfo` 有、归档无 | 6（中文名迷因币，无任何归档数据） |
+
+实测：`LUNAUSDT`、`SRMUSDT`、`HNTUSDT`、`TOMOUSDT`、`ANTUSDT` **全部只在归档里**。
+`exchangeInfo` 只保留当前挂牌 + 近期退市（约 130 天的 `SETTLING`），更早的会被移除。
+
+> **若用 `exchangeInfo` 当合约清单，就制造了幸存者偏差** —— 正是 PIT 设计要避免的那个。
+> **P1.1 的合约清单必须来自归档枚举，不来自 `exchangeInfo`。**
+
+### 1.2 ⚠️ 归档独有合约中的非加密资产（须剔除）
+
+那 241 个里有**代币化股票/商品永续**（实测样例）：
+
+```
+AAPLUSDT  AMZNUSDT  AMDUSDT  ASMLUSDT  ARMUSDT  AVGOUSDT  ADBEUSDT
+BABAUSDT  BRKBUSDT  BYDUSDT  AMATUSDT  ANETUSDT  ASTSUSDT  COINUSDT
+CLUSDT（原油）  COPPERUSDT（铜）  COSTUSDT  ...
+```
+
+**它们会通过 note 的四条闸**（非稳定币、历史够、OI 有、有成交），
+但**不是加密资产** —— 把股票永续混进"加密市场制度研究"会让结论无法解释。
+
+**须加入一条剔除：排除代币化股票/商品的永续。** 判据见 §5。
 
 ---
 
@@ -116,25 +163,27 @@ bar1.open_time - bar0.close_time = 1 ms    # 相邻 bar 无缝
 ## 3. 流水线（六步）
 
 ```
-Step 0  exchangeInfo（1 次请求，秒级）
+Step 0  【枚举归档】S3 列表接口（§1.1）→ 全部存在过的合约
            ↓
-Step 1  【硬过滤】剔稳定币、剔除从无 OI 归档的合约
-        输入 658 个 USDT 永续 → 输出约 640 个
+Step 1  【硬过滤】剔非 USDT 本位、稳定币、代币化股票/商品、无 OI 归档
+        输入 **893** 个 USDT 永续 → 输出待实跑确定
            ↓
-Step 2  【算候选池】下载全部 640 个合约的【月频 klines】（约 2 小时）
-        逐月算中位报价成交额 → 取前 K → 56 个月的并集
-        输出：候选池（估算约 283 个，以实跑为准）
-        ⚠️ 这批月频文件【保留】：它同时是 Step 4 里候选池合约的价格数据源
+Step 2  【算候选池】下载它们的【月频 klines】（约 2 小时 / 50,901 个文件）
+        逐月算中位报价成交额 → 取前 K → 各月并集
+        输出：候选池（原估 283 基于残缺的 658；正确的须实跑确定）
            ↓
 Step 3  【精筛下载】只对候选池合约下载
         日频 metrics(OI) + 月频 funding / mark / index
            ↓
 Step 4  合成第 2 层（4 张表，见 §8.2）
            ↓
-Step 5  合成 features_1h（20 列，见 §8.3）
+Step 5  合成 features_1h（19 列，见 §8.3）
            ↓
 Step 6  构造 universe 表（§7）
 ```
+
+> ⚠️ **Step 2 的月频 klines 不保留**（用完即弃）—— 它的产出是**排名**，不是数据。
+> 候选池合约的 klines 归 Step 3/4 按正规流程重新下载。见 §16.0。
 
 **为什么 features_1h 不含全部 648 个**：Step 2 已证明其余合约从未排进前 K，
 **永远不可能成为样本**。
@@ -176,7 +225,7 @@ buffer_L          = 0         # 不用排名缓冲带
 
 ---
 
-## 5. 资格闸（四条，逐期、无前视）
+## 5. 资格闸（五条，逐期、无前视）
 
 **必须是「逐期」判定** —— 用全生命周期的统计量（如整体覆盖率）作闸会引入前视。
 
@@ -186,8 +235,9 @@ buffer_L          = 0         # 不用排名缓冲带
 | **2** | Exclude **tokens with insufficient history** | 截至 M 月初已有 **≥ 720 根** 1h bar |
 | **3** | Exclude contracts with **unreliable OI data** | trailing 30 天内 `sum_open_interest` **非空天数占比 ≥ 0.90** |
 | **4** | Exclude **illiquid contracts** | trailing 30 天内 **≥ 15 天** `quote_volume > 0` |
+| **5** | **（本项目追加）排除代币化股票/商品永续** | 见 §5.3 |
 
-**排序即第二层流动性闸**：通过四条闸后取流动性前 K。
+**排序即第二层流动性闸**：通过五条闸后取流动性前 K。
 
 ### 5.1 三个易错点
 
@@ -202,6 +252,27 @@ buffer_L          = 0         # 不用排名缓冲带
 样本早期通过闸 1–3 的合约可能少于 K（实测 2022-01 仅 119 个），
 **作为描述统计报出实际入样合约的最低流动性**（实测 2022-01 第 50 名为 `2,488,185 USDT/小时`）。
 
+### 5.3 闸 5：排除代币化股票/商品永续（本项目追加）
+
+**为什么追加**：note 的四条闸**拦不住它们** —— 它们非稳定币、历史够、OI 有、成交活跃。
+但把它们混进"加密市场制度研究"，结论无法解释。
+
+**判据**：维护一份**显式的排除名单**（不用规则猜），因为代码与名称的对应关系会变。
+
+实测样例（须排除）：
+
+| 类别 | 符号 |
+|---|---|
+| 美股 | `AAPLUSDT` `AMZNUSDT` `AMDUSDT` `ASMLUSDT` `ARMUSDT` `AVGOUSDT` `ADBEUSDT` `BABAUSDT` `BRKBUSDT` `BYDUSDT` `AMATUSDT` `ANETUSDT` `ASTSUSDT` `COSTUSDT` |
+| 商品 | `CLUSDT`（原油）`COPPERUSDT`（铜） |
+| 加密相关但为股权 | `COINUSDT`（Coinbase 股票） |
+
+**判据来源**：P1.1 须先做一次**归档枚举**（§1.1），把"归档有、`exchangeInfo` 无"的
+那批合约列出并逐个分类。**这份名单要落进 `config.py`**，与 `stablecoin_bases` 并列。
+
+⚠️ **待实施时确认**：上面只是实测采样，**完整名单要在 P1.1 枚举后确认**。
+
+
 ### 5.2 为什么不用「覆盖率粗筛」
 
 用全生命周期覆盖率筛选会**误杀合法样本**（实测 90% 门槛下会剔除 203 个曾入前 50 的合约），
@@ -215,7 +286,10 @@ buffer_L          = 0         # 不用排名缓冲带
 | **50** | **约 283** | **约 31.1 万** | **约 9.1 h** |
 | 100 | 约 452 | 约 49.7 万 | 约 14.5 h |
 
-⚠️ 上表为估算值，**管线 Step 2 实跑后须回填确切数字**。
+⚠️ **上表的 283 等数字是【基于残缺种子池（658 个）】的估算，已作废。**
+现在正确的种子池是**归档枚举出的 893 个**（§1.1），候选池必然更大。
+**所有行数/体积/耗时估算都须在 P1.1 实跑后整体重算。**
+本节保留旧表仅作量级参考。
 
 ---
 
@@ -283,7 +357,7 @@ buffer_L          = 0         # 不用排名缓冲带
 ### 7.3 流动性度量的数据源
 
 **Step 2 与 Step 6 都用月频 klines 的 `quote_volume`，不换源。**
-理由：口径必须一致（否则成循环定义）；月频对全部 640 个合约都可算，无选择效应。
+理由：口径必须一致（否则成循环定义）；月频对**全部 893 个合约**都可算，无选择效应。
 
 ### 7.4 「事实上已下架」的识别（= 闸 4 的判据）
 
@@ -557,7 +631,7 @@ data/
 │   └─ features_1h/year=YYYY/chunk=YYYY-MM.parquet
 │
 └─ 03_reference/                      分析与审计用的参考表
-    ├─ master.parquet                  一币一行（658）
+    ├─ master.parquet                  一币一行（893）
     ├─ universe_eligibility.parquet    一币一行（约 283）
     ├─ universe_membership.parquet     (symbol, date)
     └─ member_changes.parquet          进/出记录
@@ -575,7 +649,7 @@ data/
 | `01_layer2/oi_1h/` | 约 1,250 万 | 约 80 MB |
 | `01_layer2/funding/` | 约 150 万 | 约 10 MB |
 | `02_features/features_1h/` | 约 1,250 万 | 约 300 MB |
-| `03_reference/` | 658 + 283 + 49 万 + 几百 | 约 6 MB |
+| `03_reference/` | 893 + 候选池 + 49 万 + 几百 | 约 6 MB |
 | `00_config/manifest` | 约 35 万 | 约 20 MB |
 | **合计** | | **约 630 MB** |
 
@@ -707,20 +781,23 @@ data/
 
 **范围：只有 `klines`。**
 
-| | 请求 | 体积 |
+合约清单来自**归档枚举**（§1.1），实测 **893 个 USDT 永续**。
+
+| | 请求（893 × 57） | 体积 |
 |---|---|---|
-| **只 klines（选定）** | **36,480** | **1.38 GB** |
-| 五源全含（否决） | 182,400 | 3.87 GB |
+| **只 klines（选定）** | **50,901** | **约 1.93 GB** |
+| 五源全含（否决） | 254,505 | 约 5.4 GB |
 
 理由：Step 2 的产出**只是一个排名**，排名只用 `quote_volume`。
-mark/index/funding 归 Step 3（只对 283 个候选合约）；**premium 永不下载**。
+mark/index/funding 归 Step 3（只对候选池合约）；**premium 永不下载**。
 
 **代码形态**：单脚本 `p1_1_candidate_pool.py`，下载部分写成**独立函数** ——
 Step 3 真需要时再提取成模块（只有一个调用方时不预设抽象）。
 
-**Step 2 的两个操作**：
-1. 探 658 个合约的 OI 归档起止 → 产出 `master`（§12 的 e 项）
-2. 下 640 个合约的月频 klines → 算 PIT 排名 → 产出候选池
+**Step 2 的三个操作**：
+1. **枚举归档**（§1.1）→ 全部存在过的合约
+2. 探它们的 OI 归档起止 → 产出 `master`（§12 的 e 项）
+3. 下它们的月频 klines → 算 PIT 排名 → 产出候选池
 
 **失败处理：统一落盘到 `manifest.parquet`，不新建文件**
 

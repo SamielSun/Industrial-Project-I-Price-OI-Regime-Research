@@ -32,8 +32,19 @@
 2. `fapi.binance.com`（REST API）**确实不可达**（TCP 443 超时，DNS 被污染为 `128.121.146.235`）。
    但**本项目不需要它** —— 所需全部数据（OHLCV / OI / funding / mark / index）归档中均有。
    原 PLAN 中"必须显式带 `limit=400` 并分页"的 REST 注意事项**作废**，改为纯归档方案。
-3. `data.binance.vision` 的 **S3 列表 API（`?list-type=2`）在此网络下返回空**
-   → 无法枚举目录，只能按**已知路径探测存在性**。生产管线需自建"路径生成 + HEAD 探测"的清单逻辑。
+3. ~~`data.binance.vision` 的 S3 列表 API（`?list-type=2`）在此网络下返回空~~ →
+   **2026-09-29 更正：目录枚举可用，是我端点用错了。**
+   `data.binance.vision` 根路径被**前端页面接管返回 HTML**；真正的 S3 接口在**区域化端点**：
+
+   ```
+   https://s3-ap-northeast-1.amazonaws.com/data.binance.vision
+       ?list-type=2&prefix=<前缀>&delimiter=/&max-keys=1000
+   ```
+
+   实测可枚举，并**修正了合约清单**：归档里的 USDT 永续共 **893 个**，
+   而 `exchangeInfo` 只有 658 —— **归档有而 `exchangeInfo` 无的有 241 个**
+   （含 `LUNAUSDT`/`SRMUSDT`/`HNTUSDT` 等早期下架合约，以及代币化股票永续）。
+   详见 `PHASE1_GUIDANCE.md` §1.1 / §1.2。
 
 ---
 
@@ -224,9 +235,13 @@ count_long_short_ratio, sum_taker_long_short_vol_ratio
 
 本节最初报告"实测路径不存在"。该结论**下得太快**，现更正。
 
-**错在哪**：当时每个数据集只试了**一条**猜测路径。而 `data.binance.vision` 的
-S3 列表 API 在本网络下返回空（无法枚举目录），因此**"路径 404" ≠ "数据集不存在"**。
-两个不同的命题被当成了同一个。
+**错在哪**：当时每个数据集只试了**一条**猜测路径。而且当时以为
+"无法枚举目录"（该判断本身也是错的，见第 0 节第 3 条），因此
+**"路径 404" ≠ "数据集不存在"**。两个不同的命题被当成了同一个。
+
+> **教训升级（2026-09-29）**：当时说"无法枚举目录"，其实**可以枚举**。
+> 若一开始就找到正确的 S3 端点，`bookTicker`/`liquidationSnapshot` 是否存在的问题
+> 本可直接查清，不必靠多点猜测。**"工具不可用"的结论同样需要证据。**
 
 ### 多路径实测结果
 
