@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import calendar
 import dataclasses
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Sequence
 
 
 @dataclass(frozen=True)
@@ -102,16 +102,27 @@ def last_complete_month(today: date | None = None) -> date:
     return last_month_end
 
 
+class ConfigViolation(ValueError):
+    """设计参数非法（例如 --sample-end 不是月末日）。
+
+    异常类定义在此处而非单独模块，好让本文件零外部依赖。
+    """
+
+    def __init__(self, problems: Sequence[str]) -> None:
+        self.problems = list(problems)
+        head = "\n".join(f"  [{i + 1}] {p}" for i, p in enumerate(self.problems))
+        super().__init__(f"配置非法（{len(self.problems)} 处问题）：\n{head}")
+
+
 def validate_sample_end(s: str, cfg: Config = CONFIG) -> None:
     """校验 --sample-end。通过则静默返回，否则抛 ConfigViolation。
 
     规则：
-      1. 必须是合法 ISO 日期
-      2. 必须是月末日（因 §1.6.6 只用完整月）
-      3. 不早于 sample_start
+      1. 必须提供（该参数必填且无默认值，§12.5）
+      2. 必须是合法 ISO 日期
+      3. 必须是月末日（因 §1.6.6 只用完整月）
+      4. 不早于 sample_start
     """
-    from lib.exceptions import ConfigViolation
-
     problems: list[str] = []
 
     if not isinstance(s, str) or not s:
@@ -139,3 +150,35 @@ def validate_sample_end(s: str, cfg: Config = CONFIG) -> None:
 
     if problems:
         raise ConfigViolation(problems)
+
+
+if __name__ == "__main__":
+    # 自测：python config.py
+    import sys
+
+    cases = [
+        ("2026-10-31", True), ("2026-10-15", False), ("2026-02-28", True),
+        ("2026-02-29", False), ("notadate", False), ("2020-01-31", False), ("", False),
+    ]
+    bad = 0
+    print("validate_sample_end 自测")
+    for s, should_pass in cases:
+        try:
+            validate_sample_end(s)
+            got = True
+        except ConfigViolation:
+            got = False
+        ok = got == should_pass
+        bad += 0 if ok else 1
+        print(f"  [{'PASS' if ok else 'FAIL'}] {s or '(空)':12s} "
+              f"期望{'通过' if should_pass else '拒绝'}，实际{'通过' if got else '拒绝'}")
+
+    try:
+        CONFIG.K = 30
+        print("  [FAIL] Config 可被修改")
+        bad += 1
+    except Exception as e:
+        print(f"  [PASS] Config frozen（{type(e).__name__}）")
+
+    print(f"\n结果：{'全部通过' if bad == 0 else f'{bad} 项失败'}")
+    sys.exit(1 if bad else 0)

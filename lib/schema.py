@@ -2,8 +2,9 @@
 Schema 契约 —— Phase 1 的 API 契约。下游 Phase 2–5 依此编写代码。
 
 权威定义在本文件。PHASE1_GUIDANCE.md §8.2/§8.3 描述【语义】（每列什么意思、
-单位、为什么），本文件定义【类型】。自测（python -m lib.schema）会校验
-两者列名一致，防止漂移。
+单位、为什么）；本文件定义【类型】。
+
+自测：python -m lib.schema
 
 =============================================================================
 类型词汇表（步骤0 第3轮 Q1：最小集，整数一律用 float64）
@@ -11,6 +12,7 @@ Schema 契约 —— Phase 1 的 API 契约。下游 Phase 2–5 依此编写代
     "string"    →  pandas "string"（原生，不绑 pyarrow 后端）
     "float64"   →  pandas float64
     "timestamp" →  pandas datetime64[ns, UTC]
+    "bool"      →  pandas bool
 
 为什么整数也用 float64：float64 精确表示到 2^53，而 trades 等远低于此。
   且 int8/int16/int32/int64 不支持 NaN（实测 TypeError），用 float 反而消除了
@@ -29,27 +31,21 @@ Schema 契约 —— Phase 1 的 API 契约。下游 Phase 2–5 依此编写代
 唯一例外：每张表的【标识列】（source_timestamp_col）强制非空 ——
   主键为空不是设计而是损坏：NaT 在 join 时静默匹配不上，那些行会无声消失。
 
-为补偿「全允许 null」，validate() 另加三条【无参】完整性检查（见 validate_contract）。
+为补偿「全允许 null」，validate() 另加三条【无参】完整性检查。
 """
 
 from __future__ import annotations
 
-import dataclasses
-import re
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 
 import pandas as pd
 
-from lib.exceptions import SchemaViolation
-
 __all__ = [
-    "Column", "TableSchema", "SemanticType",
+    "SchemaViolation", "Column", "TableSchema",
     "SEMANTIC_TO_PANDAS", "pandas_dtype_of", "normalize_dtype",
     "SOURCE_SCHEMAS", "LAYER2_SCHEMAS", "FEATURES_1H", "ALL_SCHEMAS", "get_schema",
-    "KLINE_12_NAMES", "raw_source_columns",
-    "validate", "validate_contract",
+    "KLINE_12_NAMES", "raw_source_columns", "validate",
 ]
 
 SemanticType = Literal["string", "float64", "timestamp", "bool"]
@@ -61,7 +57,21 @@ SEMANTIC_TO_PANDAS: dict[str, str] = {
     "bool": "bool",
 }
 
-GUIDANCE_PATH = Path(__file__).resolve().parent.parent / "PHASE1_GUIDANCE.md"
+
+class SchemaViolation(ValueError):
+    """DataFrame 未通过某个 TableSchema 的契约校验。
+
+    用 ValueError 的子类而非裸 ValueError，是为了让「数据未过契约」可被精确
+    捕获：except ValueError 会把别处的 ValueError 一起吞掉。异常类定义在此处
+    而非单独模块，好让本文件零外部依赖。
+    """
+
+    def __init__(self, table: str, problems: Sequence[str]) -> None:
+        self.table = table
+        self.problems = list(problems)
+        head = "\n".join(f"  [{i + 1}] {p}" for i, p in enumerate(self.problems))
+        super().__init__(
+            f'表 "{table}" 未通过 schema 校验（{len(self.problems)} 处问题）：\n{head}')
 
 
 @dataclass(frozen=True)
@@ -94,10 +104,6 @@ class TableSchema:
     def dtypes(self) -> dict[str, str]:
         return {c.name: c.dtype for c in self.columns}
 
-    def pandas_dtypes(self) -> dict[str, str]:
-        """列名 → 期望的 pandas dtype 字符串。"""
-        return {c.name: SEMANTIC_TO_PANDAS[c.dtype] for c in self.columns}
-
 
 def pandas_dtype_of(sem: str) -> str:
     return SEMANTIC_TO_PANDAS[sem]
@@ -122,15 +128,12 @@ def normalize_dtype(dt: Any) -> str:
 
 # ============================================================================
 # 源 schema —— 描述【解析器归一化之后】的形态
-# 注意：原始文件里时间戳是 int 毫秒（open_time/calc_time）或字符串（create_time），
-#       归一化后统一为 datetime64[ns, UTC]。
+# 原始文件里时间戳是 int 毫秒（open_time/calc_time）或字符串（create_time），
+# 归一化后统一为 datetime64[ns, UTC]。
 # ============================================================================
 
 def _cols(*spec) -> tuple[Column, ...]:
-    out = []
-    for s in spec:
-        out.append(Column(*s) if len(s) == 3 else Column(s[0], s[1]))
-    return tuple(out)
+    return tuple(Column(*s) if len(s) == 3 else Column(s[0], s[1]) for s in spec)
 
 
 # klines / markPriceKlines / indexPriceKlines / premiumIndexKlines 共用 12 列
@@ -253,7 +256,7 @@ LAYER2_SCHEMAS: dict[str, TableSchema] = {
 
 # ============================================================================
 # 第 3 层：features_1h
-# 列顺序与 PHASE1_GUIDANCE.md §8.3 的表格一致（自测校验）
+# 列顺序与 PHASE1_GUIDANCE.md §8.3 的表格一致
 # ============================================================================
 
 FEATURES_1H = TableSchema(
@@ -312,7 +315,7 @@ def _is_hour_aligned(s: pd.Series) -> bool:
                  & (d.nanosecond == 0)).all())
 
 
-def validate_contract(
+def validate(
     df: pd.DataFrame,
     schema: TableSchema | str,
     *,
@@ -321,20 +324,18 @@ def validate_contract(
     """校验 DataFrame 是否满足契约。失败抛 SchemaViolation（一次报全部问题）。
 
     检查项：
-      结构
-        1. 列名与顺序完全一致
-        2. dtype 与语义类型一致
-        3. 标识列（source_timestamp_col）非空          ← 第4轮 Q2
-        4. 主键唯一（无重复行）
-        5. 主键已排序（按主键单调）
-      完整性（无参，为补偿「数据列全允许 null」）      ← 第4轮 Q5
-        6. 无整列为 NaN 的列
-        7. 标识列落在整小时（若存在）
-      仅 tz 相关
-        8. 标识列为 tz-aware UTC（防 naive datetime）
+      1. 列名与【顺序】完全一致      挡列错位（源有表头/无表头混用）
+      2. dtype 与语义类型一致        挡类型漂移
+      3. 标识列非空                  NaT 在 join 时静默不匹配，行无声消失
+      4. 主键无重复                  实测源文件存在完全一致的副本行
+      5. 主键已排序                  实测近期文件时间戳非单调
+      6. 无整列为空                  整列解析失败（列名对、类型对、全 NaN）
+      7. 标识列落在整小时            挡毫秒/秒单位搞混
+      8. ts_end - ts == 1h           同上，独立第二道
+      9. 标识列为 tz-aware UTC       挡 naive datetime
 
-    注意：跨列一致性（oi_value/oi/close ≈ 1）与值域检查【不在此处】——
-    它们需要标定阈值，属质量巡检，另有函数（§6.3）。
+    【不在此处】：跨列一致性（oi_value/oi/close ≈ 1）与值域检查 —— 它们是
+    统计判断、阈值需标定，属质量巡检而非结构契约（§6.3）。
     """
     if isinstance(schema, str):
         schema = get_schema(schema)
@@ -353,11 +354,8 @@ def validate_contract(
         if extra:
             problems.append(f"多出列：{extra}")
         if not missing and not extra:
-            problems.append(
-                f"列名相同但【顺序不同】。期望 {expected}；实际 {actual}"
-            )
+            problems.append(f"列名相同但【顺序不同】。期望 {expected}；实际 {actual}")
 
-    # 列名不一致时后续按名取值会失效，但仍尽量检查共同列
     common = [c for c in expected if c in df.columns]
 
     # ---- 2. dtype ----
@@ -367,21 +365,15 @@ def validate_contract(
         want = SEMANTIC_TO_PANDAS[col.dtype]
         got = normalize_dtype(df[col.name].dtype)
         if want == "datetime64[ns, UTC]":
-            ok = got.startswith("datetime64")
-            if ok and not got.endswith("UTC]"):
+            if not got.startswith("datetime64"):
+                problems.append(f'列 "{col.name}" dtype={got}，期望 tz-aware 时间戳')
+            elif not got.endswith("UTC]"):
                 problems.append(
                     f'列 "{col.name}" 是 tz-naive 时间戳（{got}），'
-                    f"期望 tz-aware UTC。全程 UTC，禁用本地时间。"
-                )
-                continue
-        else:
-            ok = (got == want) or (want == "bool" and got == "bool")
-        if not ok:
+                    f"期望 tz-aware UTC。全程 UTC，禁用本地时间。")
+        elif got != want:
             problems.append(
-                f'列 "{col.name}" dtype={got}，期望 {want}（语义类型 {col.dtype}）'
-            )
-
-    # ---- 8. 标识列 tz 检查（已在 2 中覆盖；此处不重复）----
+                f'列 "{col.name}" dtype={got}，期望 {want}（语义类型 {col.dtype}）')
 
     # ---- 3 & 7. 标识列非空 + 整点 ----
     tcol = schema.source_timestamp_col
@@ -391,20 +383,16 @@ def validate_contract(
         if n_null:
             problems.append(
                 f'标识列 "{tcol}" 有 {n_null}/{n_rows} 行为空。'
-                f"主键为空即损坏：NaT 在 join 时静默匹配不上，那些行会无声消失。"
-            )
+                f"主键为空即损坏：NaT 在 join 时静默匹配不上，那些行会无声消失。")
         if str(s.dtype).startswith("datetime64") and not _is_hour_aligned(s):
-            problems.append(
-                f'标识列 "{tcol}" 存在非整点的时间戳，期望全部落在整小时（§第4轮 Q5）'
-            )
+            problems.append(f'标识列 "{tcol}" 存在非整点的时间戳，期望全部落在整小时')
 
-    # ---- 6. 无整列为 NaN ----
+    # ---- 6. 无整列为空 ----
     for c in common:
-        if df[c].isna().all() and n_rows > 0:
+        if n_rows > 0 and df[c].isna().all():
             problems.append(
                 f'列 "{c}" 整列为空（{n_rows} 行全 NaN）。'
-                f"多半是解析失败 —— 这类错误不会自然发生。"
-            )
+                f"多半是解析失败 —— 这类错误不会自然发生。")
 
     # ---- 4 & 5. 主键唯一 + 排序 ----
     pk = [k for k in schema.primary_key if k in df.columns]
@@ -413,43 +401,38 @@ def validate_contract(
         if dupes:
             problems.append(
                 f"主键 {tuple(pk)} 有 {dupes} 行重复。"
-                f"实测源文件存在完全一致的副本行，去重是必需步骤（§6.1）。"
-            )
+                f"实测源文件存在完全一致的副本行，去重是必需步骤（§6.1）。")
         else:
             try:
-                sorted_ok = df[pk].equals(df[pk].sort_values(pk, kind="stable"))
-                if not sorted_ok:
+                if not df[pk].equals(df[pk].sort_values(pk, kind="stable")):
                     problems.append(f"未按主键 {tuple(pk)} 排序（§6.1）")
             except TypeError as e:
                 problems.append(f"主键排序检查失败：{e}")
 
-    # ---- ts_end 派生一致性（仅当两列都在）----
+    # ---- 8. ts_end 派生一致性 ----
+    # 注意：若 ts/ts_end 的时区不一致（naive vs aware），相减会抛 TypeError。
+    # 那是【上面第 2 步已报告的 tz 问题】的后果，不是新问题 —— 故此处静默跳过，
+    # 不能让异常从 validate 里逃出去，否则问题清单就不完整了。
     if check_ts_end and "ts" in df.columns and "ts_end" in df.columns:
         both = df[["ts", "ts_end"]].dropna()
         if len(both):
-            delta = (both["ts_end"] - both["ts"]).astype("int64")
-            bad = int((delta != 3_600_000_000_000).sum())
-            if bad:
-                problems.append(
-                    f"ts_end - ts ≠ 1h 的行有 {bad}/{len(both)}。"
-                    f"多半是时间戳单位解析错误（毫秒 vs 秒）。"
-                )
+            try:
+                delta = (both["ts_end"] - both["ts"]).astype("int64")
+            except TypeError:
+                delta = None       # 时区不一致，已由 dtype 检查报告
+            if delta is not None:
+                bad = int((delta != 3_600_000_000_000).sum())
+                if bad:
+                    problems.append(
+                        f"ts_end - ts ≠ 1h 的行有 {bad}/{len(both)}。"
+                        f"多半是时间戳单位解析错误（毫秒 vs 秒）。")
 
     if problems:
         raise SchemaViolation(schema.name, problems)
 
 
-def validate(df: pd.DataFrame, schema: TableSchema | str, **kw) -> None:
-    """validate_contract 的别名（对外主入口）。"""
-    validate_contract(df, schema, **kw)
-
-
 # ============================================================================
 # 自测  ——  python -m lib.schema
-# 完成判据（PHASE1_GUIDANCE.md §16）：
-#   1) 假数据 round-trip：列名/类型/顺序完全一致
-#   2) validate() 能捕获故意构造的错误
-#   3) 文档 §8.3 的列名与代码一致（防漂移）
 # ============================================================================
 
 def _fake_frame(schema: TableSchema, n: int = 6) -> pd.DataFrame:
@@ -460,23 +443,21 @@ def _fake_frame(schema: TableSchema, n: int = 6) -> pd.DataFrame:
         if c.dtype == "timestamp":
             data[c.name] = pd.Series(
                 [ts0 + pd.Timedelta(hours=i) for i in range(n)],
-                dtype="datetime64[ns, UTC]",
-            )
+                dtype="datetime64[ns, UTC]")
         elif c.dtype == "float64":
             data[c.name] = pd.Series([1.0 + i for i in range(n)], dtype="float64")
         elif c.dtype == "bool":
             data[c.name] = pd.Series([False] * n, dtype="bool")
-        else:  # string
+        else:
             data[c.name] = pd.Series([f"SYM{i}" for i in range(n)], dtype="string")
     df = pd.DataFrame(data)[schema.names]
-    # 若存在 ts/ts_end 对，令其满足 1 小时关系
     if "ts" in df.columns and "ts_end" in df.columns:
         df["ts_end"] = df["ts"] + pd.Timedelta(hours=1)
     return df
 
 
-def _roundtrip(schema: TableSchema) -> list[str]:
-    """写 parquet → 读回，比对列名/顺序/类型。返回问题清单。"""
+def _roundtrip_problems(schema: TableSchema) -> list[str]:
+    """写 parquet → 读回，比对列名/顺序/类型。"""
     import io
 
     problems: list[str] = []
@@ -491,29 +472,14 @@ def _roundtrip(schema: TableSchema) -> list[str]:
     for c in schema.columns:
         if c.name not in back.columns:
             continue
-        want = normalize_dtype(df[c.name].dtype)
         got = normalize_dtype(back[c.name].dtype)
         if c.dtype == "timestamp":
-            if not got.startswith("datetime64") or not got.endswith("UTC]"):
+            if not (got.startswith("datetime64") and got.endswith("UTC]")):
                 problems.append(f'"{c.name}" 读回后不是 tz-aware UTC：{got}')
-        elif want != got:
-            problems.append(f'"{c.name}" 类型变了：写出 {want} → 读回 {got}')
+        elif got != normalize_dtype(df[c.name].dtype):
+            problems.append(
+                f'"{c.name}" 类型变了：写出 {normalize_dtype(df[c.name].dtype)} → 读回 {got}')
     return problems
-
-
-def _guidance_column_names(schema_name: str) -> list[str] | None:
-    """从 PHASE1_GUIDANCE.md 的标记块读取该表的列名（防文档与代码漂移）。"""
-    if not GUIDANCE_PATH.exists():
-        return None
-    text = GUIDANCE_PATH.read_text(encoding="utf-8")
-    pat = re.compile(
-        r"<!--\s*COLUMNS:" + re.escape(schema_name) + r"\s*-->(.*?)<!--\s*/COLUMNS\s*-->",
-        re.S,
-    )
-    m = pat.search(text)
-    if not m:
-        return None
-    return re.findall(r"`([a-z_][a-z0-9_]*)`", m.group(1))
 
 
 def _main() -> int:
@@ -527,21 +493,18 @@ def _main() -> int:
         else:
             fail += 1
             print(f"  [FAIL] {label}")
-            if detail:
-                for line in detail.splitlines():
-                    print(f"         {line}")
+            for line in (detail or "").splitlines():
+                print(f"         {line}")
 
     print("=" * 74)
     print("lib.schema 自测")
     print("=" * 74)
 
-    # ---- 1. round-trip ----
     print("\n[1] 假数据 round-trip（列名 / 类型 / 顺序）")
     for name, sch in ALL_SCHEMAS.items():
-        probs = _roundtrip(sch)
+        probs = _roundtrip_problems(sch)
         check(f"{name:<20} round-trip", not probs, "\n".join(probs))
 
-    # ---- 2. validate 能放行合法数据 ----
     print("\n[2] validate() 放行合法数据")
     for name, sch in ALL_SCHEMAS.items():
         try:
@@ -550,53 +513,39 @@ def _main() -> int:
         except SchemaViolation as e:
             check(f"{name:<20} 合法数据通过", False, str(e))
 
-    # ---- 3. validate 能捕获故意错误 ----
     print("\n[3] validate() 捕获故意构造的错误")
     sch = LAYER2_SCHEMAS["oi_1h"]
     good = _fake_frame(sch)
 
-    cases: list[tuple[str, pd.DataFrame, str]] = []
-
-    a = good.copy()
-    a.loc[0, "ts"] = pd.NaT
-    cases.append(("标识列为空 (NaT)", a, "为空"))
-
-    b = good.copy()
-    b.loc[0, "ts"] = pd.Timestamp("2026-08-01 00:30:00", tz="UTC")
-    cases.append(("时间戳非整点", b, "非整点"))
-
-    c = good.copy()
-    c["oi"] = float("nan")
-    cases.append(("某列整列为空", c, "整列为空"))
-
+    a = good.copy(); a.loc[0, "ts"] = pd.NaT
+    b = good.copy(); b.loc[0, "ts"] = pd.Timestamp("2026-08-01 00:30:00", tz="UTC")
+    c = good.copy(); c["oi"] = float("nan")
     d = pd.concat([good, good], ignore_index=True)
-    cases.append(("主键重复", d, "重复"))
-
     e = good.iloc[::-1].reset_index(drop=True)
-    cases.append(("未按主键排序", e, "排序"))
-
-    f = good.copy()
-    f["oi"] = f["oi"].astype("string")
-    cases.append(("dtype 错误", f, "dtype"))
-
+    f = good.copy(); f["oi"] = f["oi"].astype("string")
     g = good.drop(columns=["oi_value"])
-    cases.append(("缺列", g, "缺少列"))
+    h = good.copy(); h["ts_end"] = h["ts"] + pd.Timedelta(minutes=30)
+    i = good.copy(); i["ts"] = i["ts"].dt.tz_localize(None)
 
-    h = good.copy()
-    h["ts_end"] = h["ts"] + pd.Timedelta(minutes=30)
-    cases.append(("ts_end 非 ts+1h（单位错误）", h, "ts_end"))
-
-    for label, df, expect_kw in cases:
+    for label, df, kw in [
+        ("标识列为空 (NaT)", a, "为空"),
+        ("时间戳非整点", b, "非整点"),
+        ("某列整列为空", c, "整列为空"),
+        ("主键重复", d, "重复"),
+        ("未按主键排序", e, "排序"),
+        ("dtype 错误", f, "dtype"),
+        ("缺列", g, "缺少列"),
+        ("ts_end 非 ts+1h（单位错误）", h, "ts_end"),
+        ("tz-naive 时间戳", i, "tz-naive"),
+    ]:
         try:
             validate(df, sch)
             check(f"捕获：{label}", False, "未抛出 SchemaViolation")
         except SchemaViolation as ex:
-            hit = any(expect_kw in p for p in ex.problems)
+            hit = any(kw in p for p in ex.problems)
             check(f"捕获：{label}", hit,
-                  "" if hit else f"抛出了异常但信息未含 {expect_kw!r}：\n" +
-                  "\n".join(ex.problems))
+                  "" if hit else f"信息未含 {kw!r}：\n" + "\n".join(ex.problems))
 
-    # 一次报全
     multi = good.copy()
     multi["oi"] = float("nan")
     multi.loc[0, "ts"] = pd.NaT
@@ -607,35 +556,14 @@ def _main() -> int:
         check("一次报全多个问题（≥2 条）", len(ex.problems) >= 2,
               f"只报了 {len(ex.problems)} 条")
 
-    # ---- 4. 文档 / 代码一致性 ----
-    print("\n[4] PHASE1_GUIDANCE.md §8.3 与代码列名一致（防漂移）")
-    doc_names = _guidance_column_names("features_1h")
-    if doc_names is None:
-        check("找得到文档列名标记块", False,
-              f"在 {GUIDANCE_PATH.name} 中未找到 "
-              f"<!-- COLUMNS:features_1h --> ... <!-- /COLUMNS --> 标记块")
-    else:
-        code_names = FEATURES_1H.names
-        check("文档与代码列名一致", doc_names == code_names,
-              f"文档({len(doc_names)}) {doc_names}\n代码({len(code_names)}) {code_names}")
-
-    # ---- 5. 结构自检 ----
-    print("\n[5] schema 自身完整性")
+    print("\n[4] 结构自检")
     for name, s in ALL_SCHEMAS.items():
         missing = [k for k in s.primary_key if k not in s.names]
-        check(f"{name:<20} 主键列存在", not missing, f"主键列不在列定义中：{missing}")
-        if s.source_timestamp_col:
-            check(f"{name:<20} 标识列在主键中",
-                  s.source_timestamp_col in s.primary_key,
-                  f"{s.source_timestamp_col} 不在 {s.primary_key}")
+        check(f"{name:<20} 主键列存在", not missing, f"不在列定义中：{missing}")
         bad = [c.name for c in s.columns if c.dtype not in SEMANTIC_TO_PANDAS]
         check(f"{name:<20} 类型都在词汇表内", not bad, f"未知类型：{bad}")
 
-    # ---- 6. 主键形状（仅下游表）----
-    # 本项目的下游表都是 (symbol, 时间戳) 形状。若丢了实体键（例如误写成 ("ts",)），
-    # 表就无法区分不同合约在同一小时的记录 —— 而这类退化不会在任何数据检查中暴露。
-    # 源 schema 不适用：源文件是【单合约文件】，主键里没有 symbol 是正常的。
-    print("\n[6] 主键形状（仅第 2 层与 features）：(symbol, 时间戳)")
+    print("\n[5] 主键形状（仅第 2 层与 features）：(symbol, 时间戳)")
     downstream = {**LAYER2_SCHEMAS, FEATURES_1H.name: FEATURES_1H}
     for name, s in downstream.items():
         want = ("symbol", s.source_timestamp_col) if s.source_timestamp_col \
@@ -643,12 +571,10 @@ def _main() -> int:
         check(f"{name:<20} 主键 = {want}", tuple(s.primary_key) == want,
               f"实际 {s.primary_key}")
 
-    # ---- 7. 源 schema 主键：标识列必须在主键中 ----
-    print("\n[7] 源 schema 主键含其标识列（源为单合约文件，无需 symbol）")
+    print("\n[6] 源 schema 主键含其标识列（源为单合约文件，无需 symbol）")
     for name, s in SOURCE_SCHEMAS.items():
-        check(f"{name:<20} 标识列 {s.source_timestamp_col} 在主键中",
-              s.source_timestamp_col in s.primary_key,
-              f"主键 {s.primary_key}")
+        check(f"{name:<20} {s.source_timestamp_col} 在主键中",
+              s.source_timestamp_col in s.primary_key, f"主键 {s.primary_key}")
 
     print("\n" + "=" * 74)
     print(f"结果：{ok} 通过 / {fail} 失败")

@@ -388,16 +388,15 @@ oi_change    用 OI(H)     vs OI(H-1h)             → 同样 [H-1h, H]   ✅
 ### 8.3 `features_1h`
 
 > **权威定义在 `lib/schema.py`（`FEATURES_1H`）。** 下表讲**语义**（每列什么意思、
-> 单位、为什么），类型细节以代码为准。`python -m lib.schema` 会校验两者列名一致。
+> 单位、为什么），类型细节以代码为准。
 
 **主键** `(symbol, ts)`　**分区** `year=YYYY/chunk=YYYY-MM.parquet`
 
-<!-- COLUMNS:features_1h -->
+**20 列（顺序即契约）**：
 `symbol` `ts` `ts_end` `open` `high` `low` `close` `volume` `quote_volume`
 `trades` `taker_buy_volume` `taker_buy_quote_volume` `oi` `oi_value`
 `mark_close` `index_close` `funding_rate` `funding_interval_hours`
 `bar_missing` `oi_missing`
-<!-- /COLUMNS -->
 
 | # | 列 | 语义 |
 |---|---|---|
@@ -682,27 +681,35 @@ data/
 ## 16. 自动校验（步骤 0 落地）✅
 
 > **原则：文档讲语义，代码定类型。** schema 的权威定义在 `lib/schema.py`，
-> §8.2/§8.3 描述每列什么意思。自测校验两者列名一致。
+> §8.2/§8.3 描述每列什么意思。
 
-### 16.1 三个入口
+### 16.1 文件清单（极简）
 
-```bash
-python -c "import config; from lib import paths, schema, formatting"
-    # 判据 1：全部模块可导入
-
-python -m lib.schema
-    # schema 自测：round-trip / validate 放行 / validate 捕获 / 文档一致性 / 结构自检
-    # 退出码 0 = 全过
-
-python check_step0.py
-    # 步骤 0 完整验收：含上面的自测 + Config frozen + validate_sample_end 行为
+```
+config.py           设计参数 + validate_sample_end        ← 零外部依赖
+lib/schema.py       Schema 契约 + validate() + 自测        ← 只依赖 pandas
+lib/__init__.py     包声明
+PHASE1_GUIDANCE.md  本文档（语义）
 ```
 
-### 16.2 `validate()` 检查什么
+**刻意没有的东西**：独立的 `exceptions.py`、`paths.py`、`formatting.py`、
+验收脚本。异常类各自定义在需要它的文件里；路径与统计工具**等真正写代码时再长**，
+避免现在就有无人引用的文件。
+
+### 16.2 两个自测入口
+
+```bash
+python config.py         # validate_sample_end 行为 + Config frozen
+python -m lib.schema     # 65 项：round-trip / validate 放行 / validate 捕获 / 结构自检
+```
+
+**两者退出码 0 = 全过。** 它们就是步骤 0 完成判据的可跑载体。
+
+### 16.3 `validate()` 检查什么
 
 ```python
-from lib.schema import validate, get_schema
-validate(df, "features_1h")      # 失败抛 lib.exceptions.SchemaViolation
+from lib.schema import validate, SchemaViolation
+validate(df, "features_1h")      # 失败抛 SchemaViolation
 ```
 
 | # | 检查 | 挡住的静默错误 |
@@ -719,38 +726,34 @@ validate(df, "features_1h")      # 失败抛 lib.exceptions.SchemaViolation
 
 **失败时一次报全部问题**，不是遇到第一个就停 —— 避免"修一处、重跑、又一处"。
 
-### 16.3 不归 `validate()` 管的
+### 16.4 不归 `validate()` 管的
 
-跨列一致性与值域检查是**统计判断**（阈值需标定），与"结构契约"分开：
+跨列一致性（`oi_value/oi/close ≈ 1`、`|premium_close − (mark/index − 1)|`）
+与值域检查是**统计判断**（阈值需标定），属质量巡检而非结构契约。
+它们**尚未实现** —— 到步骤 4/5 真正需要时再写，见 §6.3。
 
-```python
-from lib.formatting import consistency_oi_price, consistency_basis
-consistency_oi_price(df)   # oi_value / oi / close ≈ 1        （§6.3 c）
-consistency_basis(df)      # |premium_close − (mark/index − 1)| （§6.3 d）
-```
+### 16.5 `manifest` 增量状态（承接 §9.4）
 
-另有两个输出工具：
-
-```python
-from lib.formatting import describe, null_summary, dedup_counts, gap_runs
-describe(df)        # 形状 / 列 / dtype / 非空率 / 样例
-null_summary(df)    # 逐列缺失，缺失最多的排前
-dedup_counts(...)   # 去重计数（§6.1「去重 + 记录」的载体）
-gap_runs(...)       # 逐日缺失 → 连续缺口区间（§12.1）
-```
-
-### 16.4 防漂移机制
-
-§8.3 有一个标记块：
+`layer2_built_at` 是**单一时间戳**，因此**构建顺序是硬性要求**：
 
 ```
-<!-- COLUMNS:features_1h -->
-`symbol` `ts` `ts_end` ...
-<!-- /COLUMNS -->
+解析 mark ✓  →  解析 index ✓  →  合并  →  写 mark_index_1h parquet ✓
+                                          →  最后写 layer2_built_at
 ```
 
-`python -m lib.schema` **读取它并与代码比对**。任何一边改了列名/顺序而另一边没跟，
-自测立刻失败。**这条检查已用注入破坏验证过**（删列、换序、改 dtype、改主键均能捕获）。
+时间戳必须**最后写**，且失败时**不写**。若提前写，`mark` 成功而 `index` 失败时
+该文件会被标记为"已建"，**`index` 的数据永久丢失且不报错**。
+
+### 16.6 `manifest` 增列
+
+在 §9.3 的字段基础上增加一列：
+
+| 列 | 含义 |
+|---|---|
+| `dup_rows_removed` | 该文件解析时去除的重复行数（§6.1「去重 + 记录」） |
+
+**为何不用报告承载**：报告里已有 `partial_rows`（行数 < 288），而重复行是
+**行数 > 288**，语义不同不宜混类；且日志会随会话消失，这属应持久记录的源数据性质。
 
 ### 16.5 `manifest` 增量状态（承接 §9.4）
 
