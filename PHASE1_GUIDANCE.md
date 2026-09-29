@@ -20,7 +20,7 @@
 | Step | 脚本 | 产出 | 状态 |
 |---|---|---|---|
 | — | `config.py` · `lib/schema.py` | 设计参数 + 数据契约 | ✅ 已完成 |
-| 0–2 | `phase1_data/build_candidate_pool.py` | **候选池名单**（296 个合约） | ✅ 已完成 |
+| 0–2 | `phase1_data/build_candidate_pool.py` | **候选池名单**（297 个合约） | ✅ 已完成 |
 | 3 | `phase1_data/fetch_market_data.py` | 候选池合约的日频 metrics + 月频 mark/index/funding | ⬜ 待写 |
 | 4 | `phase1_data/build_layer2.py` | 第 2 层 4 张规范化表 | ⬜ 待写 |
 | 5 | `phase1_data/build_features.py` | `features_1h`（19 列密集网格） | ⬜ 待写 |
@@ -28,7 +28,9 @@
 
 ⚠️ Step 3–6 的脚本名可在那一步调整。
 
-**最大的时间开销在 Step 3 的下载**（约 10 GB），不是写代码的时间。
+**Step 2 实测：19,431 个文件 / 240–287 秒 / 0 个未取得**（候选池 296 → **297**）。
+
+**最大的时间开销在 Step 3 的下载**（约 3.65 GB / 348,132 个文件），不是写代码的时间。
 
 ---
 
@@ -41,6 +43,29 @@
 | REST API | `fapi.binance.com` **不可达**，本项目**不需要** |
 | 冻结的 `exchangeInfo` | `www.binance.com/fapi/v1/exchangeInfo`（Python 可达）—— 只用来取 `baseAsset`/`quoteAsset` 等元信息 |
 | 依赖 | 标准库 + `pandas` / `pyarrow`（实为 2.3.3 / 23.0.1） |
+
+**两条必须遵守的工程规则**：
+
+**① 构造 URL 时路径段必须做百分号编码。**
+归档里有中文名合约（`币安人生USDT`、`我踏马来了USDT`、`牛来USDT`、`龙虾USDT`）。
+未编码的非 ASCII 字符会让 `urllib` 抛 `UnicodeEncodeError`：
+
+```python
+def quote_seg(seg: str) -> str:
+    """非 ASCII 才编码 —— 普通合约名保持可读，与既有 manifest 一致。"""
+    try:
+        seg.encode("ascii")
+    except UnicodeEncodeError:
+        return urllib.parse.quote(seg, safe="")
+    return seg
+```
+
+**② 只重试网络类失败。**
+`socket`/`URLError`/超时可重试；`UnicodeEncodeError`、`ValueError` 是编程错误，
+重试只会**把 bug 伪装成网络抖动**。`except Exception` 必须在它之前拦下这类异常。
+
+这两条曾合起来造成一次静默数据丢失：4 个中文名合约全部失败、被记为
+`retry_exhausted`，其中 19 个文件**真实存在**却被丢掉，候选池因此少了 1 个合约。
 
 **探测资源是否存在时，必须带对照组** —— 否则无法区分「资源不存在」与「路径猜错」。
 
@@ -183,7 +208,7 @@ Step 1  【硬过滤】剔非 USDT 本位、名称怪象、稳定币、代币化
            ↓
 Step 2  【算候选池】拉月频 klines → 过草稿闸 → 逐月算中位报价成交额排名
         → 取各月前 K 的并集 = 候选池
-        实测 831 → 19,431 个文件 → **候选池 296 个**
+        实测 831 → 19,431 个文件 → **候选池 297 个**
            ↓
 Step 3  【精筛下载】只对候选池合约：日频 metrics(OI) + 月频 funding / mark / index
            ↓
@@ -197,7 +222,7 @@ Step 6  【universe】资格判定 + PIT 成员（§6）+ D1 产出物
 **为什么 Step 2 只下 `klines`**：它的产出**只是一个排名**，排名只用 `quote_volume`。
 mark/index/funding 归 Step 3（只对候选池合约）。**premium 永不下载。**
 
-**Step 2 实测：122 文件/秒，238 秒完成。**
+**Step 2 实测：约 150 文件/秒（区间 122–169），240–287 秒完成，19,431 个文件 0 个未取得。**
 `19,431 / 831 ≈ 23.4 个月/合约`（窗口有 57 个月）—— 多数合约上市较晚，没有全程数据。
 
 ---
@@ -313,7 +338,7 @@ tmp = path + ".part"; tmp.write_bytes(data); os.replace(tmp, path)
 
 ```
 成员集    = 每个刷新期 50 个（逐月浮动）
-候选池    = 曾入过成员集的并集（实测 296 个）= Step 2 的产出 = 下载范围
+候选池    = 曾入过成员集的并集（实测 297 个）= Step 2 的产出 = 下载范围
 ```
 
 **恒等式**：一个币只有排进前 K 才可能成为样本 ⇒ 候选池 = 所有前 K 名的并集。
@@ -602,7 +627,7 @@ data/
 │   └─ features_1h/year=YYYY/chunk=YYYY-MM.parquet
 │
 └─ 03_reference/                      分析与审计用的参考表
-    ├─ candidate_pool.csv             ✅ 296 个合约
+    ├─ candidate_pool.csv             ✅ 297 个合约
     ├─ master.parquet                 一币一行（893）                 ⬜ Step 3
     ├─ universe_eligibility.parquet   一币一行                        ⬜ Step 6
     ├─ universe_membership.parquet    (symbol, date)                  ⬜ Step 6

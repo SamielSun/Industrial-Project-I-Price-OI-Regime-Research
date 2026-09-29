@@ -118,7 +118,13 @@ def month_list(start: str, end: str) -> list[str]:
 
 
 def http(url: str, *, method: str = "GET") -> bytes:
-    """带重试与退避的请求。失败抛最后一次异常（由调用方分类）。"""
+    """带重试与退避的请求。失败抛最后一次异常（由调用方分类）。
+
+    ⚠️ 只重试【网络类】失败。编程错误（未编码的 URL、非法参数）必须立刻炸，
+    不许被 `except Exception` 吞成"重试耗尽"。归档里有中文名合约
+    （`币安人生USDT` 等），URL 中未编码的非 ASCII 字符会抛
+    UnicodeEncodeError —— 曾因此把 19 个真实存在的文件静默丢成失败。
+    """
     last: Exception | None = None
     for attempt in range(RETRIES):
         try:
@@ -130,12 +136,34 @@ def http(url: str, *, method: str = "GET") -> bytes:
             if e.code == 404:
                 raise                       # 确定的答案，不重试
             last = e
+        except (UnicodeEncodeError, UnicodeDecodeError, ValueError) as e:
+            # 不可重试：重试只会把编程错误伪装成网络抖动
+            raise RuntimeError(f"URL 不可用（非网络问题，不重试）：{url!r} -> {e}") from e
         except Exception as e:              # noqa: BLE001  网络类，可重试
             last = e
         if attempt < RETRIES - 1:
             time.sleep(BACKOFF_BASE ** attempt + random.random())
     assert last is not None
     raise last
+
+
+def quote_seg(seg: str) -> str:
+    """把路径段编码进 URL。
+
+    普通合约名原样返回（可读性 + 与既有 manifest 一致）；
+    中文名等非 ASCII 必须编码（`币安人生USDT` -> `%E5%B8%81...`）。
+    """
+    try:
+        seg.encode("ascii")
+    except UnicodeEncodeError:
+        return urllib.parse.quote(seg, safe="")
+    return seg
+
+
+def monthly_klines_path(sym: str, ym: str) -> str:
+    """月频 klines 的 URL 路径。所有 URL 构造必须走这里。"""
+    q = quote_seg(sym)
+    return f"/data/futures/um/monthly/klines/{q}/1h/{q}-1h-{ym}.zip"
 
 
 # ============================================================================
@@ -273,12 +301,14 @@ def download_one(sym: str, ym: str) -> tuple[str, str, str]:
     p = cache_path(sym, ym)
     if p.exists():
         return sym, ym, "cached"
-    url = f"{CDN}/data/futures/um/monthly/klines/{sym}/1h/{sym}-1h-{ym}.zip"
+    url = CDN + monthly_klines_path(sym, ym)
     try:
         data = http(url)
     except urllib.error.HTTPError as e:
         return sym, ym, ("confirmed_404" if e.code == 404 else "retry_exhausted")
-    except Exception:                        # noqa: BLE001
+    except RuntimeError:                     # URL 编码等编程错误 —— 直接炸
+        raise
+    except Exception:                        # noqa: BLE001  网络类
         return sym, ym, "retry_exhausted"
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".zip.part")
@@ -414,6 +444,11 @@ def main() -> int:
     todo = [(s, ym) for s, ms in avail.items() for ym in ms]
     log(f"\nStep 2  下载 {len(todo)} 个月频 klines…")
     statuses: dict[str, int] = {}
+    # 逐文件的最终状态。必须显式记录 —— 靠"缓存文件在不在"反推会把
+    # 【已确认的 404】和【网络抖动】混为一谈，两者在缺失报告里处置完全不同（§8.3）。
+    final_status: dict[tuple[str, str], str] = {
+        (s_, ym_): ("cached" if cache_path(s_, ym_).exists() else "retry_exhausted")
+        for s_, ym_ in todo}
     if args.skip_download:
         log("        --skip-download：跳过下载，只用已有缓存")
     else:
@@ -422,7 +457,8 @@ def main() -> int:
         with ThreadPoolExecutor(CONCURRENCY) as ex:
             futs = [ex.submit(download_one, s, ym) for s, ym in todo]
             for f in as_completed(futs):
-                _, _, st = f.result()
+                sy, ymy, st = f.result()
+                final_status[(sy, ymy)] = st
                 statuses[st] = statuses.get(st, 0) + 1
                 done += 1
                 if done % 5000 == 0:
@@ -437,7 +473,8 @@ def main() -> int:
             log(f"        对 {len(retry)} 个未取得项补跑一轮…")
             t1 = time.time()
             with ThreadPoolExecutor(CONCURRENCY) as ex:
-                for _, _, st in ex.map(lambda t: download_one(*t), retry):
+                for sy, ymy, st in ex.map(lambda t: download_one(*t), retry):
+                    final_status[(sy, ymy)] = st
                     statuses["retry2_" + st] = statuses.get("retry2_" + st, 0) + 1
             log(f"        补跑完成，耗时 {time.time()-t1:.0f}s")
 
@@ -474,14 +511,17 @@ def main() -> int:
     for s, ym in todo:
         p = cache_path(s, ym)
         exists = p.exists()
+        st = final_status.get((s, ym), "retry_exhausted")
+        if st == "cached":                   # 本次没下，但缓存就在那儿
+            st = "ok"
         rows.append({
             "source": "klines",
             "symbol": s,
             "period": ym,
             "granularity": "monthly",
-            "remote_path": f"/data/futures/um/monthly/klines/{s}/1h/{s}-1h-{ym}.zip",
+            "remote_path": monthly_klines_path(s, ym),
             "filename": f"{s}-1h-{ym}.zip",
-            "status": "ok" if exists else "retry_exhausted",
+            "status": st,
             "bytes": p.stat().st_size if exists else 0,
             "downloaded_at": now if exists else "",
         })
@@ -504,8 +544,13 @@ def main() -> int:
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # ---- 运行摘要（§8.3：★ 未取得 绝不能算进缺失）----
-    n_ok = sum(1 for s, ym in todo if cache_path(s, ym).exists())
-    n_missing = len(todo) - n_ok
+    cnt: dict[str, int] = {}
+    for st in final_status.values():
+        cnt[st] = cnt.get(st, 0) + 1
+    n_cached = cnt.get("cached", 0)
+    n_ok = cnt.get("ok", 0) + n_cached
+    n_404 = cnt.get("confirmed_404", 0)
+    n_retry = cnt.get("retry_exhausted", 0)
     log("\n" + "=" * 74)
     log("运行摘要")
     log("=" * 74)
@@ -513,8 +558,10 @@ def main() -> int:
     log(f"  硬过滤后               {len(kept):>8,}")
     log(f"  有窗口内数据           {len(avail):>8,}")
     log(f"  待下载文件             {len(todo):>8,}")
-    log(f"  已取得                 {n_ok:>8,}")
-    log(f"  ★ 未取得               {n_missing:>8,}   ← 不等于缺失")
+    log(f"  本次新下载             {n_ok - n_cached:>8,}")
+    log(f"  已取得（含缓存命中）      {n_ok:>8,}")
+    log(f"  确认不存在 404         {n_404:>8,}   ← 归档空洞，非网络问题")
+    log(f"  ★ 未取得（待重试）      {n_retry:>8,}   ← 不等于缺失")
     log(f"  ** 候选池（K={K} 并集）  {len(union):>8,} **")
     log(f"  总耗时                 {time.time()-t_start:.0f}s")
     log("=" * 74)
