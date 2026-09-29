@@ -1,0 +1,29 @@
+{
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+
+    // 排除数据与产物目录：避免编辑器索引 Parquet / 原始 zip（预计 5–15 GB）
+    "files.watcherExclude": {
+        "**/data/**": true,
+        "**/outputs/**": true,
+        "**/research_archive/**": true,
+        "**/__pycache__/**": true
+    },
+    "search.exclude": {
+        "**/data/**": true,
+        "**/outputs/**": true,
+        "**/research_archive/**": true,
+        "**/__pycache__/**": true
+    },
+
+    // 数据文件不进编辑器全文检索；但要能看到文件名
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true
+    },
+
+    // Python
+    "python.analysis.extraPaths": [".", "./lib"],
+    "files.encoding": "utf8",
+    "files.eol": "\n"
+}

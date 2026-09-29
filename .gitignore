@@ -1,0 +1,25 @@
+# ---- Phase 1 数据产物（约 600 MB，完全可重建，不进版本控制）----
+data/
+outputs/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.ipynb_checkpoints/
+
+# ---- 生成的分析产物 ----
+*.parquet
+*.pkl
+*.log
+
+# ---- Office 临时锁文件 ----
+~$*
+~WRL*.tmp
+
+# ---- 编辑器 / 系统 ----
+.DS_Store
+Thumbs.db
