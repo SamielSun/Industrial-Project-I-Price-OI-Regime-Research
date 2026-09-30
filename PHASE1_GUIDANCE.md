@@ -23,7 +23,7 @@
 | 0–2 | `phase1_data/build_candidate_pool.py` | **候选池名单**（285 个合约） | ✅ 已完成 |
 | 3 | `phase1_data/fetch_market_data.py` | **raw 数据**（1.10 GB / 1,145 个 parquet） | ✅ 已完成 |
 | 4 | `phase1_data/build_layer2.py` | **第 2 层 4 张表**（546.8 MB / 228 个文件） | ✅ 已完成 |
-| 5 | `phase1_data/build_features.py` | `features_1h`（19 列密集网格） | ⬜ 待写 |
+| 5 | `phase1_data/build_features.py` | **`features_1h`**（541.5 MB / 7,253,002 行 / 19 列） | ✅ 已完成 |
 | 6 | `phase1_data/build_universe.py` | universe 表 + D1 全部产出物 | ⬜ 待写 |
 
 ⚠️ Step 4–6 的脚本名可在那一步调整。
@@ -32,6 +32,11 @@
 
 **Step 3 实测：345,472 个文件 / 两轮共 111 分钟 / 0 个 `retry_exhausted`。**
 （首轮旧版写法 109 分钟；改进为"一遍过"后，增量只需 341 秒。见 §5.3）
+
+**Step 4 实测：228 个文件 / 546.8 MB / 866 秒。**
+
+**Step 5 实测：57 个文件 / 7,253,002 行 / 541.5 MB / 285 秒。**
+裁掉死尾 321,737 行，密集化补 6,886 行（`bar_missing`）。
 
 ---
 
