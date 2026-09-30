@@ -28,7 +28,7 @@
 
 ⚠️ Step 4–6 的脚本名可在那一步调整。
 
-**Step 2 实测：19,431 个文件 / 240–287 秒 / 0 个未取得**（候选池 296 → **297**）。
+**Step 2 实测：18,874 个文件 / 76 秒（缓存命中）/ 0 个未取得**（候选池 296 → 297 → 288 → **285**）。
 
 **Step 3 实测：345,472 个文件 / 两轮共 111 分钟 / 0 个 `retry_exhausted`。**
 （首轮旧版写法 109 分钟；改进为"一遍过"后，增量只需 341 秒。见 §5.3）
@@ -211,7 +211,7 @@ Step 1  【硬过滤】剔非 USDT 本位、名称怪象、稳定币、代币化
            ↓
 Step 2  【算候选池】拉月频 klines → 过草稿闸 → 逐月算中位报价成交额排名
         → 取各月前 K 的并集 = 候选池
-        实测 831 → 19,431 个文件 → **候选池 297 个**
+        实测 831 → 18,874 个文件 → **候选池 285 个**
            ↓
 Step 3  【精筛下载】只对候选池合约：日频 metrics(OI) + 月频 funding / mark / index
            ↓
@@ -225,7 +225,7 @@ Step 6  【universe】资格判定 + PIT 成员（§6）+ D1 产出物
 **为什么 Step 2 只下 `klines`**：它的产出**只是一个排名**，排名只用 `quote_volume`。
 mark/index/funding 归 Step 3（只对候选池合约）。**premium 永不下载。**
 
-**Step 2 实测：约 150 文件/秒（区间 122–169），240–287 秒完成，19,431 个文件 0 个未取得。**
+**Step 2 实测：首轮 463 秒（VPN）／缓存命中 76 秒。18,874 个文件，0 个未取得。**
 `19,431 / 831 ≈ 23.4 个月/合约`（窗口有 57 个月）—— 多数合约上市较晚，没有全程数据。
 
 ---
@@ -355,13 +355,34 @@ NTFS 完全支持 Unicode。实测踩过：两个源的文件被写成编码名�
 | **2** | 截至 M 月初已有 ≥ N 根 1h bar | `min_history_bars = 720` |
 | **3** | trailing 30 天内 `sum_open_interest` 非空天数占比 ≥ N | `min_oi_coverage = 0.90` |
 | **4** | trailing 30 天内 `quote_volume > 0` 的天数 ≥ N | `min_active_days = 15` |
-| **5** | 非代币化股票/商品永续（**本项目追加**） | 显式排除名单 |
+| **5** | 非代币化传统金融资产（**本项目追加**） | `exchangeInfo` 判据，见下 |
 
-**闸 5 的必要性**：归档里有代币化股票与商品永续（`AAPLUSDT` `AMZNUSDT` `AMDUSDT`
-`ASMLUSDT` `ARMUSDT` `AVGOUSDT` `COINUSDT` `CLUSDT`(原油) `COPPERUSDT`(铜) 等）。
-它们能通过闸 1–4（非稳定币、历史够、OI 有、成交活跃），但**不是加密资产**，
-混入会让结论无法解释。**用显式名单，不用规则猜** —— 代码与名称的对应关系会变。
-名单在 `build_candidate_pool.py` 的 `TOKENIZED_EQUITY_COMMODITY`。
+**闸 5 的必要性**：归档里有大量**代币化传统金融资产** —— 美股（`TSLAUSDT` `NVDAUSDT`
+`GOOGLUSDT` 等）、港韩 A 股（`TENCENTUSDT` `SAMSUNGUSDT` `KORUUSDT`）、
+ETF（`SPYUSDT` `QQQUSDT` `SOXLUSDT`）、商品（`XAUUSDT` 金、`XAGUSDT` 银、
+`CLUSDT` 原油）、指数（`DEFIUSDT` `BTCDOMUSDT` `ALLUSDT` `BLUEBIRDUSDT`）、
+外汇（`USDBRLUSDT`）。它们能通过闸 1–4，但**不是加密资产**，混入会让结论无法解释。
+
+**判据用 `exchangeInfo` 的分类字段，不用手工名单：**
+
+| 字段 | 加密资产 | 传统金融 |
+|---|---|---|
+| `contractType` | `PERPETUAL` | `TRADIFI_PERPETUAL` |
+| `underlyingType` | `COIN` | `EQUITY` · `HK_EQUITY` · `KR_EQUITY` · `CN_EQUITY` · `COMMODITY` · `PREMARKET` · `FX` · `INDEX` |
+
+**通过闸 5 ⇔ `contractType == "PERPETUAL"` 且 `underlyingType == "COIN"`。**
+实测这一条在归档里剔掉 **216 个**非加密资产，保留 684 个。
+
+⚠️ **为什么不用手工名单**：首版名单 35 个，漏进 21 个代币化标的；补齐到 55 个后，
+仍漏掉 `GOOGLUSDT`/`SPYUSDT`/`NBISUSDT`，也漏掉 25 个当时不在池里的。
+**手工名单的结构性缺陷是：候选池按排名滚动，新标的随时可能进池** ——
+每轮都要重新人工核对，必然出错。API 判据一次到位，且自动跟进新增标的。
+
+⚠️ 该判据也排掉 `PERPETUAL/INDEX` 的**指数永续** —— 它们是合成品，不是单一资产。
+
+⚠️ **局限**：`exchangeInfo` 只含**当前挂牌**的合约，已下架的查不到。
+脚本里留了 `DELISTED_NON_CRYPTO` 兜底名单（当前为空 —— 实测池里查不到的那些
+合约全部是加密资产）。**新增合约时要复核**，脚本跑完会打印分类剔除统计供核对。
 
 **闸 2 / 闸 3 的两个易错点**：
 
@@ -397,7 +418,7 @@ NTFS 完全支持 Unicode。实测踩过：两个源的文件被写成编码名�
 
 ```
 成员集    = 每个刷新期 50 个（逐月浮动）
-候选池    = 曾入过成员集的并集（实测 297 个）= Step 2 的产出 = 下载范围
+候选池    = 曾入过成员集的并集（实测 285 个）= Step 2 的产出 = 下载范围
 ```
 
 **恒等式**：一个币只有排进前 K 才可能成为样本 ⇒ 候选池 = 所有前 K 名的并集。
@@ -686,7 +707,7 @@ data/
 │   └─ features_1h/year=YYYY/chunk=YYYY-MM.parquet
 │
 └─ 03_reference/                      分析与审计用的参考表
-    ├─ candidate_pool.csv             ✅ 297 个合约
+    ├─ candidate_pool.csv             ✅ 285 个合约
     ├─ master.parquet                 一币一行（893）                 ⬜ Step 3
     ├─ universe_eligibility.parquet   一币一行                        ⬜ Step 6
     ├─ universe_membership.parquet    (symbol, date)                  ⬜ Step 6

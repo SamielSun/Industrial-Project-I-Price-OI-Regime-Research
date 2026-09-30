@@ -81,18 +81,32 @@ MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 
-# 闸 5：代币化股票 / 商品永续（§6.1）。**首次运行后会打印候选名单供核对。**
-TOKENIZED_EQUITY_COMMODITY = {
-    # 美股
-    "AAPLUSDT", "ADBEUSDT", "ALABUSDT", "AMATUSDT", "AMDUSDT", "AMZNUSDT",
-    "ANETUSDT", "APLDUSDT", "APPUSDT", "ARMUSDT", "ASMLUSDT", "ASTSUSDT",
-    "AVGOUSDT", "AXTIUSDT", "BABAUSDT", "BBXUSDT", "BEUSDT", "BLUEBIRDUSDT",
-    "BMNRUSDT", "BRKBUSDT", "BSPUSDT", "BYDUSDT", "CBRSUSDT", "CIENUSDT",
-    "COHRUSDT", "COINUSDT", "COSTUSDT", "CRCLUSDT", "AAOIUSDT", "AGPUUSDT",
-    "ANTHROPICUSDT", "APLDUSDT",
-    # 商品
-    "CLUSDT", "COPPERUSDT", "BZUSDT",
-}
+# 闸 5：排除代币化传统金融资产（股票 / ETF / 商品 / 指数）。
+#
+# 判据来自 exchangeInfo 的两个字段（实测于 2026-09）：
+#     contractType    PERPETUAL（加密）  vs  TRADIFI_PERPETUAL（传统金融）
+#     underlyingType  COIN（加密）       vs  EQUITY / KR_EQUITY / HK_EQUITY /
+#                                          CN_EQUITY / COMMODITY / PREMARKET /
+#                                          FX / INDEX
+#   判据：**contractType == "PERPETUAL" 且 underlyingType == "COIN"** 才算加密资产。
+#
+# 为什么不用手工名单：首版名单只有 35 个，漏进 21 个代币化标的；
+# 补齐后仍未覆盖 GOOGLUSDT / SPYUSDT / NBISUSDT，且漏掉 25 个当时不在池里的。
+# 手工名单的结构性缺陷是【池子按排名滚动，新标的随时可能进池】——
+# 每轮都要重新人工核对，必然出错。
+#
+# 这个判据同时排掉了 PERPETUAL/INDEX 的指数永续（DEFIUSDT / BTCDOMUSDT /
+# ALLUSDT / BLUEBIRDUSDT）—— 它们是合成品，不是单一加密资产。
+#
+# ⚠️ 局限：exchangeInfo 只含【当前挂牌】的合约。已下架的在里面查不到，
+#    只能靠下面的兜底名单。兜底名单很短，因为 2026-09 之前的代币化标的
+#    基本都已下架或改判，而实测池里那些查不到的合约全部是加密资产。
+DELISTED_NON_CRYPTO: set[str] = set()   # 目前为空，见上方说明
+
+# 允许的 exchangeInfo 分类（其余一律视为非加密资产）
+CRYPTO_CONTRACT_TYPE = "PERPETUAL"
+CRYPTO_UNDERLYING_TYPE = "COIN"
+
 
 
 # ============================================================================
@@ -201,10 +215,10 @@ def enumerate_archive() -> tuple[set[str], set[str], dict]:
     syms = {n.rstrip("/").split("/")[-1] for n in names if n.rstrip("/").split("/")[-1]}
     log(f"        归档合约总数 {len(syms)}   耗时 {time.time()-t0:.1f}s")
 
-    # exchangeInfo：只为拿 base/quote/status 等元信息，不用它当合约清单（§3.1）
+    # exchangeInfo：只为拿 base/quote/underlyingType 等元信息，不用它当合约清单（§3.1）
+    # ⚠️ 这里【不过滤】contractType —— 闸 5 需要看 TRADIFI_PERPETUAL 才能排除它
     ex_url = "https://www.binance.com/fapi/v1/exchangeInfo"
-    info = {s["symbol"]: s for s in json.loads(http(ex_url))["symbols"]
-            if s.get("contractType") == "PERPETUAL"}
+    info = {s["symbol"]: s for s in json.loads(http(ex_url))["symbols"]}
     log(f"        exchangeInfo 元信息 {len(info)} 条")
 
     usdt = {s for s in syms if s.endswith("USDT")}
@@ -241,10 +255,16 @@ def hard_filter(usdt: set[str], info: dict, cfg: cfg_mod.Config,
         if base and base in cfg.stablecoin_bases:
             drop(s, "稳定币")
             continue
-        # 闸 5：代币化股票/商品
-        if s in TOKENIZED_EQUITY_COMMODITY:
-            drop(s, "代币化股票/商品")
+        # 闸 5：排除代币化传统金融资产（见文件头 CRYPTO_* 常量处的说明）
+        if s in DELISTED_NON_CRYPTO:
+            drop(s, "非加密资产（兜底名单）")
             continue
+        if rec:
+            ct = rec.get("contractType")
+            ut = rec.get("underlyingType")
+            if ct != CRYPTO_CONTRACT_TYPE or ut != CRYPTO_UNDERLYING_TYPE:
+                drop(s, f"非加密资产（{ct}/{ut}）")
+                continue
         kept.append(s)
 
     for why, ss in sorted(dropped.items(), key=lambda kv: -len(kv[1])):
@@ -527,10 +547,22 @@ def main() -> int:
         })
     mf = pd.DataFrame(rows, columns=[
         "source", "symbol", "period", "granularity", "remote_path",
-        "filename", "status", "bytes", "downloaded_at"])
-    mf.to_parquet(MANIFEST, engine="pyarrow", compression="zstd")
+        "filename", "status", "bytes", "downloaded_at", "raw_written_at"])
+    # 只替换本步骤自己的 (source=klines, granularity=monthly) 记录，
+    # 其余（Step 3 的 mark/index/funding/metrics 明细）原样保留。
+    if MANIFEST.exists():
+        old = pd.read_parquet(MANIFEST)
+        for c in mf.columns:
+            if c not in old.columns:
+                old[c] = ""
+        own = (old["source"] == "klines") & (old["granularity"] == "monthly")
+        mf = pd.concat([old[~own][mf.columns], mf], ignore_index=True)
+    MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+    tmp = MANIFEST.with_name(MANIFEST.name + ".part")
+    mf.to_parquet(tmp, engine="pyarrow", compression="zstd")
+    os.replace(tmp, MANIFEST)
     n_fail = int((mf["status"] != "ok").sum())
-    log(f"\nmanifest -> {MANIFEST}  ({len(mf):,} 行，未取得 {n_fail:,})")
+    log(f"\nmanifest -> {MANIFEST}  ({len(mf):,} 行，非 ok {n_fail:,})")
 
     RUN_INFO.write_text(json.dumps({
         "sample_end": args.sample_end,
