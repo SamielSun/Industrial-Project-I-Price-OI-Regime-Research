@@ -22,7 +22,7 @@
 | — | `config.py` · `lib/schema.py` | 设计参数 + 数据契约 | ✅ 已完成 |
 | 0–2 | `phase1_data/build_candidate_pool.py` | **候选池名单**（285 个合约） | ✅ 已完成 |
 | 3 | `phase1_data/fetch_market_data.py` | **raw 数据**（1.10 GB / 1,145 个 parquet） | ✅ 已完成 |
-| 4 | `phase1_data/build_layer2.py` | 第 2 层 4 张规范化表 | ⬜ 待写 |
+| 4 | `phase1_data/build_layer2.py` | **第 2 层 4 张表**（546.8 MB / 228 个文件） | ✅ 已完成 |
 | 5 | `phase1_data/build_features.py` | `features_1h`（19 列密集网格） | ⬜ 待写 |
 | 6 | `phase1_data/build_universe.py` | universe 表 + D1 全部产出物 | ⬜ 待写 |
 
