@@ -81,7 +81,7 @@ MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 
-# 闸 5：排除代币化传统金融资产（股票 / ETF / 商品 / 指数）。
+# 闸 4：排除代币化传统金融资产（股票 / ETF / 商品 / 指数）。
 #
 # 判据来自 exchangeInfo 的两个字段（实测于 2026-09）：
 #     contractType    PERPETUAL（加密）  vs  TRADIFI_PERPETUAL（传统金融）
@@ -216,7 +216,7 @@ def enumerate_archive() -> tuple[set[str], set[str], dict]:
     log(f"        归档合约总数 {len(syms)}   耗时 {time.time()-t0:.1f}s")
 
     # exchangeInfo：只为拿 base/quote/underlyingType 等元信息，不用它当合约清单（§3.1）
-    # ⚠️ 这里【不过滤】contractType —— 闸 5 需要看 TRADIFI_PERPETUAL 才能排除它
+    # ⚠️ 这里【不过滤】contractType —— 闸 4 需要看 TRADIFI_PERPETUAL 才能排除它
     ex_url = "https://www.binance.com/fapi/v1/exchangeInfo"
     info = {s["symbol"]: s for s in json.loads(http(ex_url))["symbols"]}
     log(f"        exchangeInfo 元信息 {len(info)} 条")
@@ -255,7 +255,7 @@ def hard_filter(usdt: set[str], info: dict, cfg: cfg_mod.Config,
         if base and base in cfg.stablecoin_bases:
             drop(s, "稳定币")
             continue
-        # 闸 5：排除代币化传统金融资产（见文件头 CRYPTO_* 常量处的说明）
+        # 闸 4：排除代币化传统金融资产（见文件头 CRYPTO_* 常量处的说明）
         if s in DELISTED_NON_CRYPTO:
             drop(s, "非加密资产（兜底名单）")
             continue
@@ -384,7 +384,7 @@ def build_monthly_stats(sym: str, months: list[str]) -> tuple[dict[str, float], 
 #
 # 两者都【故意宽松】（宁可多留）：本脚本是粗筛，过严会误杀合法样本；
 # 过宽的代价只是 Step 3 多下一批，而 Step 6 会用完整四条闸再筛一次。
-# 闸 3（OI 可靠性）与闸 5（代币化资产，已在 Step 1 处理）不在此。
+# 闸 3（OI 可靠性）与闸 4（代币化资产，已在 Step 1 处理）不在此。
 # ============================================================================
 
 DRAFT_MIN_PRIOR_MONTHS = 1              # >= 1 个月，是闸 2「2160 根 bar」的宽松下界
