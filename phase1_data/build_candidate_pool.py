@@ -31,7 +31,7 @@ Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，
   python phase1_data/build_candidate_pool.py --sample-end 2026-08-31 --skip-download  # 只用缓存重算
   P11_DATA_ROOT=/tmp/x python phase1_data/build_candidate_pool.py ... --subset A B C   # 冒烟/核验
 
-依据：PHASE1_GUIDANCE.md §3.1（枚举）、§6（五条闸与排名）、§5.3（下载参数）
+依据：PHASE1_GUIDANCE.md §3.1（枚举）、§6（四条闸与排名）、§5.3（下载参数）
 """
 
 from __future__ import annotations
@@ -380,15 +380,15 @@ def build_monthly_stats(sym: str, months: list[str]) -> tuple[dict[str, float], 
 #
 # §6.2 的排名是「对通过资格闸的合约排名」。本脚本只有 klines，所以只能做：
 #   草稿闸 A（对应闸 2「历史不足」）：到该月初为止，窗口内已有 >= N 个月数据
-#   草稿闸 B（对应闸 4「不流动」  ）：上一个月有效小时数 >= 24*15
+#   草稿闸 B（对应闸 2 的存在性    ）：上一个月有效小时数 >= 24*15
 #
 # 两者都【故意宽松】（宁可多留）：本脚本是粗筛，过严会误杀合法样本；
-# 过宽的代价只是 Step 3 多下一批，而 Step 6 会用完整五条闸再筛一次。
-# 闸 3（OI 可靠性）与闸 5（代币化股票，已在 Step 1 处理）不在此。
+# 过宽的代价只是 Step 3 多下一批，而 Step 6 会用完整四条闸再筛一次。
+# 闸 3（OI 可靠性）与闸 5（代币化资产，已在 Step 1 处理）不在此。
 # ============================================================================
 
-DRAFT_MIN_PRIOR_MONTHS = 1              # >= 1 个月，是闸 2「720 根 bar」的宽松下界
-DRAFT_MIN_BARS_IN_PREV_MONTH = 24 * 15  # = 360 小时，对应闸 4 的「30 天内 >= 15 天」
+DRAFT_MIN_PRIOR_MONTHS = 1              # >= 1 个月，是闸 2「2160 根 bar」的宽松下界
+DRAFT_MIN_BARS_IN_PREV_MONTH = 24 * 15  # = 360 小时，只要上个月还活着就放行
 
 
 def draft_gate_ok(liq: dict[str, float], bars: dict[str, int],

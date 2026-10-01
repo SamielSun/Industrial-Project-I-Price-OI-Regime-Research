@@ -260,9 +260,9 @@ K                 = 50
 liq_window_days   = 30
 refresh_months    = 1
 buffer_L          = 0
-min_history_bars  = 720       # 闸 2
-min_oi_coverage   = 0.90      # 闸 3
-min_active_days   = 15        # 闸 4
+min_history_bars  = 2160      # 闸 2：90 天
+min_oi_coverage   = 0.90      # 闸 3①
+max_oi_gap_hours  = 48        # 闸 3②
 stablecoin_bases  = ("USDC","FDUSD","TUSD","BUSD","DAI","USDP","SUSD","USDD","PYUSD","EUR")
 ```
 
@@ -271,11 +271,12 @@ stablecoin_bases  = ("USDC","FDUSD","TUSD","BUSD","DAI","USDP","SUSD","USDD","PY
 | `K=50` | 第 1 名与第 50 名流动性差 168 倍，切在合理档位 |
 | `liq_window_days=30` | 实测月换手 **18.9%**（60 天为 13.0%，更稳但更滞后） |
 | `refresh_months=1` | 滞后不进事件研究的问题，噪声才进 → 月度冻结 |
-| `min_history_bars=720` | = 流动性窗口，**最小可行值** |
+| `min_history_bars=2160` | 90 天。note 要 rolling 60/70 分位与 25/75/90 分位，2160 个观测够估 p90 |
 | `min_oi_coverage=0.90` | 允许 30 天缺 3 天。**不取 1.0** —— 存在全市场级偶发缺失 |
-| `min_active_days=15` | 有成交天数分布**两极**（正常币 30/30，停摆币 0/30） |
+| `max_oi_gap_hours=48` | 实测最长连续缺失中位仅 10h，>48h 的只有 46 个合约（最长 7832h）。这条切开两侧 |
 
-**稳健性对照**：`liq_window_days ∈ {60, 90}`；`refresh_months = 3`。
+**稳健性对照**：`liq_window_days ∈ {60, 90}`；`refresh_months = 3`；
+`min_history_bars ∈ {720, 4320}`。
 
 ### 5.2 运行参数（CLI，不进 config）
 
@@ -357,23 +358,50 @@ tmp = path + ".name" + ".part"; tmp.write_bytes(data); os.replace(tmp, path)
 
 ## 6. Universe 构造
 
-### 6.1 五条资格闸（逐期、无前视）
+### 6.1 四条资格闸（逐期、无前视）
 
 **必须是逐期判定** —— 用全生命周期的统计量（如整体覆盖率）作闸会引入前视。
 
 | # | 判据 | 阈值 |
 |---|---|---|
 | **1** | 非稳定币（按 `base_asset` 判，不按符号字面） | — |
-| **2** | 截至 M 月初已有 ≥ N 根 1h bar | `min_history_bars = 720` |
-| **3** | trailing 30 天内 `sum_open_interest` 非空天数占比 ≥ N | `min_oi_coverage = 0.90` |
-| **4** | trailing 30 天内 `quote_volume > 0` 的天数 ≥ N | `min_active_days = 15` |
-| **5** | 非代币化传统金融资产（**本项目追加**） | `exchangeInfo` 判据，见下 |
+| **2** | 截至 M 月初已有 ≥ N 根 1h bar | `min_history_bars = 2160`（90 天） |
+| **3** | trailing 30 天内：① OI 覆盖率 ≥ N ② **最长连续缺失 ≤ 48h** | `min_oi_coverage = 0.90` · `max_oi_gap_hours = 48` |
+| **4** | 非代币化传统金融资产（**本项目追加**） | `exchangeInfo` 判据，见下 |
 
-**闸 5 的必要性**：归档里有大量**代币化传统金融资产** —— 美股（`TSLAUSDT` `NVDAUSDT`
+**编号从 1 到 4 连续。** 原有的「流动性闸」（30 天内 `quote_volume > 0` 的天数 ≥ 15）
+已废除 —— 理由见下方"流动性为什么不设闸"。
+
+**闸 2 为什么是 2160 bar**：note §6 要求 regime 阈值用 rolling 60/70 分位、§7 要求
+funding 状态用 trailing 25/75/90 分位。2160 个观测足以估计 p90；720 太薄。
+**代价**：样本前 3 个月（`2021-12` ~ `2022-02`）所有合约都"历史不足"，成员集为空。
+
+**闸 3 为什么用「连续缺失长度」而不是只有覆盖率**：
+
+| 候选判据 | 实测 | 结论 |
+|---|---|---|
+| OI 覆盖率 | 中位 0.9997；<0.90 的合约 35 个 | ✅ 采用 |
+| **最长连续缺失** | 中位 10h；**>48h 的 46 个合约**，最长 7832h | ✅ **采用** |
+| `oi == 0` 比例 | 中位 0.029%，**最高仅 0.264%**，无一超 0.5% | ❌ 不用作闸 |
+| 最长冻结 | p90 = 10h，**仅 1 个合约 >12h** | ❌ 不用作闸 |
+
+`oi == 0` 是**全市场发布事件**（实测 2022-03-07 一天 105 个合约同时为 0），
+不是单个合约的缺陷，用它作闸会误杀被波及的正常合约。**它记入缺失报告，不进闸。**
+
+**「缺 1 小时」与「缺 48 小时」对滚动窗口的破坏完全不同** —— 前者影响 1 个观测，
+后者让 48 个观测全无 OI。所以判据用**连续长度**。
+
+**流动性为什么不设闸**：note 的原文是 `Exclude illiquid contracts where transaction
+costs dominate` —— 这是**可交易性**判断，需要盘口数据；归档只有 OHLCV，**测不到成本**。
+而 note 自己提供了更好的机制：`Top 30–50 liquid`。**按流动性排名取前 K 即是流动性筛选。**
+原设计里的「30 天内 `quote_volume > 0` 的天数 ≥ 15」只挡"完全不交易"（实测仅触发 7 次），
+与"成本主导"不是一回事，已废除。
+
+**闸 4 的必要性**：归档里有大量**代币化传统金融资产** —— 美股（`TSLAUSDT` `NVDAUSDT`
 `GOOGLUSDT` 等）、港韩 A 股（`TENCENTUSDT` `SAMSUNGUSDT` `KORUUSDT`）、
 ETF（`SPYUSDT` `QQQUSDT` `SOXLUSDT`）、商品（`XAUUSDT` 金、`XAGUSDT` 银、
 `CLUSDT` 原油）、指数（`DEFIUSDT` `BTCDOMUSDT` `ALLUSDT` `BLUEBIRDUSDT`）、
-外汇（`USDBRLUSDT`）。它们能通过闸 1–4，但**不是加密资产**，混入会让结论无法解释。
+外汇（`USDBRLUSDT`）。它们能通过闸 1–3，但**不是加密资产**，混入会让结论无法解释。
 
 **判据用 `exchangeInfo` 的分类字段，不用手工名单：**
 
@@ -382,7 +410,7 @@ ETF（`SPYUSDT` `QQQUSDT` `SOXLUSDT`）、商品（`XAUUSDT` 金、`XAGUSDT` 银
 | `contractType` | `PERPETUAL` | `TRADIFI_PERPETUAL` |
 | `underlyingType` | `COIN` | `EQUITY` · `HK_EQUITY` · `KR_EQUITY` · `CN_EQUITY` · `COMMODITY` · `PREMARKET` · `FX` · `INDEX` |
 
-**通过闸 5 ⇔ `contractType == "PERPETUAL"` 且 `underlyingType == "COIN"`。**
+**通过闸 4 ⇔ `contractType == "PERPETUAL"` 且 `underlyingType == "COIN"`。**
 这一条在归档里剔掉 **216 个**非加密资产，保留 684 个。
 
 ⚠️ **不用手工名单。** 候选池按排名滚动，新标的随时可能进池，
@@ -400,7 +428,7 @@ ETF（`SPYUSDT` `QQQUSDT` `SOXLUSDT`）、商品（`XAUUSDT` 金、`XAGUSDT` 银
 - **闸 3 用 `sum_open_interest` 本身的空值率**，**不得**用那 4 个衍生字段
   （大户多空比等）—— 它们 **2022 全年大面积为空**，用作闸会把 2022 整年误杀
 
-**排序即第二层流动性闸**：通过五条闸后取流动性前 K。
+**排序即第二层流动性闸**：通过所有闸后取流动性前 K。
 
 ### 6.2 PIT 规则
 
@@ -408,7 +436,7 @@ ETF（`SPYUSDT` `QQQUSDT` `SOXLUSDT`）、商品（`XAUUSDT` 金、`XAGUSDT` 银
 每月 M：
   Step 1  排名量 liq(sym, 月初) = median(quote_volume) over [月初−30天, 月初)
                                                           ↑ 严格开口，否则前视
-  Step 2  五条资格闸（§6.1）
+  Step 2  四条资格闸（§6.1）
   Step 3  对通过闸的合约按 liq 降序排名
   Step 4  取前 K = 50（无缓冲带）
   Step 5  成员集在 M 月内【冻结】
@@ -420,9 +448,19 @@ ETF（`SPYUSDT` `QQQUSDT` `SOXLUSDT`）、商品（`XAUUSDT` 金、`XAGUSDT` 银
 **关键 2**：**流动性度量的数据源全程用月频 klines，不换源** ——
 口径不一致会成循环定义。
 
-**关键 3**：**不要写 `if delisted: remove`**。下架币的处理是自然的 ——
-合约停止交易后，闸 4 自然不通过（无正成交额），成员表下月落选。
-**下架币存活期的完整历史留在样本里。**
+**关键 3**：**不要写 `if delisted: remove`，也不要维护下架名单。**
+下架合约由闸 2 自然地淘汰 —— 它死后再过 90 天，`[首根 bar, 月初)` 的 bar 数不再增长，
+而窗口在推进，闸 2 迟早不通过。**下架币存活期的完整历史留在样本里。**
+
+⚠️ **代价（已知，需在报告里披露）**：合约死后的头 ~90 天内闸 2 仍可能通过。
+实测这个窗口里会有 **2 个成员-月**落入成员集：
+
+```
+2022-06  LUNAUSDT  rank=4   （2022-05-12 停止交易，整月零成交、OI 冻结）
+2022-06  ANCUSDT   rank=30
+```
+
+`universe_membership` 会带一列 `dead_contract` 标记它们，供下游过滤。
 
 ### 6.3 候选池 ≠ 成员集
 
@@ -434,8 +472,8 @@ ETF（`SPYUSDT` `QQQUSDT` `SOXLUSDT`）、商品（`XAUUSDT` 金、`XAGUSDT` 银
 **恒等式**：一个币只有排进前 K 才可能成为样本 ⇒ 候选池 = 所有前 K 名的并集。
 不需要任何额外门槛。
 
-**Step 2 的候选池是下界，不是最终成员集** —— 它只能做闸 2 与闸 4 的宽松草稿版
-（闸 3 需要 OI 数据，那时还没下）。Step 6 会用完整五条闸再筛一次。
+**Step 2 的候选池是下界，不是最终成员集** —— 它只能做闸 2 的宽松草稿版
+（闸 3 需要 OI 数据，那时还没下）。Step 6 会用完整四条闸再筛一次。
 
 ### 6.4 换手率（如实报出）
 
@@ -559,8 +597,10 @@ validate(df, "features_1h")      # 失败抛 SchemaViolation，一次报全部�
 | 个别日期 | 缺失，或 287 行而非 288 | 记入缺失报告 |
 | **2022 全年** | 4 个大户多空比字段大面积空 | **不存这些列** |
 | 新币首日 | 从半天开始 | 按可用天数判定，非按上币日 |
-| 零成交额月 | 文件存在但 `quote_volume = 0` | 闸 4 的判据 |
-| **下架合约的尾部空行** | 见下 | 闸 4 自动挡住 |
+| 零成交额月 | 文件存在但 `quote_volume = 0` | 该合约该月不该进成员集 |
+| **下架合约的尾部空行** | 见下 | Step 5 裁到「最后活跃日」 |
+| **`oi = 0` 的行** | 2,906 行 / 48 天 | 全市场发布事件，记入缺失报告 |
+| **冻结的 `oi`** | 仅 1 个合约 >12h | 记入缺失报告 |
 
 #### 8.2.1 下架合约：`klines` 不停，`funding` / `mark` / `index` 会停
 
@@ -579,9 +619,8 @@ validate(df, "features_1h")      # 失败抛 SchemaViolation，一次报全部�
 
 **三个直接后果：**
 
-1. **闸 4 是挡住死合约的唯一机制。** 不能因为"有 bar"就认为合约还活着 ——
-   **没有闸 4，死合约会进成员集。** 判活看 trailing 30 天的 `quote_volume`，
-   不看有没有 bar，也不看 `exchangeInfo` 的 `status`。
+1. **判活看 trailing 30 天的 `quote_volume`，不看有没有 bar，也不看
+   `exchangeInfo` 的 `status`。** 死合约的退出靠闸 2（§6.2 关键 3）。
 2. **`funding` 表允许超出 `klines` 网格**（实测 7,911 行 / 0.64%，
    其中 6,916 行是下架合约的尾部结算）。它是事件表，**不按网格裁**。
 3. **`mark` / `index` 的覆盖率缺口（0.28% / 3.00%）主要来自这里** ——
