@@ -3,7 +3,7 @@
 """
 fetch_market_data —— 为候选池合约下载全部可用历史，存成 raw 数据
 
-它在 Phase 1 中的位置：Step 3（见 PHASE1_GUIDANCE.md §1.1 进度表与 §4 流水线）。
+它在 Phase 1 中的位置：Step 3（见 phase1/guidance.md §1.1 进度表与 §4 流水线）。
 
 做什么
 ------
@@ -46,13 +46,13 @@ OCEANUSDT / REEFUSDT / RENUSDT / UNFIUSDT）的 indexPrice 与 fundingRate
 
 用法
 ----
-  python phase1_data/fetch_market_data.py --sample-end 2026-08-31
-  P3_DATA_ROOT=/tmp/x python phase1_data/fetch_market_data.py \\
+  python phase1/fetch_market_data.py --sample-end 2026-08-31
+  P3_DATA_ROOT=/tmp/x python phase1/fetch_market_data.py \\
       --sample-end 2026-08-31 --subset BTCUSDT ETHUSDT     # 冒烟
-  python phase1_data/fetch_market_data.py --sample-end 2026-08-31 --list-only
-  python phase1_data/fetch_market_data.py --sample-end 2026-08-31 --keep-cache
+  python phase1/fetch_market_data.py --sample-end 2026-08-31 --list-only
+  python phase1/fetch_market_data.py --sample-end 2026-08-31 --keep-cache
 
-依据：PHASE1_GUIDANCE.md §2（工程规则）§3（数据源）§5.3（下载参数）§8.3（缺失分类）
+依据：phase1/guidance.md §2（工程规则）§3（数据源）§5.3（下载参数）§8.3（缺失分类）
 """
 
 from __future__ import annotations

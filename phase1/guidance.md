@@ -20,13 +20,14 @@
 | Step | 脚本 | 产出 | 状态 |
 |---|---|---|---|
 | — | `config.py` · `lib/schema.py` | 设计参数 + 数据契约 | ✅ 已完成 |
-| 0–2 | `phase1_data/build_candidate_pool.py` | **候选池名单**（285 个合约） | ✅ 已完成 |
-| 3 | `phase1_data/fetch_market_data.py` | **raw 数据**（1.10 GB / 1,145 个 parquet） | ✅ 已完成 |
-| 4 | `phase1_data/build_layer2.py` | **第 2 层 4 张表**（546.8 MB / 228 个文件） | ✅ 已完成 |
-| 5 | `phase1_data/build_features.py` | **`features_1h`**（541.5 MB / 7,253,002 行 / 19 列） | ✅ 已完成 |
-| 6 | `phase1_data/build_universe.py` | universe 表 + D1 全部产出物 | ⬜ 待写 |
+| 0–2 | `phase1/build_candidate_pool.py` | **候选池名单**（285 个合约） | ✅ 已完成 |
+| 3 | `phase1/fetch_market_data.py` | **raw 数据**（1.10 GB / 1,145 个 parquet） | ✅ 已完成 |
+| 4 | `phase1/build_layer2.py` | **第 2 层 4 张表**（546.8 MB / 228 个文件） | ✅ 已完成 |
+| 5 | `phase1/build_features.py` | **`features_1h`**（541.5 MB / 7,253,002 行 / 19 列） | ✅ 已完成 |
+| 6a | `phase1/build_universe.py` | **universe 四表**（`03_reference/`） | ✅ 已完成 |
+| 6b | `phase1/build_qa.py` | **质量与审计产出**（`04_qa/` + `REPRODUCE.md`） | ✅ 已完成 |
 
-⚠️ Step 4–6 的脚本名可在那一步调整。
+**Phase 1 已全部完成。** D1 产出物见 §10.2，验收自测见 §11。
 
 **Step 2 实测：18,874 个文件 / 76 秒（缓存命中）/ 0 个未取得**（候选池 296 → 297 → 288 → **285**）。
 
@@ -727,35 +728,43 @@ validate(df, "features_1h")      # 失败抛 SchemaViolation，一次报全部�
 
 ### 10.1 项目根目录
 
-**代码平铺在根目录，数据在共享的根 `data/`。**
+**判据只有一条：这个东西只被本阶段用，还是被两个以上阶段用。**
+只被本阶段用的（Phase 1 的六个脚本、本文件）放 `phaseN/`；
+被两个以上阶段用的（`config.py`、`lib/schema.py`）放根目录。
+`phase2/`–`phase5/` 目前为空，代码开始写时才建文件。
 
 ```
 Industrial Programme I/
 │
-├─ config.py                     设计参数（Phase 2–5 也用，故在根）
-├─ lib/schema.py                 数据契约（Phase 2–5 也用，故在根）
-│
-├─ phase1_data/                  Phase 1 的代码
-│   └─ build_candidate_pool.py   ✅ 已产出
+├─ config.py                     设计参数 —— 各阶段共用，故在根
+├─ lib/schema.py                 数据契约 —— 各阶段共用，故在根
 │
 ├─ data/                         全部产出（见 §10.2）
-├─ outputs/                      图表与报告（Phase 3+ 才用）
-├─ phase2_regime/ · phase3_event/ · phase4_funding/ · phase5_strategy/
 │
-├─ PHASE1_GUIDANCE.md            本文件
-├─ DATA_RECON_2026-09-28.md      数据侦察实测报告
-├─ research_archive/             规划期材料
+├─ phase1/                       Phase 1 的全部内容：代码 + 本文件
+│   ├─ build_candidate_pool.py   Step 0–2  候选池 + raw 下载
+│   ├─ fetch_market_data.py      Step 3    逐文件下载状态
+│   ├─ build_layer2.py           Step 4    4 张规范化表
+│   ├─ build_features.py         Step 5    features_1h
+│   ├─ build_universe.py         Step 6a   universe 表
+│   ├─ build_qa.py               Step 6b   质量与审计产出
+│   └─ guidance.md               本文件
+│
+├─ phase2/ · phase3/ · phase4/ · phase5/
+│
+├─ research_archive/             规划期材料（导师 note、文献、提交件）
 └─ .vscode/ · .gitattributes · .gitignore · .git/
 ```
 
-**为什么平铺、不按阶段分文件夹**：所有阶段**共享同一个 `data/`** ——
-`features_1h` 是 Phase 2–5 的输入。若按阶段分文件夹，Phase 2 就要写
-`../phase1_data/data/...`，跨目录引用很脆。
+**`data/` 留在根、不放进 `phase1/`**：它不是 Phase 1 的私有产物。
+`02_features/` 与 `03_reference/` 是 Phase 2–5 的正式输入，
+把它们埋在 `phase1/` 下面会让下游写成 `../phase1/data/...`，
+既啰嗦又暗示「这是 Phase 1 的东西」。
 
-**`config.py` 与 `lib/schema.py` 在根目录** —— 它们跨阶段复用，
-放 `phase1_data/` 会暗示只属 Phase 1。
+**阶段说明书随阶段走**：本文件是 Phase 1 的说明书，故在 `phase1/`；
+Phase 2 写自己的 `phase2/guidance.md`。根目录只留四个阶段共用的东西。
 
-**脚本从 `phase1_data/` 运行时的 import**：脚本首行加
+**脚本从 `phase1/` 运行时的 import**：脚本首行加
 ```python
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 ```
@@ -766,26 +775,39 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 ```
 data/
 │
-├─ 00_config/                         构建元信息
-│   ├─ sample_end.json                {sample_end, config_snapshot, run_at, 各阶段计数}
-│   └─ manifest.parquet               逐文件下载状态（断点续传的唯一依据）
+├─ 00_config/                          构建元信息
+│   ├─ sample_end.json                 {sample_end, config_snapshot, run_at, 各阶段计数}
+│   └─ manifest.parquet                逐文件下载状态（断点续传的唯一依据）
 │
-├─ 01_layer2/                         4 张规范化源表（小时粒度）        ⬜ Step 4
+├─ 01_layer2/                          4 张规范化源表（小时粒度）
 │   ├─ klines_1h/year=YYYY/chunk=YYYY-MM.parquet
 │   ├─ mark_index_1h/year=YYYY/chunk=YYYY-MM.parquet
 │   ├─ oi_1h/year=YYYY/chunk=YYYY-MM.parquet
 │   └─ funding/year=YYYY/chunk=YYYY-MM.parquet
 │
-├─ 02_features/                                                       ⬜ Step 5
+├─ 02_features/
 │   └─ features_1h/year=YYYY/chunk=YYYY-MM.parquet
 │
-└─ 03_reference/                      分析与审计用的参考表
-    ├─ candidate_pool.csv             ✅ 285 个合约
-    ├─ master.parquet                 一币一行（893）                 ⬜ Step 3
-    ├─ universe_eligibility.parquet   一币一行                        ⬜ Step 6
-    ├─ universe_membership.parquet    (symbol, date)                  ⬜ Step 6
-    └─ member_changes.parquet         进/出记录                       ⬜ Step 6
+├─ 03_reference/                       分析与审计用的参考表
+│   ├─ candidate_pool.csv              285 个合约
+│   ├─ master.parquet                  一合约一行（679）
+│   ├─ universe_eligibility.parquet    一合约 × 一月（38,703）
+│   ├─ universe_membership.parquet     (symbol, month)（2,700）
+│   └─ member_changes.parquet          逐月进出记录（57）
+│
+├─ 04_qa/                              质量与审计
+│   ├─ missing_files.parquet           归档空洞（67）
+│   ├─ gaps.parquet                    缺口明细（5,769）
+│   ├─ coverage.parquet                逐合约覆盖率（1,425）
+│   ├─ data_dictionary.md              字段字典与全部已知口径
+│   ├─ checksums.sha256                1,440 个产出文件的 SHA256
+│   └─ REPRODUCE.md                    六条重跑命令
+│
+└─ raw/                                五个源的原始 parquet
 ```
+
+**编号从 00 连到 04，不跳号；`raw/` 不编号** ——
+它按数据源分目录（`klines/`、`metrics/`…），与编号层的含义不同。
 
 **不保留 RAW 归档**（zip 镜像、`oi_5m` 全量均不存）。
 **下载缓存是临时的，用完即清。**
@@ -793,19 +815,36 @@ data/
 **`universe_*` 放 `03_reference/`**：其粒度是**日**与**合约**，
 与 `features_1h` 的**小时**粒度不同，不能混放。
 
+**`04_qa/` 放最后**：它是**对 00–03 的检查**，不是流水线的一环，
+放在参考表之后表示「读完上面这些再看这里」。
+
 ---
 
-## 11. 自测
+## 11. 自测与验收
+
+### 11.1 单元自测
 
 ```bash
-python config.py                    # 8 项：validate_sample_end 行为 + Config frozen
-python -m lib.schema                # 65 项：round-trip / validate 放行 / validate 捕获 / 结构自检
-python phase1_data/build_candidate_pool.py --sample-end 2026-08-31
+python config.py            # 8 项：validate_sample_end 行为 + Config frozen
+python -m lib.schema        # 65 项：round-trip / validate 放行 / validate 捕获 / 结构自检
 ```
 
-**退出码 0 = 全过。**
+**退出码 0 = 全过。** 两项都不碰 `data/`，随时可跑。
 
-`build_candidate_pool.py` 支持：
+`build_candidate_pool.py` 的核验开关：
 - `--skip-download` —— 只用已有缓存重算
-- `--subset SYM [SYM ...]` —— 只处理指定合约（核验用）
-- 环境变量 `P11_DATA_ROOT` —— 把产出重定向到别处（核验时不污染正式产出）
+- `--subset SYM [SYM ...]` —— 只处理指定合约
+
+### 11.2 产出完整性
+
+```bash
+# 重算 1,440 个产出文件的 SHA256；0 个不一致则退出码 0
+python phase1/build_qa.py --out-root data --sample-end 2026-08-31 --verify
+```
+
+**实测：`核验 1,440 个文件：全部一致`，退出码 0。**
+
+**校验和是本流程最后一个写盘动作**，它此前写入的每一个文件（含
+`00_config/sample_end.json` 的运行元信息）都被纳入哈希。
+因此**重跑 Step 3–6a 之后必须重跑 Step 6b**，否则校验和失效。
+

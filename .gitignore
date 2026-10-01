@@ -1,6 +1,5 @@
-# ---- Phase 1 数据产物（约 600 MB，完全可重建，不进版本控制）----
+# ---- 数据产出（约 2.2 GB，可由 data/REPRODUCE.md 从零重建，不进版本控制）----
 data/
-outputs/
 
 # ---- Python ----
 __pycache__/
@@ -16,11 +15,9 @@ venv/
 *.pkl
 *.log
 
-# ---- 核验与冒烟测试的临时目录/日志（P11_DATA_ROOT 重定向的产出）----
+# ---- 冒烟测试的临时产出（--out-root 指向项目外的临时目录）----
 _smoke/
 _mid/
-_*.log
-p11_full.log
 
 # ---- Office 临时锁文件 ----
 ~$*

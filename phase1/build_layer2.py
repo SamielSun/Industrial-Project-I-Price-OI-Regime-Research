@@ -3,7 +3,7 @@
 """
 build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
 
-它在 Phase 1 中的位置：Step 4（见 PHASE1_GUIDANCE.md §1.1 进度表与 §4 流水线）。
+它在 Phase 1 中的位置：Step 4（见 phase1/guidance.md §1.1 进度表与 §4 流水线）。
 
 做什么
 ------
@@ -14,7 +14,7 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
     oi_1h           (symbol, ts)          5 列 —— 左连接到 klines 网格
     funding         (symbol, ts_funding)  4 列 —— 事件表，独立于网格
 
-核心设计（全部为已决策项，依据见 PHASE1_GUIDANCE.md §7.2）
+核心设计（全部为已决策项，依据见 phase1/guidance.md §7.2）
 -----------------------------------------------------------
 1. **网格 = klines_1h 实际存在的 ts**。稀疏，不发明行。
    `features_1h`（Step 5）才密集化。
@@ -46,10 +46,10 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
 
 用法
 ----
-  python phase1_data/build_layer2.py --sample-end 2026-08-31
-  P4_DATA_ROOT=/tmp/x python phase1_data/build_layer2.py --sample-end 2026-08-31 --subset BTCUSDT
+  python phase1/build_layer2.py --sample-end 2026-08-31
+  python phase1/build_layer2.py --sample-end 2026-08-31 --subset BTCUSDT
 
-依据：PHASE1_GUIDANCE.md §6（闸）§7.2（四张表）§7.4（validate）§8（质量规则）
+依据：phase1/guidance.md §6（闸）§7.2（四张表）§7.4（validate）§8（质量规则）
 """
 
 from __future__ import annotations

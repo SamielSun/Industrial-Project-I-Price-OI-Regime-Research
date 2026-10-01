@@ -2,16 +2,14 @@
     "python-envs.defaultEnvManager": "ms-python.python:conda",
     "python-envs.defaultPackageManager": "ms-python.python:conda",
 
-    // 排除数据与产物目录：避免编辑器索引 Parquet / 原始 zip（预计 5–15 GB）
+    // 排除数据目录：避免编辑器索引 Parquet（约 2.2 GB）
     "files.watcherExclude": {
         "**/data/**": true,
-        "**/outputs/**": true,
         "**/research_archive/**": true,
         "**/__pycache__/**": true
     },
     "search.exclude": {
         "**/data/**": true,
-        "**/outputs/**": true,
         "**/research_archive/**": true,
         "**/__pycache__/**": true
     },

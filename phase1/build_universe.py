@@ -3,7 +3,7 @@
 """
 build_universe —— Step 6：逐期资格判定 + PIT 成员集 + master 表
 
-它在 Phase 1 中的位置：Step 6（见 PHASE1_GUIDANCE.md §1.1 进度表与 §6）。
+它在 Phase 1 中的位置：Step 6（见 phase1/guidance.md §1.1 进度表与 §6）。
 
 做什么
 ------
@@ -32,8 +32,8 @@ build_universe —— Step 6：逐期资格判定 + PIT 成员集 + master 表
 
 用法
 ----
-  python phase1_data/build_universe.py --out-root <data> --sample-end 2026-08-31
-  python phase1_data/build_universe.py --out-root /tmp/x --fe-root <data> \\
+  python phase1/build_universe.py --out-root <data> --sample-end 2026-08-31
+  python phase1/build_universe.py --out-root /tmp/x --fe-root <data> \\
       --sample-end 2026-08-31 --subset BTCUSDT LUNAUSDT      # 冒烟
 """
 

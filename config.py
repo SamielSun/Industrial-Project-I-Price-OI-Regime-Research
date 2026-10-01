@@ -1,13 +1,13 @@
 """
 Phase 1 设计参数（研究设计的一部分，跨运行稳定）。
 
-原则（PHASE1_GUIDANCE.md §12.5）：
+原则（phase1/guidance.md §12.5）：
   · 本文件只放【设计参数】—— 定义"研究是什么"。
   · 运行参数（--sample-end、--no-refresh、--symbols）走 CLI，不进本文件。
     理由：若把 sample_end 写进这里，两次运行会共用同一份 config.py 却内容不同，
     事后无法回答"这个结果是用哪套设计跑的"。
 
-所有数值的依据见 PHASE1_GUIDANCE.md §4。
+所有数值的依据见 phase1/guidance.md §4。
 """
 
 from __future__ import annotations

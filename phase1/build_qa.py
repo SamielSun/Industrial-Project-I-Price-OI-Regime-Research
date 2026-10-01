@@ -3,7 +3,7 @@
 """
 build_qa —— Step 6 的第二部分：缺失数据报告 + 数据字典 + 校验和 + 复现命令
 
-它在 Phase 1 中的位置：D1 的产出物部分（见 PHASE1_GUIDANCE.md §8.3 与 §12）。
+它在 Phase 1 中的位置：D1 的产出物部分（见 phase1/guidance.md §8.3 与 §12）。
 
 做什么
 ------
@@ -31,7 +31,7 @@ build_qa —— Step 6 的第二部分：缺失数据报告 + 数据字典 + 校
 
 用法
 ----
-  python phase1_data/build_qa.py --out-root <data> --sample-end 2026-08-31
+  python phase1/build_qa.py --out-root <data> --sample-end 2026-08-31
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 FE = DATA / "02_features" / "features_1h"
 REF = DATA / "03_reference"
-QA = DATA / "05_qa"
+QA = DATA / "04_qa"
 MANIFEST = DATA / "00_config" / "manifest.parquet"
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 L2 = DATA / "01_layer2"
@@ -82,7 +82,7 @@ def configure_paths(out_root: Path, fe_root: Path | None,
     DATA = out_root.resolve()
     FE = ((fe_root or (DATA / "02_features")) / "features_1h").resolve()
     REF = DATA / "03_reference"
-    QA = DATA / "05_qa"
+    QA = DATA / "04_qa"
     MANIFEST = (manifest or (DATA / "00_config" / "manifest.parquet")).resolve()
     RUN_INFO = DATA / "00_config" / "sample_end.json"
     L2 = DATA / "01_layer2"
@@ -116,11 +116,16 @@ def main() -> int:
     ap.add_argument("--fe-root", default=None, help="features 读取位置（冒烟用）")
     ap.add_argument("--manifest", default=None, help="manifest 路径（冒烟用）")
     ap.add_argument("--sample-end", required=True, help="样本截止日，必须是月末")
+    ap.add_argument("--verify", action="store_true",
+                    help="只核验 04_qa/checksums.sha256，不构建、不写任何文件")
     args = ap.parse_args()
 
     configure_paths(Path(args.out_root),
                     Path(args.fe_root) if args.fe_root else None,
                     Path(args.manifest) if args.manifest else None)
+    if args.verify:
+        log(f"verify_checksums   {QA / 'checksums.sha256'}")
+        return 0 if verify_checksums() == 0 else 1
     cfg = cfg_mod.Config()
     cfg_mod.validate_sample_end(args.sample_end)
 
@@ -249,26 +254,24 @@ def main() -> int:
         pq.write_table(pa.Table.from_pandas(df, preserve_index=False), tmp,
                        compression="zstd")
         os.replace(tmp, p)
-        log(f"    -> 05_qa/{name:<26} {len(df):>8,} 行  {p.stat().st_size/1024:8.1f} KB")
+        log(f"    -> 04_qa/{name:<26} {len(df):>8,} 行  {p.stat().st_size/1024:8.1f} KB")
 
     # ---- 4. 数据字典 ----
     dd = build_data_dictionary(cfg, args.sample_end, len(d), d["symbol"].nunique(),
                               MF, G, V)
     (QA / "data_dictionary.md").write_text(dd, encoding="utf-8", newline="\n")
-    log(f"    -> 05_qa/data_dictionary.md          {len(dd):,} 字符")
+    log(f"    -> 04_qa/data_dictionary.md          {len(dd):,} 字符")
 
-    # ---- 5. 校验和 ----
-    n_ck = write_checksums()
-    log(f"    -> 05_qa/checksums.sha256            {n_ck} 个文件")
-
-    # ---- 6. 复现命令 ----
+    # ---- 5. 复现命令 ----
     # REPRODUCE.md 放在产出根目录，不写项目根 —— 否则冒烟会污染正式目录
     repro = build_reproduce(cfg, args.sample_end)
     rp = DATA / "REPRODUCE.md"
     rp.write_text(repro, encoding="utf-8", newline="\n")
     log(f"    -> REPRODUCE.md                      {len(repro):,} 字符")
 
-    # ---- 运行元信息 ----
+    # ---- 6. 运行元信息 ----
+    # 必须在校验和【之前】写：否则 sample_end.json 每次都被算成不一致。
+    n_ck = len(checksum_targets())            # 只数，不哈希，省一遍读盘
     prev = {}
     if RUN_INFO.exists():
         try:
@@ -285,6 +288,11 @@ def main() -> int:
     RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
     RUN_INFO.write_text(json.dumps(prev, ensure_ascii=False, indent=2),
                         encoding="utf-8")
+
+    # ---- 7. 校验和（最后一个写盘动作）----
+    written = write_checksums()
+    assert written == n_ck, f"checksum count drift: {written} != {n_ck}"
+    log(f"    -> 04_qa/checksums.sha256            {written} 个文件")
 
     log("")
     log("=" * 80)
@@ -321,7 +329,8 @@ def build_data_dictionary(cfg, sample_end: str, n_fe_rows: int, n_syms: int,
     A("├── 01_layer2/                        第 2 层：4 张规范化源表")
     A("├── 02_features/features_1h/          分析面板（密集网格，19 列）")
     A("├── 03_reference/                     参考表")
-    A("└── 05_qa/                            质量保证")
+    A("├── 04_qa/                            质量保证")
+    A("└── raw/                              五个源的原始 parquet")
     A("")
     A("REPRODUCE.md                         从零复现的命令")
     A("```")
@@ -398,7 +407,7 @@ def build_data_dictionary(cfg, sample_end: str, n_fe_rows: int, n_syms: int,
         A(f"**{len(MF)} 个源文件在归档里不存在**（`confirmed_404`），"
           f"涉及 {MF['symbol'].nunique()} 个合约。全部是 `metrics`（OI）的日文件。")
         A("")
-        A("这是**归档自身的空洞**，不是下载失败。明细见 `05_qa/missing_files.parquet`。")
+        A("这是**归档自身的空洞**，不是下载失败。明细见 `04_qa/missing_files.parquet`。")
     else:
         A("无下载失败的文件。")
     A("")
@@ -456,7 +465,7 @@ def build_data_dictionary(cfg, sample_end: str, n_fe_rows: int, n_syms: int,
     A("")
     A("## 6. 缺失报告的读法")
     A("")
-    A("`05_qa/gaps.parquet` 按 `(symbol, metric, gap_start)` 排序 ——")
+    A("`04_qa/gaps.parquet` 按 `(symbol, metric, gap_start)` 排序 ——")
     A("**同一合约的缺口相邻**，便于按合约排查。")
     A("")
     A("选读建议：")
@@ -478,15 +487,16 @@ def build_data_dictionary(cfg, sample_end: str, n_fe_rows: int, n_syms: int,
     A("")
     A("全部产出可由 `REPRODUCE.md` 的六条命令从零重建。")
     A("")
-    A("`05_qa/checksums.sha256` 记录 `data/` 下**全部产出文件的 SHA256**，")
-    A("包含 `raw/`（Step 3 下载的源数据）—— 共 1,437 个文件 / 2.2 GB。")
+    A("`04_qa/checksums.sha256` 记录 `data/` 下**全部产出文件的 SHA256**，")
+    A("包含 `raw/`（Step 3 下载的源数据）—— 共 1,440 个文件 / 2.2 GB。")
     A("")
     A("**它是内部一致性记录，不是来源证明。** 它只能验证「本地文件与产出时一致」，")
     A("不能验证「下载到的东西等于 Binance 归档里的东西」—— 那需要官方 `.CHECKSUM`。")
     A("")
-    A("⚠️ **`00_config/sample_end.json` 每次核验都会报不一致** —— 因为脚本在算完")
-    A("校验和之后，才把本次运行的元信息追加进该文件。这是先有鸡还是先有蛋，")
-    A("不是数据被改动。其余 1,439 个文件应当全部一致。")
+    A("**校验应当 0 个不一致。** 校验和是本流程最后一个写盘动作，")
+    A("它此前写入的每一个文件（含 `00_config/sample_end.json` 的运行元信息）都被纳入哈希。")
+    A("不在名单里的只有 `checksums.sha256` 自身、`data/REPRODUCE.md`（在 `data/` 根，")
+    A("不属于任何编号层）与写盘用的 `.part` 临时文件。")
     A("")
     return "\n".join(L)
 
@@ -495,22 +505,64 @@ def build_data_dictionary(cfg, sample_end: str, n_fe_rows: int, n_syms: int,
 # 校验和
 # ============================================================================
 
-def write_checksums() -> int:
-    """对 data/ 下所有产出文件算 SHA256。不包含 checksums.sha256 自身。
+def checksum_targets() -> list:
+    """列出参与校验和的全部文件，顺序固定（供计数与哈希共用）。
 
     含 `raw/` —— 它也是产出（Step 3 下载的源数据），校验它能查出归档与本地不一致。
-    1,437 个文件 / 2.2 GB，实测约 5 秒。
+    排除 `checksums.sha256` 自身与写盘中的 `.part` 临时文件。
+    1,440 个文件 / 2.2 GB，实测约 5 秒。
     """
-    lines = []
     targets = []
     for sub in ("00_config", "raw", "01_layer2", "02_features",
-                "03_reference", "05_qa"):
+                "03_reference", "04_qa"):
         p = DATA / sub
         if p.exists():
             targets += [f for f in sorted(p.rglob("*")) if f.is_file()]
-    for f in targets:
-        if f.name == "checksums.sha256" or f.suffix == ".part":
+    return [f for f in targets
+            if f.name != "checksums.sha256" and f.suffix != ".part"]
+
+
+def verify_checksums() -> int:
+    """逐行重算 `04_qa/checksums.sha256` 里的 SHA256，返回不一致个数。
+
+    不写任何文件。用 `--verify` 调用；0 表示本地产出与产出时逐字节一致。
+    """
+    ck = QA / "checksums.sha256"
+    if not ck.exists():
+        print(f"找不到 {ck} —— 先跑一次 build_qa.py 生成。", file=sys.stderr)
+        return -1
+    bad, n = [], 0
+    for line in ck.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
             continue
+        h, rel = line.split("  ", 1)
+        rel = rel.strip()
+        p = DATA / rel
+        n += 1
+        if not p.exists():
+            bad.append((rel, "缺失"))
+            continue
+        got = hashlib.sha256()
+        with open(p, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                got.update(chunk)
+        if got.hexdigest() != h:
+            bad.append((rel, "内容不一致"))
+    for rel, why in bad:
+        log(f"  {why}  {rel}")
+    log(f"核验 {n:,} 个文件：{'全部一致' if not bad else f'{len(bad)} 个不一致'}")
+    return len(bad)
+
+
+def write_checksums() -> int:
+    """对 data/ 下所有产出文件算 SHA256，覆盖写 `04_qa/checksums.sha256`。
+
+    **必须在最后一步调用**：此前写入的任何文件都会被纳入哈希。
+    本函数之前若还有写入，校验必然报不一致。
+    """
+    targets = checksum_targets()
+    lines = []
+    for f in targets:
         h = hashlib.sha256()
         with open(f, "rb") as fh:
             for chunk in iter(lambda: fh.read(1 << 20), b""):
@@ -546,22 +598,22 @@ def build_reproduce(cfg, sample_end: str) -> str:
     A("")
     A("```bash")
     A("# Step 0–2  枚举归档 → 硬过滤 → 逐月流动性排名 → 候选池")
-    A("python phase1_data/build_candidate_pool.py --sample-end " + sample_end)
+    A("python phase1/build_candidate_pool.py --sample-end " + sample_end)
     A("")
     A("# Step 3  下载候选池的 raw 数据（~34.7 万个文件 / 1.10 GB）")
-    A("python phase1_data/fetch_market_data.py --sample-end " + sample_end)
+    A("python phase1/fetch_market_data.py --sample-end " + sample_end)
     A("")
     A("# Step 4  建第 2 层 4 张规范化表")
-    A("python phase1_data/build_layer2.py --out-root data --sample-end " + sample_end)
+    A("python phase1/build_layer2.py --out-root data --sample-end " + sample_end)
     A("")
     A("# Step 5  建 features_1h（19 列密集网格）")
-    A("python phase1_data/build_features.py --out-root data --sample-end " + sample_end)
+    A("python phase1/build_features.py --out-root data --sample-end " + sample_end)
     A("")
     A("# Step 6a 四条资格闸 → universe 四张表")
-    A("python phase1_data/build_universe.py --out-root data --sample-end " + sample_end)
+    A("python phase1/build_universe.py --out-root data --sample-end " + sample_end)
     A("")
     A("# Step 6b 缺失报告 + 数据字典 + 校验和")
-    A("python phase1_data/build_qa.py --out-root data --sample-end " + sample_end)
+    A("python phase1/build_qa.py --out-root data --sample-end " + sample_end)
     A("```")
     A("")
     A("## 自测")
@@ -574,18 +626,8 @@ def build_reproduce(cfg, sample_end: str) -> str:
     A("## 核验")
     A("")
     A("```bash")
-    A("# 校验全部产出文件未被改动")
-    A("python - <<'EOF'")
-    A("import hashlib, pathlib")
-    A("bad = 0")
-    A("for line in open('data/05_qa/checksums.sha256'):")
-    A("    h, rel = line.split('  ', 1)")
-    A("    p = pathlib.Path('data') / rel.strip()")
-    A("    got = hashlib.sha256(p.read_bytes()).hexdigest()")
-    A("    if got != h:")
-    A("        print('MISMATCH', rel.strip()); bad += 1")
-    A("print('OK' if not bad else f'{bad} 个文件不一致')")
-    A("EOF")
+    A("# 重算全部产出文件的 SHA256，0 个不一致则退出码 0")
+    A("python phase1/build_qa.py --out-root data --sample-end " + sample_end + " --verify")
     A("```")
     A("")
     A("## 说明")
@@ -594,6 +636,9 @@ def build_reproduce(cfg, sample_end: str) -> str:
     A("- Step 2 的月频 klines 缓存读完即删，**重跑会重新下载**（约 4 分钟）。")
     A("- 全部脚本的产出目录由 `--out-root` / `--skip-download` 等参数显式指定，")
     A("  **不依赖环境变量**（环境变量不跨 shell 保留，曾经因此把冒烟结果写进正式目录）。")
+    A("- **Step 6b 必须在最后跑**：校验和是它的最后一个写盘动作，")
+    A("  此前写入的每一个文件都被纳入哈希。重跑 Step 3–6a 会使校验和失效，")
+    A("  需重跑 Step 6b 重新生成。")
     A("")
     return "\n".join(L)
 

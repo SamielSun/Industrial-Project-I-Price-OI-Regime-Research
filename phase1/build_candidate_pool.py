@@ -3,7 +3,7 @@
 """
 build_candidate_pool —— 选出「后面要为哪些合约下数据」
 
-它在 Phase 1 中的位置：Step 0–2（见 PHASE1_GUIDANCE.md §1.1 进度表与 §4 流水线）。
+它在 Phase 1 中的位置：Step 0–2（见 phase1/guidance.md §1.1 进度表与 §4 流水线）。
 
 做什么
 ------
@@ -27,11 +27,11 @@ Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，
 
 用法
 ----
-  python phase1_data/build_candidate_pool.py --sample-end 2026-08-31
-  python phase1_data/build_candidate_pool.py --sample-end 2026-08-31 --skip-download  # 只用缓存重算
-  P11_DATA_ROOT=/tmp/x python phase1_data/build_candidate_pool.py ... --subset A B C   # 冒烟/核验
+  python phase1/build_candidate_pool.py --sample-end 2026-08-31
+  python phase1/build_candidate_pool.py --sample-end 2026-08-31 --skip-download  # 只用缓存重算
+  python phase1/build_candidate_pool.py --sample-end 2026-08-31 --subset A B C   # 冒烟/核验
 
-依据：PHASE1_GUIDANCE.md §3.1（枚举）、§6（四条闸与排名）、§5.3（下载参数）
+依据：phase1/guidance.md §3.1（枚举）、§6（四条闸与排名）、§5.3（下载参数）
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ READ_TIMEOUT = 45         # s；实测 max=45.8s 是极端长尾
 RETRIES = 3               # 合计最多 3 次尝试
 BACKOFF_BASE = 2          # 2^attempt 秒
 
-# 本脚本在 phase1_data/ 下，项目根是上一级
+# 本脚本在 phase1/ 下，项目根是上一级
 ROOT = Path(__file__).resolve().parent.parent
 # 环境变量 P11_DATA_ROOT 可把全部产出重定向到别处（冒烟测试用，绝不污染正式产出）
 DATA = Path(os.environ.get("P11_DATA_ROOT", ROOT / "data"))
