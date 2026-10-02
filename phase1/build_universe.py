@@ -40,6 +40,7 @@ build_universe —— Step 6：逐期资格判定 + PIT 成员集 + master 表
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -136,6 +137,108 @@ def fetch_exchange_info() -> dict[str, dict]:
 
 
 # ============================================================================
+# exchangeInfo 快照（闸 4 的判据必须可复现）
+# ============================================================================
+
+# 快照只存闸 4 用到的两个字段。全量 payload 有 9 个顶层键 × 920 条 × 40 个字段
+# （几 MB），而闸 4 只读 contractType / underlyingType —— 存全量会把一个
+# 判定表的快照变成噪声。
+EI_FIELDS = ("contractType", "underlyingType")
+
+
+def ei_digest(info: dict[str, dict]) -> str:
+    """对「合约 → 分类」映射取指纹。用来证明本次用的 oracle 与快照逐字节一致。
+
+    只对闸 4 读的字段做哈希，且按 symbol 排序 —— 否则 Binance 调整 JSON 里
+    无关字段的顺序就会让指纹变化，失去验证意义。
+    """
+    canon = {s: [info[s].get(f) for f in EI_FIELDS] for s in sorted(info)}
+    blob = json.dumps(canon, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def ei_snapshot_path() -> Path:
+    """快照位置：与代码同目录（这个文件要进版本控制）。
+
+    ⚠️ 不能放 <out-root>/00_config/ —— data/ 整体被 .gitignore 排除，
+    那样快照不进版本控制，等于没解决"判据不可复现"的问题。
+    D1 的复现性不该依赖一次成功的网络请求。
+    """
+    return Path(__file__).resolve().parent / "exchange_info_snapshot.json"
+
+
+def read_ei_snapshot(p: Path) -> tuple[dict[str, dict], dict]:
+    """读快照。文件中途被截断或哈希对不上都拒绝使用 —— 宁可取不到也不能用半个 oracle。"""
+    d = json.loads(p.read_text(encoding="utf-8"))
+    info = d.get("classifications") or {}
+    if len(info) < 300:
+        raise SystemExit(f"{p} 只有 {len(info)} 条分类（< 300）—— 快照损坏，拒绝使用。")
+    want = d.get("digest", "")
+    got = ei_digest(info)
+    if want and got != want:
+        raise SystemExit(f"{p} 的指纹不符：记录 {want[:12]}… 实算 {got[:12]}… —— 拒绝使用。")
+    return info, d
+
+
+def write_ei_snapshot(p: Path, info: dict[str, dict]) -> None:
+    payload = {
+        "note": "闸 4 的判据。只存 contractType / underlyingType，其余字段与闸 4 无关。",
+        "source": "https://www.binance.com/fapi/v1/exchangeInfo",
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "n_symbols": len(info),
+        "digest": ei_digest(info),
+        "classifications": {s: {f: info[s].get(f) for f in EI_FIELDS}
+                            for s in sorted(info)},
+    }
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.part")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=1,
+                              sort_keys=True), encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def load_or_fetch_exchange_info(refresh: bool,
+                                path: Path | None) -> tuple[dict[str, dict], dict]:
+    """闸 4 的 oracle：优先用快照，可选强制刷新。
+
+    顺序：--refresh → 联网取并写快照；否则先读快照；快照不存在才联网取。
+    联网失败时回落到快照，让**离线也能复现已发布的 D1** ——
+    原来离线只能 exit 3，D1 的复现性被一次网络请求绑架。
+    """
+    p = path or ei_snapshot_path()
+    src = {"snapshot_path": str(p), "from": "", "fetched_at": "", "digest": ""}
+
+    if refresh or not p.exists():
+        log(f"  {'--refresh：' if refresh else '快照不存在，'}联网取 exchangeInfo…")
+        info = fetch_exchange_info()
+        if len(info) < 300:
+            log(f"    ⚠️ 只拿到 {len(info)} 条 —— 疑似残包或网络不可达。")
+            if p.exists():
+                info, d = read_ei_snapshot(p)
+                src["from"] = "snapshot_fallback"
+                src["fetched_at"] = d.get("fetched_at", "")
+                src["digest"] = d.get("digest", "")
+                log(f"    回落到快照（{len(info)} 条，取于 {src['fetched_at']}）。")
+                return info, src
+            log("    且没有可用快照 —— 拒绝继续（闸 4 会把代币化资产全放行）。")
+            return {}, src
+        write_ei_snapshot(p, info)
+        _, d = read_ei_snapshot(p)          # 回读，保证记录的就是落盘的那份
+        src["from"] = "live"
+        src["fetched_at"] = d.get("fetched_at", "")
+        src["digest"] = d.get("digest", "")
+        log(f"    取到 {len(info)} 条，已写入快照 {p.name}")
+        return info, src
+
+    info, d = read_ei_snapshot(p)
+    src["from"] = "snapshot"
+    src["fetched_at"] = d.get("fetched_at", "")
+    src["digest"] = d.get("digest", "")
+    log(f"  用快照 {p.name}：{len(info)} 条，取于 {src['fetched_at']}")
+    return info, src
+
+
+
+# ============================================================================
 # 主流程
 # ============================================================================
 
@@ -151,6 +254,11 @@ def main() -> int:
     ap.add_argument("--subset", nargs="+", default=None, help="只处理这些合约（冒烟）")
     ap.add_argument("--no-schema-note", action="store_true",
                     help="跳过 exchangeInfo（闸 4 退化为只查兜底名单）")
+    ap.add_argument("--refresh-exchange-info", action="store_true",
+                    help="强制联网重取 exchangeInfo 并覆盖快照（默认用快照；"
+                         "快照不存在才联网）")
+    ap.add_argument("--exchange-info", default=None,
+                    help="快照文件路径（默认 phase1/exchange_info_snapshot.json）")
     args = ap.parse_args()
 
     configure_paths(Path(args.out_root),
@@ -207,22 +315,23 @@ def main() -> int:
 
     # ---- exchangeInfo（闸 4）----
     log("")
+    ei_src = {"from": "skipped", "snapshot_path": "", "fetched_at": "", "digest": ""}
     if args.no_schema_note:
         info = {}
         log("  --no-schema-note：跳过 exchangeInfo，闸 4 只查兜底名单")
     else:
-        log("  取 exchangeInfo（闸 4 判据）…")
-        info = fetch_exchange_info()
-        log(f"    {len(info)} 条")
+        info, ei_src = load_or_fetch_exchange_info(
+            args.refresh_exchange_info,
+            Path(args.exchange_info) if args.exchange_info else None)
         # 不能静默降级：没有 exchangeInfo 就没有 underlyingType，
         # 闸 4 会把【全部】代币化资产判成加密资产放进池子。
         # 两种失败都要拦住：完全取不到（0 条），以及截断但合法的残包 ——
-        # 后者会让闸 4 对缺记录的合约静默放行。Binance 当前挂牌的 USDT 永续
-        # 远超 300 个，低于此数一定是残包。
+        # 后者会让闸 4 对缺记录的合约静默放行。
         if len(info) < 300:
             log("")
             log(f"  ✗ exchangeInfo 只有 {len(info)} 条（< 300）—— 取不到或残包，拒绝继续。")
-            log("    需要 VPN（www.binance.com 的 DNS 被污染，见 guidance §2.1）。")
+            log("    需要 VPN（www.binance.com 的 DNS 被污染，见 guidance §2.1）；")
+            log("    或从版本控制里取回 phase1/exchange_info_snapshot.json；")
             log("    若只想跑通流程做冒烟，加 --no-schema-note。")
             return 3
 
@@ -449,8 +558,12 @@ def main() -> int:
     if RUN_INFO.exists():
         try:
             info_prev = json.loads(RUN_INFO.read_text(encoding="utf-8"))
-        except Exception:                         # noqa: BLE001
-            info_prev = {}
+        except json.JSONDecodeError as e:
+            # 不能吞：这个文件里同时存着 Step 0–5 与 QA 的元信息。
+            # 读失败还往下走，就会用"只有 step_6"的内容覆盖掉全部历史。
+            log(f"  ✗ {RUN_INFO.name} 解析失败：{e}")
+            log("    拒绝覆盖 —— 它里面还有 Step 0–5 的元信息。请先修复或移走该文件。")
+            return 5
     info_prev["step_6_build_universe"] = {
         "run_at": datetime.now(timezone.utc).isoformat(),
         "months": len(months),
@@ -468,9 +581,18 @@ def main() -> int:
             "g3b_oi_gap": int((~E["g3b"]).sum()),
             "g4_non_crypto": int((~E["g4"]).sum()),
         },
+        # 闸 4 的判据来源与指纹：事后可核"这次用的是哪个 oracle"，以及重跑是否一致
+        "exchange_info": {
+            "from": ei_src["from"],
+            "n_records": len(info),
+            "fetched_at": ei_src["fetched_at"],
+            "digest": ei_src["digest"],
+        },
     }
-    RUN_INFO.write_text(json.dumps(info_prev, ensure_ascii=False, indent=2),
-                        encoding="utf-8")
+    tmp_ri = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
+    tmp_ri.write_text(json.dumps(info_prev, ensure_ascii=False, indent=2),
+                      encoding="utf-8")
+    os.replace(tmp_ri, RUN_INFO)
     log(f"\n  总耗时 {time.time()-T_START:.0f}s")
     return 0
 

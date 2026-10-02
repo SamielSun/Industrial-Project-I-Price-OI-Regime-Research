@@ -19,7 +19,7 @@
 | 样本窗口 | `2021-12-01` ~ `2026-08-31` |
 | 月度成员集 | 有成员的月份各 50 个，共 **2,700** 行 / 54 个月 |
 | 磁盘 | **2.2 GB / 1,440 个文件** |
-| 全流程实测 | 本地计算约 **28 分钟**（首次下载另需约 2 小时） |
+| 全流程实测 | 本地计算约 **26 分钟**（首次下载另需约 2 小时） |
 
 **四件产出**
 
@@ -71,7 +71,7 @@ Industrial Programme I/
 | **3** | `fetch_market_data.py` | 候选池 + S3 列表 | `raw/` **1,144 文件 / 1.10 GB** | 约 111 分钟 |
 | **4** | `build_layer2.py` | `raw/` | 4 张表 **228 文件 / 546.8 MB** | **847s** |
 | **5** | `build_features.py` | 4 张表 | `features_1h` **57 文件** | **357s** |
-| **6a** | `build_universe.py` | 面板 + 候选池 + manifest + `exchangeInfo` | universe 四表 | **451s** |
+| **6a** | `build_universe.py` | 面板 + 候选池 + manifest + **快照** | universe 四表 | **239s**（走快照） |
 | **6b** | `build_qa.py` | 面板 + manifest | 缺失报告 + 字典 + 校验和 | **30s** |
 
 **六条命令按此顺序执行，Step 6b 必须最后跑**（原因见 §5.2）。
@@ -80,8 +80,8 @@ Industrial Programme I/
 - **下载只能用 Python 的 `urllib`** —— 本机 Windows schannel 故障，`curl` / `Invoke-WebRequest` 一律失败。
 - **`s3-ap-northeast-1.amazonaws.com` 与 `www.binance.com` 的 DNS 被污染**，需要 VPN。
   `data.binance.vision`（CloudFront）不受影响。
-- **需要 VPN 的步骤**：Step 0–3、**Step 6a**（要读 `exchangeInfo`，取不到即 exit 3）。
-  **不需要**：Step 4 / 5 / 6b。
+- **需要 VPN 的步骤**：Step 0–3。
+  **Step 6a 只要快照在就不需要网络**（§2.2 有说明；快照随代码进版本控制）。
 - 依赖：Python 3.12 + `pandas` 2.3.3 / `pyarrow` 23.0.1。
 
 ### 2.2 逐步说明
@@ -288,9 +288,21 @@ features_1h = klines_1h
 #### Step 6a · Universe（资格判定 + PIT 成员）
 
 **输入**：`data/02_features/features_1h/` + `data/03_reference/candidate_pool.csv`
-+ `data/00_config/manifest.parquet`（决定评测哪些合约） + `exchangeInfo`。
++ `data/00_config/manifest.parquet`（决定评测哪些合约）
++ **`phase1/exchange_info_snapshot.json`**（闸 4 的判据）。
 
-⚠️ **需要网络。** `exchangeInfo` 取不到或返回条数 < 300（残包）都会 **exit 3**，
+**闸 4 的判据走快照，不是每次联网取。** 顺序是：`--refresh-exchange-info` →
+联网取并覆盖快照；否则先读快照；快照不存在才联网取。**取数来源与指纹记进
+`sample_end.json`**，事后可核「这次用的是哪个 oracle」。
+
+为什么必须落快照：**否则 D1 的复现性被一次网络请求绑架** ——
+换台机器重跑，Binance 只要新增一个分类或下架一个合约，闸 4 的判定就可能不同，
+而你无法从产出里判断两次结果是否同源。实测三种情况：用快照 **239s**、
+联网取 **451s**、断网且无快照 **4952s**（重试超时拖长）。
+
+快照只存闸 4 读的两个字段（`contractType` / `underlyingType`，920 条 / 79 KB），
+不存全量 payload。`--no-schema-note` 仍可用于忽略判据的冒烟。
+`exchangeInfo` 取不到、返回 < 300 条（残包）、或快照指纹不符，都会 **exit 3**，
 不静默降级 —— 降级的后果是闸 4 全部放行，代币化股票会混进成员集。
 
 **处理**：**逐月**评测全归档 679 个合约的资格状态（§3.1），
@@ -416,8 +428,16 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 所以另加 `config.tokenized_tradfi_bases = ("PAXG", "XAUT")` 按 `base_asset` 再挡一次
 —— 实测拦下 114 行，PAXG/XAUT 在成员集里归零。
 
+**闸 4 到底拦掉了什么**（快照实测，920 条分类）：
+`TRADIFI_PERPETUAL` 213 条（`EQUITY` 175 · `HK_EQUITY` 15 · `COMMODITY` 8 ·
+`KR_EQUITY` 8 · `PREMARKET` 4 · `CN_EQUITY` 2 · `FX` 1），
+另加 3 条 `PERPETUAL` 但分类是 `INDEX` 的合成指数永续
+（`DEFIUSDT` `BTCDOMUSDT` `ALLUSDT`）。
+
 ⚠️ **`exchangeInfo` 只含当前挂牌合约**：29 个已下架合约查不到，走
 `DELISTED_NON_CRYPTO` 兜底名单（**当前为空** —— 实测查不到的全是加密资产）。
+⚠️ 分类表里有 **656** 个 USDT 本位加密合约，本地只有 **650** 个 —— 差的 6 个是
+在两次取数之间下架的。**这正是判据必须落快照的原因**（§2.2 Step 6a）。
 
 **两个易错点**：闸 2 用 bar 数而非 `onboard_date`（上市与 OI 归档不同步）；
 闸 3 用 `sum_open_interest` 本身的空值率，**不得**用那 4 个衍生字段
@@ -671,11 +691,18 @@ python phase1/build_qa.py       --out-root data --sample-end 2026-08-31
 **Step 4 与 Step 5 是全量重建**（先清旧产出）。`--subset` 加 `--keep-existing`
 才是"只处理部分合约"的冒烟模式，此时收尾的交叉校验只对该批次有意义。
 
+**Step 6a 的判据来自快照**，所以离线可复现。要更新判据（例如到了新月份、
+Binance 新增了合约分类）才需要联网：
+```bash
+python phase1/build_universe.py --out-root data --sample-end 2026-08-31 \
+       --refresh-exchange-info          # 联网重取并覆盖快照
+```
+
 ---
 
 ## 6. 时间优化
 
-**全流程本地计算约 28 分钟**（Step 4 = 847s，Step 5 = 357s，Step 6a = 451s，Step 6b = 30s）。
+**全流程本地计算约 26 分钟**（Step 4 = 847s，Step 5 = 357s，Step 6a = 239s，Step 6b = 30s）。
 四个优化点，各自的收益都是实测的：
 
 ### 6.1 一遍过：下载即解压（Step 3，最大的一个）
@@ -871,7 +898,7 @@ chunk（约 357 秒）。**正确性没问题，代价是时间。**
 数量级。`coverage.parquet` 的 `median_daily_qv` 是逐小时成交额中位数，不设闸。
 
 **Q：整个流程要跑多久？增量呢？**
-首次约 2.5–3 小时（Step 2 约 8 分钟 + Step 3 约 111 分钟 + Step 4–6b 约 28 分钟）；
+首次约 2.5–3 小时（Step 2 约 8 分钟 + Step 3 约 111 分钟 + Step 4–6b 约 26 分钟）；
 增量只加一个月约 **10 分钟**。**换月增量前要先补 §7.4 的两个缺口（TTL 重探、upsert）。**
 
 必须读 `funding_interval_hours`。

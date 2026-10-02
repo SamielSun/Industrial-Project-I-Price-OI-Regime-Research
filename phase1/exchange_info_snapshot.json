@@ -1,0 +1,3689 @@
+{
+ "classifications": {
+  "0GUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000000BOBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000000MOGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000BONKUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000BONKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000CATUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000CHEEMSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000FLOKIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000LUNCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000PEPEUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000PEPEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000RATSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000SATSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000SHIBUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000SHIBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000WHYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000XECUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1000XUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1INCHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "1MBABYDOGEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "2ZUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "42USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "4USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "A2ZUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AAOIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "AAPLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "AAVEUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AAVEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ACEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ACHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ACNUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ACTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ACUUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ACXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ADAUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ADAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ADBEUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "AEROUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AEVOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AGIXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AGLDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AGPUUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "AGTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AI16ZUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AIAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AIGENSYNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AINUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AIOTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AIOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AIXBTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AKEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AKTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ALABUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ALCHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ALGOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ALICEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ALLOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ALLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "INDEX"
+  },
+  "ALPACAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ALPHAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ALPINEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ALTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AMATUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "AMBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AMCUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "AMDUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "AMZNUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ANETUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ANIMEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ANKRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ANTHROPICUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "PREMARKET"
+  },
+  "APEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "API3USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "APLDUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "APPUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "APRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "APTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ARBUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ARBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ARCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ARIAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ARKMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ARKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ARMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ARPAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ARUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ARXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ASMLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ASRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ASTERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ASTRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ASTSUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ATAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ATHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ATOMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ATUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AUCTIONUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AVAAIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AVAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AVAXUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AVAXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AVGOUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "AVNTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AWEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AXLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AXSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "AXTIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "AZTECUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "B2USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "B3USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BABAUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BABYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BADGERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BAKEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BALUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BANANAS31USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BANANAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BANDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BANKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BANUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BARDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BASEDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BASUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BATUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BBXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BCHUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BCHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BEAMXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BEATUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BELUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BERAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BEUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BICOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BIDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BIGTIMEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BILLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BIOUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BIOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BIRBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BITOUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BLESSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BLUAIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BLURUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BLZUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BMNRUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BMTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BNBUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BNBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BNCUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BNTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BNXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BOBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BOMEUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BOMEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BONDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BOTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BRETTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BREVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BRKBUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BROCCOLI714USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BROCCOLIF3BUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BSBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BSPUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BSVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BSWUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BTCDOMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "INDEX"
+  },
+  "BTCU": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BTCUSD1": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BTCUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BTCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BTCUSDT_261225": {
+   "contractType": "CURRENT_QUARTER",
+   "underlyingType": "COIN"
+  },
+  "BTCUSDT_270326": {
+   "contractType": "NEXT_QUARTER",
+   "underlyingType": "COIN"
+  },
+  "BTRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BTWUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BULLAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "BWETUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "BYDUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "BZUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "COMMODITY"
+  },
+  "C98USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CAKEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CAPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CARVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CATIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CATUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CBRSUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CELOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CELRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CETUSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CFGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CFXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CGPTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CHESSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CHILLGUYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CHIPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CHRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CHZUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CIENUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CKBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CLANKERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CLOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "COMMODITY"
+  },
+  "COAIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "COHRUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "COINUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "COLLECTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "COMBOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "COMMONUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "COMPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "COOKIEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "COPPERUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "COMMODITY"
+  },
+  "COSTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "COSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "COTIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "COWUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CRCLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CRDOUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CRMLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CRMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CROSSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CRVUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CRVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CRWDUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CRWVUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CSCOUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CSOPSAMSUNG2LUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "CSOPSKHYNIX2LUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "CTKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CTRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CTSIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CUDISUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CVCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CVNAUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CVXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CXMTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "CN_EQUITY"
+  },
+  "CYBERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "CYPHUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "CYSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DAMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DARUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DASHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DATAIPUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DATAIPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DDOGUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "DEEPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DEFIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "INDEX"
+  },
+  "DEGENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DEGOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DELLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "DENTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DEXEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DFUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DGBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DIAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DISUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "DJTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "DKNGUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "DMCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DODOXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DOGEUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DOGEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DOGSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DOLOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DOODUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DOSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DOTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DRAMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "DRIFTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DUSKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DYDXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "DYMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EBAYUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "EDENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EDGEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EDUUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EGLDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EIGENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ELSAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ENAUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ENAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ENJUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ENSOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ENSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EPICUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EPTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ERAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ESPORTSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ESPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ETCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ETHBTC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ETHFIUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ETHFIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ETHU": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ETHUSD1": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ETHUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ETHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ETHUSDT_261225": {
+   "contractType": "CURRENT_QUARTER",
+   "underlyingType": "COIN"
+  },
+  "ETHUSDT_270326": {
+   "contractType": "NEXT_QUARTER",
+   "underlyingType": "COIN"
+  },
+  "ETHWUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EULUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EVAAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "EWJUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "EWTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "EWYUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "EWZUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "FARTCOINUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FETUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FFUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FHEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FIDAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FIGHTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FILUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FILUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FIOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FISUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FLEXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "FLMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FLNCUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "FLOCKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FLOWUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FLUIDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FLUXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FOGOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FOLKSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FORMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FORTHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FRAXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FTMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FTTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FUNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "FWDIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "FXSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GAIBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GALAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GASUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GDXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "GENIUSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GEVUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "GHSTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GIGADEVUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "GIGGLEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GLMRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GLMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GLWUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "GMEUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "GMTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GMXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GOATUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GOOGLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "GPROUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "GPSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GRAMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GRASSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GRIFFAINUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GRTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GRVTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GSUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "GTCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GTLBUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "GUAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GUNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "GWEIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HAEDALUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HANAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HANMIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "KR_EQUITY"
+  },
+  "HBARUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HBARUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HDUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "HEIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HEMIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HFTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HIFIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HIGHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HIMSUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "HIPPOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HIVEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HK0625USDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "HK0700USDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "HK0992USDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "HK1810USDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "HMSTRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HOLOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HOMEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HOODUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "HOOKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HOTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HPEUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "HUMAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HUTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "HYPERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HYPEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "HYUNDAIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "KR_EQUITY"
+  },
+  "IBMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ICNTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ICPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ICXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IDEXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IDOLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ILVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IMXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "INITUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "INJUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "INTCUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "INTWUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "INUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "INXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IONQUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "IOSTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IOTAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IOTXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IPUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IRENUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "IRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IRYSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "IWMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "JASMYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "JCTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "JELLYJELLYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "JOEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "JPMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "JSTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "JTOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "JUPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KAIAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KAITOUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KAITOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KASUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KATUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KAVAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KDAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KERNELUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KEYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KGENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KITEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KLACUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "KLAYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KMNOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KNCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KODEX200USDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "KR_EQUITY"
+  },
+  "KOMAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KORUUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "KOUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "KSMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "KSTRUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "KUAISHOUUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "LABUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LAYERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LDOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LEVERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LGELECTRONICSUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "KR_EQUITY"
+  },
+  "LIGHTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LINAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LINEAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LINKUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LINKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LISTAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LITEUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "LITUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LLYUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "LOKAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LOOMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LPTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LQTYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LRCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LRCXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "LSKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LTCUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LTCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LUMIAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LUNA2USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LYNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "LYTEUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MAGICUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MAGMAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MANAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MANTAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MANTRAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MARAUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MARSCOINUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MASKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MAVIAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MAVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MBOXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MDBUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MDTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MEGAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MEITUANUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "MELANIAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MEMEFIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MEMEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MERLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "METAUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "METISUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "METUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MEWUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MILKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MINAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MINIMAXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "MIRAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MITOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MKRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MLNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MMTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MOCAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MONUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MOODENGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MOONSHOTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "PREMARKET"
+  },
+  "MORPHOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MOVEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MOVRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MPUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MRKUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MRNAUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MRVLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MSFTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MSTRUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MTLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MUBARAKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MUUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MUUUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MVLLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "MYROUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "MYXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NAORISUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NATGASUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "COMMODITY"
+  },
+  "NAVERUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "KR_EQUITY"
+  },
+  "NBISUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "NEARUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NEARUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NEIROETHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NEIROUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NEOUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NEOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NETUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "NEWTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NFLXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "NFPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NIGHTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NILUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NKEUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "NKNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NMRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NOKUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "NOMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NOTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NOWUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "NTRNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NULSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "NVDAUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "NVDLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "NVOUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "NXPCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OBOLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OCEANUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OGNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OKLOUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "OLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OMGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OMNIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ONDOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ONDSUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ONEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ONGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ONTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ONUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OPENAIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "PREMARKET"
+  },
+  "OPENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OPGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OPNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ORBSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ORCAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ORCLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ORDERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ORDIUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ORDIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OURAUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "PREMARKET"
+  },
+  "OUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "OXTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PANWUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "PARTIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PATHUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "PAXGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PAYPUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "PDDUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "PENDLEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PENGUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "PENGUUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PENGUUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PEOPLEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PERPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PHAROSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PHAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PHBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PIEVERSEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PIPPINUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PIXELUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PLAYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PLTRUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "PLUMEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PNUTUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PNUTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "POLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "POLYXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PONKEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PONSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "POPCATUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "POPMARTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "PORT3USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PORTALUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "POWERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "POWRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PRLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PROMPTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PROMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PROVEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PTBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PUFFERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PUMPBTCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PUMPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PUNDIXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "PYPLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "PYTHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "QCOMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "QNTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "QNTXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "QQQUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "QTUMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "QUICKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "QUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RADUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RAMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "RAREUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RAVEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RAYSOLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RAYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RDDTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "RDNTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RECALLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "REDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "REEFUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "REIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RENDERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RESOLVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "REUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "REZUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RIFUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RIVERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RIVNUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "RKLBUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "RLCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RLSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ROBOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RONINUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ROSEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RPLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RSRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RUMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "RUNEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RVNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "RVVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SAFEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SAGAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SAHARAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SAMSUNGEMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "KR_EQUITY"
+  },
+  "SAMSUNGUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "KR_EQUITY"
+  },
+  "SANDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SANTOSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SAPIENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SCRTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SCRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SECZUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SEIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SENTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SFPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SHAZUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SHELLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SHOPUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SIGNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SIRENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SKATEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SKDDUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SKHYNIXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "KR_EQUITY"
+  },
+  "SKHYUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SKLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SKRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SKUUUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SKYAIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SKYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SLERFUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SLPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SLXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SMCIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SMHUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SNDKUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SNOWUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SNTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SNXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SNXXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SOFIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SOLUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SOLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SOLVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SOMIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SONICUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SONYUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SOONUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SOPHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SOXLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SOXSUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SPACEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SPCXUSD1": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SPCXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SPELLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SPKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SPORTFUNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SPXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SPYUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SQDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SQQQUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SSVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STABLEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STARUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STBLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STEEMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STMXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STORJUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STPTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STRAXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STRCUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "STRKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "STXXUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "SUIUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SUIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SUNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SUPERUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SUSHIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SWARMSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SWELLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SXTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SYNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SYRUPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "SYSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TACUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TAGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TAIKOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TAKEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TANSSIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TAOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TBTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TEAMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TEMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TENCENTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "TERUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "THETAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "THEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TIAUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TIAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TLMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TMFUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TNSRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TOKENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TONUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TOSHIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TOWNSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TQQQUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TRADOORUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TRBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TREEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TRIAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TROYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TRUMPUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TRUMPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TRUSTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TRUTHUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TRUUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TRXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TSLAUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TSLLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TSMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TSTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TTWOUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TURBOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TURTLEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TUTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TWSTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TWTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "TXNUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "TZAUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "UAIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "UBERUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "UBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "UMAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "UNFIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "UNHUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "UNITREEUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "CN_EQUITY"
+  },
+  "UNIUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "UNIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "URNMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "USARUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "USDBRLUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "FX"
+  },
+  "USDCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "USELESSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "USTCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "USUALUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "USUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "UVXYUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "UXLINKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VANAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VANRYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VELODROMEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VELVETUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VETUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VFYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VICUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VIDTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VINEUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VIRTUALUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VOXELUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VRTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "VSTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "VTHOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "VUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "VVVUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WALUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WAVESUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WAXPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WCTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WDCUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "WENUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "WETUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WIFUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WIFUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WLDUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WLDUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WLFIUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WLFIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WMTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "WOOUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "WUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XAGUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "COMMODITY"
+  },
+  "XAIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XANUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XAUTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XAUUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "COMMODITY"
+  },
+  "XBIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "XCNUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XEMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XLEUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "XLMUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XMRUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XNYUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XOMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "XPDUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "COMMODITY"
+  },
+  "XPINUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XPLUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XPTUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "COMMODITY"
+  },
+  "XRPUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XRPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XTZUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XVGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "XVSUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "YALAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "YBUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "YFIUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "YGGUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZAMAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZBTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZECUSDC": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZECUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZENUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZEREBROUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZESTUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZETAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZHIPUUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "ZHONGJIUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "HK_EQUITY"
+  },
+  "ZILUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZKCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZKJUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZKPUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZKUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZMUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "ZORAUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZRCUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZROUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZRXUSDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "ZSUSDT": {
+   "contractType": "TRADIFI_PERPETUAL",
+   "underlyingType": "EQUITY"
+  },
+  "哈基米USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "币安人生USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "我踏马来了USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "牛来USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  },
+  "龙虾USDT": {
+   "contractType": "PERPETUAL",
+   "underlyingType": "COIN"
+  }
+ },
+ "digest": "14132135273b79b353d0ff91491b6313c58adc563853d810f10bf3d7b0c3b404",
+ "fetched_at": "2026-10-02T18:04:25.194798+00:00",
+ "n_symbols": 920,
+ "note": "闸 4 的判据。只存 contractType / underlyingType，其余字段与闸 4 无关。",
+ "source": "https://www.binance.com/fapi/v1/exchangeInfo"
+}
