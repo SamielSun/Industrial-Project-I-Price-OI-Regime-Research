@@ -87,18 +87,6 @@ class Config:
     )
     """闸 1：按 base_asset 判定，不按符号字面"""
 
-    tokenized_tradfi_bases: tuple[str, ...] = ("PAXG", "XAUT")
-    """闸 4 的第二道判据：代币化贵金属的 base_asset，按 base_asset 判定。
-
-    为什么 `exchangeInfo` 的分类字段【不够】：Binance 把代币化黄金标成
-    contractType=PERPETUAL / underlyingType=COIN，与加密资产完全无法区分。
-    实测 PAXGUSDT 因此通过全部四条闸，并在 2025-10..2026-08 连续 11 个月
-    进入成员集（最高排到第 13 名）。XAUTUSDT 也曾 eligible（排名 55/64）。
-
-    它们是黄金的凭证，不是加密资产 —— 混入会让 regime 结论无法解释。
-    实测 285 个候选池合约里只有这两个命中。
-    """
-
     # ---- 路径与IO（非设计参数，但需集中管理）----
     parquet_compression: str = "zstd"
     event_lookbacks: tuple[int, ...] = (1, 4, 8, 24)
@@ -108,7 +96,6 @@ class Config:
         """设计参数的完整快照，供写入 00_config/sample_end.json（§12.5）。"""
         d = dataclasses.asdict(self)
         d["stablecoin_bases"] = list(self.stablecoin_bases)
-        d["tokenized_tradfi_bases"] = list(self.tokenized_tradfi_bases)
         d["event_lookbacks"] = list(self.event_lookbacks)
         return d
 

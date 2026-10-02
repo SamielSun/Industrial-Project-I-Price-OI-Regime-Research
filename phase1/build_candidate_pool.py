@@ -255,12 +255,13 @@ def hard_filter(usdt: set[str], info: dict, cfg: cfg_mod.Config,
         if base and base in cfg.stablecoin_bases:
             drop(s, "稳定币")
             continue
-        # 闸 4 第二道：代币化贵金属（exchangeInfo 把它们标成 PERPETUAL/COIN，
-        # 分类字段挡不住 —— 实测 PAXGUSDT 曾在成员集里连续 11 个月）
-        if base and base in cfg.tokenized_tradfi_bases:
-            drop(s, f"代币化传统金融（{base}）")
-            continue
-        # 闸 4：排除代币化传统金融资产（见文件头 CRYPTO_* 常量处的说明）
+        # 闸 4：非加密资产 —— 判据【只有分类字段】，不设额外的名字黑名单。
+        # 代币化股票/ETF/商品/外汇是 TRADIFI_PERPETUAL，天然被挡住（实测 212 个）；
+        # 3 个合成指数永续是 PERPETUAL/INDEX，也被挡住。
+        # 故意的例外：PAXGUSDT / XAUTUSDT 被标成 PERPETUAL/COIN，按此判据放行 ——
+        # 它们是链上发行的加密原生合约（24/7 交易，无收盘时段），
+        # 结构上与加密永续无区别，属于 note 所说的 "crypto perpetual futures"。
+        # 反之代币化股票有交易时段，闭市时 OI/资金费率语义会变，必须挡掉。
         if s in DELISTED_NON_CRYPTO:
             drop(s, "非加密资产（兜底名单）")
             continue

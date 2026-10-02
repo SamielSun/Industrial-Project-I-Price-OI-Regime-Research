@@ -343,11 +343,6 @@ def main() -> int:
     # 所以名单为空；若将来发现查不到的里面有非加密资产，加进来。
     DELISTED_NON_CRYPTO: set[str] = set()
 
-    # ---- 闸 4 的第二道判据：代币化贵金属（按 base_asset）----
-    # exchangeInfo 把 PAXG/XAUT 标成 PERPETUAL/COIN，与加密资产无法区分，
-    # 系统提示词之外的判据必须补上这一条（实测 PAXGUSDT 曾入选 11 个月）。
-    TOKENIZED_TRADFI = set(cfg.tokenized_tradfi_bases)
-
     # ---- 逐月 ----
     log("")
     log("逐月评测…")
@@ -401,13 +396,17 @@ def main() -> int:
             g3b = r["oi_max_gap_h"] <= cfg.max_oi_gap_hours
             g3 = g3a and g3b
             if rec is not None:
+                # 闸 4 的判据【只有分类字段】。代币化股票/ETF/商品/外汇是
+                # TRADIFI_PERPETUAL，合成指数永续是 PERPETUAL/INDEX，都被挡住。
+                # 故意的例外：PAXG/XAUT 被标成 PERPETUAL/COIN，按此判据放行 ——
+                # 它们是链上发行的加密原生合约（24/7、无收盘时段），
+                # 属于 note 所说的 "crypto perpetual futures"；
+                # 反之代币化股票有交易时段，闭市时 OI/资金费率语义会变。
                 g4 = (rec.get("contractType") == "PERPETUAL"
                       and rec.get("underlyingType") == "COIN")
             else:
                 # 已下架 → exchangeInfo 查不到。实测池里查不到的合约全是加密资产
                 g4 = s not in DELISTED_NON_CRYPTO
-            # 第二道：分类字段把代币化黄金也算成 COIN，必须按 base_asset 再挡一次
-            g4 = g4 and base not in TOKENIZED_TRADFI
 
             reasons = []
             if not g1:

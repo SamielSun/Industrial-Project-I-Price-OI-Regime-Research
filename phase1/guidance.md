@@ -101,7 +101,7 @@ Industrial Programme I/
 `LUNAUSDT` 等样本期内最重要的事件标的 —— **用它当清单会制造幸存者偏差。**
 
 **Step 1 处理**：五条硬过滤 —— 非 USDT 本位、名称怪象（交割 / `SETTLED` 后缀）、
-稳定币、代币化贵金属、代币化传统金融（分类字段判据）。实测 **893 → 679**。
+稳定币、代币化传统金融（分类字段判据）。实测 **893 → 679**。
 归档里混着美股（`TSLAUSDT`）、港韩 A 股、ETF、商品、指数（`DEFIUSDT`）、外汇，
 不先过滤会让结论无法解释。
 
@@ -341,7 +341,7 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 **它代表什么**：`membership` 是**唯一的择时口径** —— Phase 2–5 的分组、Phase 3 的
 事件样本、Phase 5 的回测标的都从它出发。`eligibility` 不是分析表，是**给人审计用的**。
 **候选池 285 个的去向**：曾通过四条闸 **280**、曾当成员 **248**、通过闸但从未排进
-前 50 的 **32**。**`membership` 只有 54 个月**（样本前 3 个月所有合约都"历史不足"，
+前 50 的 **32**（含 `XAUTUSDT`，排名 55/64）。**`membership` 只有 54 个月**（样本前 3 个月所有合约都"历史不足"，
 保留在 `eligibility` 里可查可解释）。
 
 ---
@@ -398,7 +398,7 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 | **2②** | **最后活跃日 ≥ M 月初**（仍在交易） | `require_live_at_month_start` | **23,262** |
 | **3①** | trailing 30 天 OI 覆盖率 ≥ N | `min_oi_coverage = 0.90` | **28,964** |
 | **3②** | trailing 30 天最长连续缺失 ≤ N 小时 | `max_oi_gap_hours = 48` | **87** |
-| **4** | 非代币化传统金融资产 / 贵金属 | 分类字段 + base_asset 名单 | **114** |
+| **4** | 非加密资产（分类字段判据） | `contractType` + `underlyingType` | **0**（见下） |
 
 「单条拦下」是**各闸独立计数**（同一合约月可被多条拦下），不能相加。
 闸 2① 与闸 3① 几乎拦住同一批（新合约既无 90 天历史，也无 30 天 OI）。
@@ -408,31 +408,34 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 闸1  通过  16,245
 闸2① 通过   9,761
 闸2  通过   9,008      ← ①② 同时满足
-闸3  通过   8,915      ← 闸1·2①·2②·3①·3② 同时满足
-闸4  通过   8,915
+闸3  通过   8,931      ← 闸1·2①·2②·3①·3② 同时满足
+闸4  通过   8,931      ← 分类字段在候选池内无人可拦
 ```
-**闸 1 的「单条拦下 = 0」是意料之中**：候选池在 Step 1 就已剔掉稳定币与非加密资产，
-这两条闸的作用在 679 的全归档层面。**闸 3② 是最锋利的边界** —— 只剔 87 行，
-但剔掉的全是真正不可用的合约。
+**闸 1 与闸 4 的「单条拦下 = 0」都是意料之中**：候选池在 Step 1 就已用同一套
+判据剔掉了稳定币与非加密资产，所以这两条闸的作用在 **679 的全归档层面**
+（闸 4 在 Step 1 拦下 **215** 个 USDT 代币化标的）。
+**闸 3② 是最锋利的边界** —— 只剔 87 行，但剔掉的全是真正不可用的合约。
 
-**闸 4 是两条判据，缺一不可**
+**闸 4 的判据只有分类字段，不设名字黑名单**
 
-| 字段 | 加密资产 | 传统金融 |
+| 字段 | 加密资产（放行） | 其他（拦下） |
 |---|---|---|
-| `contractType` | `PERPETUAL` | `TRADIFI_PERPETUAL` |
+| `contractType` | `PERPETUAL` | `TRADIFI_PERPETUAL` · `CURRENT_QUARTER` · `NEXT_QUARTER` |
 | `underlyingType` | `COIN` | `EQUITY` · `HK_EQUITY` · `KR_EQUITY` · `CN_EQUITY` · `COMMODITY` · `PREMARKET` · `FX` · `INDEX` |
 
-⚠️ **分类字段挡不住代币化黄金**：Binance 把 `PAXGUSDT` / `XAUTUSDT` 标成
-`PERPETUAL` / `COIN`，与加密资产无法区分。实测 `PAXGUSDT` 因此通过全部四条闸，
-在 `2025-10` ~ `2026-08` **连续 11 个月进入成员集，最高排到第 13 名**。
-所以另加 `config.tokenized_tradfi_bases = ("PAXG", "XAUT")` 按 `base_asset` 再挡一次
-—— 实测拦下 114 行，PAXG/XAUT 在成员集里归零。
+**通过闸 4 ⇔ 两个字段同时命中。** 实测拦下的东西（快照口径）：
+`TRADIFI_PERPETUAL` **212** 个（`EQUITY` 174 · `HK_EQUITY` 15 · `KR_EQUITY` 8 ·
+`COMMODITY` 8 · `PREMARKET` 4 · `CN_EQUITY` 2 · `FX` 1），
+另加 **3** 个 `PERPETUAL` 但分类是 `INDEX` 的合成指数永续
+（`DEFIUSDT` `BTCDOMUSDT` `ALLUSDT`）—— 它们是合成品，不是单一资产。
+理由是**代币化股票有交易时段**：闭市时它不波动，OI 与资金费率的语义会变，
+1 小时 regime 会被外部时段切断。上面每个都符合这个理由。
 
-**闸 4 到底拦掉了什么**（快照实测，920 条分类）：
-`TRADIFI_PERPETUAL` 213 条（`EQUITY` 175 · `HK_EQUITY` 15 · `COMMODITY` 8 ·
-`KR_EQUITY` 8 · `PREMARKET` 4 · `CN_EQUITY` 2 · `FX` 1），
-另加 3 条 `PERPETUAL` 但分类是 `INDEX` 的合成指数永续
-（`DEFIUSDT` `BTCDOMUSDT` `ALLUSDT`）。
+⚠️ **故意的例外：`PAXGUSDT` / `XAUTUSDT` 放行。** Binance 把它们标成
+`PERPETUAL` / `COIN`，按分类字段判据自然放行 —— 这是对的，因为它们是
+**链上发行的加密原生合约**（24/7 交易、无收盘时段），结构上与加密永续无区别，
+属于 note 所说的 `crypto perpetual futures`。实测 `PAXGUSDT` 是成员 **11 个月**
+（2025-10 ~ 2026-08，rank 13–49），`XAUTUSDT` 排名 55/64 未入选。
 
 ⚠️ **`exchangeInfo` 只含当前挂牌合约**：29 个已下架合约查不到，走
 `DELISTED_NON_CRYPTO` 兜底名单（**当前为空** —— 实测查不到的全是加密资产）。
