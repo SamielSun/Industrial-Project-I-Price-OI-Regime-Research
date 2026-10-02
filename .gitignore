@@ -19,6 +19,10 @@ venv/
 _smoke/
 _mid/
 
+# ---- 我自己的临时脚本与提交信息（曾两次被 git add -A 误提交）----
+_*.py
+_cm.txt
+
 # ---- Office 临时锁文件 ----
 ~$*
 ~WRL*.tmp
