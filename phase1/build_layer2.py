@@ -27,6 +27,7 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
 3. **OI 终点对齐**：bar [ts, ts_end) 配 OI(ts_end)。
    即 `oi_1h.ts = 源 create_time - 1h`。这是 schema 已定的语义
    （`ts_end` = "OI 对齐时刻 = 决策时刻"）。
+   **`create_time` 的秒位必须截断**（实测 4,138 行非 0）—— 见 §3 oi_1h 处的说明。
 
 4. **funding 落在结算时刻【起的】那根 bar**：`ts_funding == klines.ts`。
    实测 calc_time 截断到整秒后 100% 落在整点、100% 等于某 bar 的 ts。
@@ -56,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 import time
 from collections import Counter, defaultdict
@@ -130,22 +132,34 @@ def read_monthly(src: str, sym: str) -> pd.DataFrame | None:
     return df
 
 
+_METRICS_CACHE: dict[str, pd.DataFrame] | None = None
+
+
+def _metrics_cache(years: list[int]) -> dict[str, pd.DataFrame]:
+    """把 6 个年度 metrics 文件读【一次】、解析 ts、并【按合约预分组】。
+
+    两个优化叠加：
+      1. 原来每个合约都重读一遍 6 个文件（同一份 730 万行 × 285 次）—— 实测 289s；
+      2. 只在读完后按 `symbol == s` 反复过滤仍是 285 次全表布尔扫描 —— 实测 114s。
+    一次 groupby 建索引后，取单个合约是 O(1) 字典查找（实测 < 2s）。
+    """
+    global _METRICS_CACHE
+    if _METRICS_CACHE is None:
+        frames = [pq.read_table(RAW / "metrics" / f"year={y}.parquet").to_pandas()
+                  for y in years if (RAW / "metrics" / f"year={y}.parquet").exists()]
+        if not frames:
+            raise SystemExit(f"找不到 metrics：{RAW / 'metrics'}")
+        c = pd.concat(frames, ignore_index=True)
+        c["ts"] = pd.to_datetime(c["create_time"], utc=True)
+        c = c[["symbol", "ts", "sum_open_interest"]].sort_values(
+            ["symbol", "ts"], ignore_index=True)
+        _METRICS_CACHE = {s: g for s, g in c.groupby("symbol", sort=False)}
+    return _METRICS_CACHE
+
+
 def read_metrics(sym: str, years: list[int]) -> pd.DataFrame | None:
-    """读日频 metrics（按年分文件），只取该合约。"""
-    frames = []
-    for y in years:
-        p = RAW / "metrics" / f"year={y}.parquet"
-        if not p.exists():
-            continue
-        d = pq.read_table(p).to_pandas()
-        d = d[d["symbol"] == sym]
-        if not d.empty:
-            frames.append(d)
-    if not frames:
-        return None
-    df = pd.concat(frames, ignore_index=True)
-    df["ts"] = pd.to_datetime(df["create_time"], utc=True)
-    return df
+    """取该合约的日频 metrics（来自共享缓存）。"""
+    return _metrics_cache(years).get(sym)
 
 
 # ============================================================================
@@ -209,9 +223,19 @@ def build_symbol(sym: str, years: list[int]
     oi = read_metrics(sym, years)
     o = pd.DataFrame({"symbol": sym, "ts_end": grid + pd.Timedelta(hours=1)})
     if oi is not None:
-        c = oi[["ts", "sum_open_interest"]].rename(
-            columns={"ts": "ts_end", "sum_open_interest": "oi"})
-        c = c.drop_duplicates(subset=["ts_end"], keep="last")
+        # 对齐规则：ts_end == create_time（实测确认，例 TLMUSDT 2021-12-01：
+        # bar [00:00,01:00) 的 oi = 102,744,323 = create_time 01:00 的快照）。
+        # 秒位必须截断，否则静默丢数据：实测 4,138 行（64 个合约，如
+        # TLMUSDT 2022-05-09 11:00:59）的 create_time 秒位非 0，其中 1,147 行
+        # 是该合约该小时唯一的快照。不截断则匹配不上任何 ts_end，
+        # 被静默记成 oi_missing=True，并把该合约的 OI 序列人为拉长
+        # （TLMUSDT 的 39 小时冻结即由此而来）。
+        # 同一小时若真有多条（整点 + 迟到），按时间取最后一条。
+        oi = oi.assign(ts_end=oi["ts"].dt.floor("h"))
+        stats["oi秒位非零"] = int((oi["ts"].dt.second != 0).sum())
+        c = (oi.sort_values("ts")[["ts_end", "sum_open_interest"]]
+               .drop_duplicates(subset=["ts_end"], keep="last")
+               .rename(columns={"sum_open_interest": "oi"}))
         o = o.merge(c, on="ts_end", how="left")
     if "oi" not in o.columns:
         o["oi"] = float("nan")
@@ -305,7 +329,8 @@ def write_chunk(table: str, ym: str, df: pd.DataFrame, *, do_validate: bool) -> 
     if do_validate:
         validate(df, table)              # 失败抛 SchemaViolation，一次报全部问题
     out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_name(out.name + ".part")
+    # .part 名里带 PID：两个进程同时跑时不会互相覆盖暂存文件
+    tmp = out.with_name(f"{out.name}.{os.getpid()}.part")
     pq.write_table(pa.Table.from_pandas(df, preserve_index=False), tmp,
                    compression="zstd")
     os.replace(tmp, out)
@@ -322,6 +347,8 @@ def main() -> int:
     ap.add_argument("--pool", default=None, help="候选池 CSV 路径（默认项目内那一个）")
     ap.add_argument("--sample-end", required=True, help="样本截止日，必须是月末")
     ap.add_argument("--subset", nargs="+", default=None, help="只处理这些合约（冒烟）")
+    ap.add_argument("--keep-existing", action="store_true",
+                    help="不要清掉已有产出（只在 --subset 冒烟时用；默认全量重建）")
     ap.add_argument("--batch", type=int, default=30,
                     help="每多少个合约合并落盘一次（默认 30）。越小内存越省、"
                          "但 chunk 重写次数越多（次数 ≈ 合约数/批大小 × 57）")
@@ -354,13 +381,26 @@ def main() -> int:
     years = sorted({int(p.stem.split("=")[1]) for p in (RAW / "metrics").glob("year=*.parquet")})
     log(f"候选池 {len(pool)} 个合约   metrics 年份 {years}")
 
+    # ---- 全量重建：先清掉本步骤的旧产出 ----
+    # 不能依赖 write_chunk 的"读回合并"：本轮没处理的合约会在目录里留【旧代码/旧输入】
+    # 的行，而且没人能发现 —— 实测 --subset 连跑两次后，目录里还留着上一次的合约，
+    # 收尾的交叉校验是对整个目录做的，照样打印"三张网格表一致: 是"。
+    # 必须显式给 --subset 才保留旧产出（冒烟用）。
+    if not args.keep_existing:
+        for tname in LAYER2_SCHEMAS:
+            d_old = L2 / tname
+            if d_old.exists():
+                n_old = sum(1 for _ in d_old.rglob("*.parquet"))
+                shutil.rmtree(d_old)
+                log(f"  清掉旧产出 {tname}（{n_old} 个文件，全量重建）")
+
     # ---- 逐合约建表，按【批】合并落盘 ----
     # 内存约束：不能把所有合约攒到最后（2,400 万行）。
     # 性能约束：也不能每个合约都读回全部 57 个 chunk 重写一遍
     #          （285 × 57 ≈ 10 万次"读回+合并+重写"，二次方）。
     # 折中：每 --batch 个合约攒一批合并一次。缓冲区峰值 ≈ batch × 一个合约。
     agg: Counter = Counter()
-    rows_by_table: Counter = Counter()
+    rows_by_table: Counter = Counter()      # 本次写入的行数（仅用于日志）
     chunks_written: dict[str, set[str]] = {t: set() for t in LAYER2_SCHEMAS}
     pend: dict[str, dict[str, list[pd.DataFrame]]] = {
         t: defaultdict(list) for t in LAYER2_SCHEMAS
@@ -371,9 +411,9 @@ def main() -> int:
         nonlocal pend, pend_syms
         for tname in LAYER2_SCHEMAS:
             for ym, parts in pend[tname].items():
-                added, _ = write_chunk(tname, ym,
-                                       pd.concat(parts, ignore_index=True),
-                                       do_validate=not args.no_validate)
+                added, _total = write_chunk(tname, ym,
+                                            pd.concat(parts, ignore_index=True),
+                                            do_validate=not args.no_validate)
                 rows_by_table[tname] += added
                 chunks_written[tname].add(ym)
         pend = {t: defaultdict(list) for t in LAYER2_SCHEMAS}
@@ -401,10 +441,29 @@ def main() -> int:
         f"oi 缺 {agg['oi缺']:,}")
     log(f"        funding 毫秒非零 {agg['funding毫秒非零']:,}   "
         f"不在网格 {agg['funding不在网格']:,}")
+    log(f"        oi 秒位非零（已截断到整点）{agg['oi秒位非零']:,}")
     written = {t: len(chunks_written[t]) for t in LAYER2_SCHEMAS}
+    # 表的总行数【从磁盘读】，不是本次写入数 —— 本轮没碰到的 chunk 也有行，
+    # 而 funding 是事件表（每批只写它那个月的行），累计写入数会严重低报。
+    rows_total = {t: sum(pq.read_metadata(str(f)).num_rows
+                         for f in (L2 / t).rglob("*.parquet"))
+                  for t in LAYER2_SCHEMAS}
     for tname in LAYER2_SCHEMAS:
         log(f"    {tname:<16} {written[tname]:>3} 个 chunk   "
-            f"{rows_by_table[tname]:>12,} 行")
+            f"{rows_total[tname]:>12,} 行")
+
+    # ---- 空产出必须报错，不能"绿灯通过" ----
+    # 实测：--raw-root 指向空目录时，0 个文件、0 行，旧的交叉校验仍然打印
+    # "三张网格表一致: 是" 并 exit 0 —— 空的第 2 层会被 Step 5/6 继续消费。
+    if sum(rows_total.values()) == 0:
+        log("")
+        log(f"  ✗ 产出为 0 行 —— 检查 --raw-root 是否指对了：{RAW}")
+        return 4
+    if agg["klines_缺失"]:
+        log("")
+        log(f"  ✗ 有 {agg['klines_缺失']} 个合约在 raw 里没有 klines 文件 —— "
+            f"它们会得到整表 NaN。拒绝以'成功'结束。")
+        return 4
 
     # ---- 交叉判据：三张网格表的 (symbol, ts) 必须逐一致 ----
     log("")
@@ -439,7 +498,7 @@ def main() -> int:
         "run_at": datetime.now(timezone.utc).isoformat(),
         "candidate_pool_size": len(pool),
         "chunks_per_table": written,
-        "rows_by_table": dict(rows_by_table),
+        "rows_by_table": dict(rows_total),
         "grid_consistent": ok,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -449,7 +508,7 @@ def main() -> int:
     log("=" * 78)
     log(f"  候选池合约            {len(pool):>10,}")
     for tname in LAYER2_SCHEMAS:
-        log(f"  {tname:<20} {rows_by_table[tname]:>10,} 行   {written[tname]:>3} chunk")
+        log(f"  {tname:<20} {rows_total[tname]:>10,} 行   {written[tname]:>3} chunk")
     log(f"  三张网格表一致        {'是' if ok else '否':>10}")
     log(f"  总耗时                {time.time()-T_START:>10.0f}s")
     log("=" * 78)

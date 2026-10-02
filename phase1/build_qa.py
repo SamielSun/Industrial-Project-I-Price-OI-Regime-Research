@@ -285,9 +285,15 @@ def main() -> int:
         "coverage_rows": len(V),
         "checksums": n_ck,
     }
+    # config_snapshot 每次重写：Step 0-2/3/4 只在各自运行时写一次，
+    # 之后 config.py 若改过（例如闸 2 的 min_history_bars 从 720 提到 2160），
+    # 旧快照会一直留着 —— 实测出现过 sample_end.json 与 config.py 互相矛盾。
+    # Step 6b 是最后一步，由它强制对齐。
+    prev["config_snapshot"] = cfg.snapshot()
     RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
     RUN_INFO.write_text(json.dumps(prev, ensure_ascii=False, indent=2),
                         encoding="utf-8")
+    log("    -> 00_config/sample_end.json         config_snapshot 已对齐 config.py")
 
     # ---- 7. 校验和（最后一个写盘动作）----
     written = write_checksums()

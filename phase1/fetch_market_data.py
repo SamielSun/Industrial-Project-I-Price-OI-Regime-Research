@@ -245,10 +245,18 @@ def cpath(src: str, sym: str, period: str) -> Path:
 # ============================================================================
 
 def enum_monthly(src: str, interval: str | None, sym: str) -> set[str]:
-    """月频源该合约的可用月份（窗口内）。返回 set['YYYY-MM']。"""
-    qs = quote_seg(sym)
+    """月频源该合约的可用月份（窗口内）。返回 set['YYYY-MM']。
+
+    ⚠️ prefix 传【原始合约名】，不要先 quote_seg ——
+    s3_keys 内部的 urlencode 会编码一次，提前编码就会变成双重编码：
+    非 ASCII 合约名（币安人生USDT）被编成 %25E5%25B8%2581… ，
+    服务端解码一次后拿到字面量 "%E5%B8%81…"，永远匹配不到真实 key，
+    于是该合约【一个文件都枚举不到】，且不会留下任何 manifest 记录。
+    实测这样静默丢掉过 1 个候选池合约的全部 mark/index/OI。
+    quote_seg 只用于 CDN 下载 URL（monthly_path）。
+    """
     mid = f"{interval}/" if interval else ""
-    keys = s3_keys(f"data/futures/um/monthly/{src}/{qs}/{mid}")
+    keys = s3_keys(f"data/futures/um/monthly/{src}/{sym}/{mid}")
     lo, hi = _MONTH_RE_WINDOW
     out = set()
     for k in keys:
@@ -261,9 +269,11 @@ def enum_monthly(src: str, interval: str | None, sym: str) -> set[str]:
 
 
 def enum_metrics(sym: str) -> set[str]:
-    """日频 metrics 该合约的可用日期（窗口内）。返回 set['YYYY-MM-DD']。"""
-    qs = quote_seg(sym)
-    keys = s3_keys(f"data/futures/um/daily/metrics/{qs}/")
+    """日频 metrics 该合约的可用日期（窗口内）。返回 set['YYYY-MM-DD']。
+
+    同样：prefix 传原始合约名，不 quote_seg（见 enum_monthly 的说明）。
+    """
+    keys = s3_keys(f"data/futures/um/daily/metrics/{sym}/")
     lo, hi = _MONTH_RE_WINDOW
     out = set()
     for k in keys:
@@ -283,23 +293,47 @@ KLINES_COLS = ["open_time", "open", "high", "low", "close", "volume",
                "close_time", "quote_volume", "count", "taker_buy_volume",
                "taker_buy_quote_volume", "ignore"]
 FUND_COLS = ["calc_time", "funding_interval_hours", "last_funding_rate"]
+METRICS_ALL_COLS = ["create_time", "symbol", "sum_open_interest",
+                    "sum_open_interest_value", "count_toptrader_long_short_ratio",
+                    "sum_toptrader_long_short_ratio", "count_long_short_ratio",
+                    "sum_taker_long_short_vol_ratio"]
 
 
-def parse_zip(blob: bytes) -> pd.DataFrame | None:
+class ParseError(Exception):
+    """归档内容无法解析。与网络失败区分开 —— 打戳规则不同。"""
+
+
+def parse_zip(blob: bytes) -> pd.DataFrame:
+    """解析一个归档 zip，返回 DataFrame。
+
+    失败【必须抛异常】，不能返回 None —— 调用方原来把"解析失败"和
+    "压缩包里没有整点行"都当成 None，于是两种截然不同的情况走同一条分支：
+    打戳 ok + 释放缓存。实测 parsed=None 走 stamp() 的有 813 个 (合约,月)：
+    文件被永久记为"已完成"，而 data/raw 里一行都没有，缓存也已删掉，无法追查。
+    """
     try:
         with zipfile.ZipFile(io.BytesIO(blob)) as z:
             body = z.read(z.namelist()[0]).decode()
-    except Exception:                        # noqa: BLE001
-        return None
+    except Exception as e:                   # noqa: BLE001
+        raise ParseError(f"不是可读的 zip：{type(e).__name__}: {e}") from e
     lines = body.strip().split("\n")
-    if not lines:
-        return None
+    if not lines or not lines[0].strip():
+        raise ParseError("压缩包成员为空")
     first = lines[0].split(",", 1)[0].strip()
     has_header = not first.lstrip("-").replace(".", "").isdigit()
-    df = pd.read_csv(io.StringIO(body), header=0 if has_header else None)
+    try:
+        df = pd.read_csv(io.StringIO(body), header=0 if has_header else None)
+    except Exception as e:                   # noqa: BLE001
+        raise ParseError(f"CSV 解析失败：{type(e).__name__}: {e}") from e
     if not has_header:
+        # 市场级突发事件会让归档里出现【空成员】，
+        # 也会出现列数对不上任何已知模板的残包 —— 都按解析失败处理。
         n = df.shape[1]
-        df.columns = (KLINES_COLS if n == 12 else FUND_COLS)[:n]
+        if n not in (len(KLINES_COLS), len(FUND_COLS), len(METRICS_ALL_COLS)):
+            raise ParseError(f"无表头且列数 {n} 不匹配任何已知模板")
+        table = (KLINES_COLS if n == len(KLINES_COLS)
+                 else FUND_COLS if n == len(FUND_COLS) else METRICS_ALL_COLS)
+        df.columns = table[:n]
     return df
 
 
@@ -325,9 +359,14 @@ def grab(src: str, sym: str, period: str, remote: str) -> tuple[str, int, pd.Dat
     p = cpath(src, sym, period)
     if p.exists():
         data = p.read_bytes()
-        df = parse_zip(data)
-        if src == DAILY_SOURCE:
-            df = to_hourly_metrics(df)
+        try:
+            df = parse_zip(data)
+            if src == DAILY_SOURCE:
+                df = to_hourly_metrics(df)
+        except ParseError:
+            # 缓存里的这份是坏的 —— 删掉，让它下次重下
+            p.unlink(missing_ok=True)
+            return "retry_exhausted", 0, None
         return "ok", len(data), df
     try:
         blob = http(CDN + remote)
@@ -342,9 +381,14 @@ def grab(src: str, sym: str, period: str, remote: str) -> tuple[str, int, pd.Dat
     tmp.write_bytes(blob)                    # 先落缓存，中断后可续
     os.replace(tmp, p)
     n = len(blob)
-    df = parse_zip(blob)                     # ← 就地解压，blob 随即丢弃
-    if src == DAILY_SOURCE:
-        df = to_hourly_metrics(df)
+    try:
+        df = parse_zip(blob)                 # ← 就地解压，blob 随即丢弃
+        if src == DAILY_SOURCE:
+            df = to_hourly_metrics(df)
+    except ParseError:
+        # 【不删缓存、不打戳】：这是"下载到了但读不懂"，与网络失败同类，
+        # 必须留待重试。原来这里归到 ok，于是文件被永久记为已完成而 raw 里没有数据。
+        return "retry_exhausted", n, None
     return "ok", n, df
 
 
@@ -367,10 +411,9 @@ def flush_monthly(src: str, sym: str, frames: list[pd.DataFrame]) -> None:
     new = pd.concat(frames, ignore_index=True)
     out = raw_out(src, sym)
     if out.exists():
-        try:
-            new = pd.concat([pq.read_table(out).to_pandas(), new], ignore_index=True)
-        except Exception:                    # noqa: BLE001
-            pass
+        # 同 flush_metrics：读失败必须抛，不能静默用本批覆盖掉已落盘的月份
+        old = pq.read_table(out).to_pandas()
+        new = pd.concat([old, new], ignore_index=True)
     tcol = "open_time" if "open_time" in new.columns else "calc_time"
     new = (new.drop_duplicates(subset=[tcol], keep="last")
               .sort_values(tcol, ignore_index=True))
@@ -387,10 +430,11 @@ def flush_metrics(year: str, df: pd.DataFrame) -> None:
     """把某一年的 OI 攒批落盘。"""
     out = raw_out(DAILY_SOURCE, year)
     if out.exists():
-        try:
-            df = pd.concat([pq.read_table(out).to_pandas(), df], ignore_index=True)
-        except Exception:                    # noqa: BLE001
-            pass
+        # 读【不能】吞异常：读失败还继续往下走，就会用"只有本批"的数据覆盖掉
+        # 该年已落盘的其他月份 —— 数据永久丢失，而随后照样打戳记成功。
+        # 实测：强制读失败后文件从 2 行变成 1 行。
+        old = pq.read_table(out).to_pandas()
+        df = pd.concat([old, df], ignore_index=True)
     df = (df.drop_duplicates(subset=["symbol", "create_time"], keep="last")
             .sort_values(["create_time", "symbol"], ignore_index=True))
     _atomic_parquet(df, out)
@@ -653,6 +697,7 @@ def main() -> int:
                     flush_all()
                 if done % 2000 == 0:
                     log(f"    {done:,}/{len(todo):,}  已用 {time.time()-t0:.0f}s")
+                    persist()          # 中途落盘进度：SIGKILL/断电也不丢戳
         flush_all()
         log(f"    完成，耗时 {time.time()-t0:.0f}s")
 
@@ -685,58 +730,70 @@ def main() -> int:
 
     # ---- manifest ----
     now = datetime.now(timezone.utc).isoformat()
-    rows = []
-    for src, s, period, remote in jobs:
-        key = (src, s, period)
-        wr = written.get(key, "")
-        rows.append({
-            "source": src,
-            "symbol": s,
-            "period": period,
-            "granularity": "daily" if src == DAILY_SOURCE else "monthly",
-            "remote_path": remote,
-            "filename": remote.rsplit("/", 1)[-1],
-            "status": status.get(key, "retry_exhausted"),
-            "bytes": size.get(key, 0),
-            "downloaded_at": now if status.get(key) == "ok" else "",
-            "raw_written_at": wr,
-        })
     cols = ["source", "symbol", "period", "granularity", "remote_path",
             "filename", "status", "bytes", "downloaded_at", "raw_written_at"]
-    mf = pd.DataFrame(rows, columns=cols)
-    if MANIFEST.exists():
-        old = pd.read_parquet(MANIFEST)
-        for c in cols:
-            if c not in old.columns:
-                old[c] = ""
-        keys = set(zip(mf["source"], mf["symbol"], mf["period"], mf["granularity"]))
-        keep = [tuple(r) not in keys for r in
-                old[["source", "symbol", "period", "granularity"]]
-                .itertuples(index=False)]
-        mf = pd.concat([old[keep][cols], mf], ignore_index=True)
-    MANIFEST.parent.mkdir(parents=True, exist_ok=True)
-    tmp = MANIFEST.with_name(MANIFEST.name + ".part")
-    mf.to_parquet(tmp, engine="pyarrow", compression="zstd")
-    os.replace(tmp, MANIFEST)
 
-    n_written = sum(1 for k in jobs
-                    if written.get((k[0], k[1], k[2])))
-    # ---- 运行摘要 ----
-    RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
-    RUN_INFO.write_text(json.dumps({
-        "sample_end": args.sample_end,
-        "sample_start": cfg.sample_start,
-        "config_snapshot": cfg.snapshot(),
-        "step": "fetch_market_data",
-        "run_at": now,
-        "interrupted": interrupted,
-        "candidate_pool_size": len(pool),
-        "files_total": len(jobs),
-        "files_written": n_written,
-        "files_per_source": dict(by_src),
-        "status_counts": {"ok": n_ok, "confirmed_404": n_404,
-                          "retry_exhausted": n_retry},
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    def persist(final: bool = False) -> None:
+        """把当前进度写进 manifest（原子写）。
+
+        必须能【中途反复调用】：原来只在全部跑完后写一次，于是 SIGKILL / 断电 /
+        未捕获异常会丢掉所有 raw_written_at 戳，而缓存早就被 drop_cache 删了 ——
+        下次重跑要把已经下过的几十万个文件全部重下。
+        """
+        rows_ = []
+        for src_, s_, period_, remote_ in jobs:
+            key_ = (src_, s_, period_)
+            rows_.append({
+                "source": src_,
+                "symbol": s_,
+                "period": period_,
+                "granularity": "daily" if src_ == DAILY_SOURCE else "monthly",
+                "remote_path": remote_,
+                "filename": remote_.rsplit("/", 1)[-1],
+                "status": status.get(key_, "retry_exhausted"),
+                "bytes": size.get(key_, 0),
+                "downloaded_at": now if status.get(key_) == "ok" else "",
+                "raw_written_at": written.get(key_, ""),
+            })
+        mf_ = pd.DataFrame(rows_, columns=cols)
+        if MANIFEST.exists():
+            old_ = pd.read_parquet(MANIFEST)
+            for c_ in cols:
+                if c_ not in old_.columns:
+                    old_[c_] = ""
+            keys_ = set(zip(mf_["source"], mf_["symbol"], mf_["period"],
+                            mf_["granularity"]))
+            keep_ = [tuple(r) not in keys_ for r in
+                     old_[["source", "symbol", "period", "granularity"]]
+                     .itertuples(index=False)]
+            mf_ = pd.concat([old_[keep_][cols], mf_], ignore_index=True)
+        MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+        tmp_ = MANIFEST.with_name(MANIFEST.name + f".{os.getpid()}.part")
+        mf_.to_parquet(tmp_, engine="pyarrow", compression="zstd")
+        os.replace(tmp_, MANIFEST)
+        if not final:
+            return
+        n_written_ = sum(1 for k in jobs if written.get((k[0], k[1], k[2])))
+        RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
+        tmp2_ = RUN_INFO.with_name(RUN_INFO.name + f".{os.getpid()}.part")
+        tmp2_.write_text(json.dumps({
+            "sample_end": args.sample_end,
+            "sample_start": cfg.sample_start,
+            "config_snapshot": cfg.snapshot(),
+            "step": "fetch_market_data",
+            "run_at": now,
+            "interrupted": interrupted,
+            "candidate_pool_size": len(pool),
+            "files_total": len(jobs),
+            "files_written": n_written_,
+            "files_per_source": dict(by_src),
+            "status_counts": {"ok": n_ok, "confirmed_404": n_404,
+                              "retry_exhausted": n_retry},
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp2_, RUN_INFO)
+
+    persist(final=True)
+    n_written = sum(1 for k in jobs if written.get((k[0], k[1], k[2])))
 
     log("")
     log("=" * 76)

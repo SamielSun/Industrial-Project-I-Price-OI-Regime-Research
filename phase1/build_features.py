@@ -20,12 +20,11 @@ build_features —— 建 features_1h（19 列密集网格）
 
 四条核心规则
 ------------
-1. **密集网格**，范围 [首根 bar, 最后一个正成交额日]。
-   `klines_1h` 几乎本来就密集（抽样 788,731 行只有 5 处断点），
-   实测密集化只补 6,855 行（0.09%）。
+1. **密集网格**，范围 [首根 bar, 最后一个正成交额日的 23:00]（见 `active_bounds()`）。
+   实测密集化补 6,886 行（0.09%）。
 
 2. **裁掉死尾。** 下架合约的 `klines` 归档会一直写「整月零成交空行」到样本末端，
-   共 310,466 行（4.10%），其 `oi_missing` 占 99.8%。
+   实测裁掉 321,737 行（4.25%），其 `oi_missing` 占 99.8%。
    按 `schema.py` 的 note（"覆盖 [oi_archive_start, last_active_date]"）裁掉。
 
 3. **funding 的处理**：
@@ -73,6 +72,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 L2 = DATA / "01_layer2"
 OUT = DATA / "02_features"
+FE_DIR = OUT / "features_1h"      # 运行时被指向暂存目录 features_1h.new
 CANDIDATE_POOL = ROOT / "data" / "03_reference" / "candidate_pool.csv"
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 
@@ -81,10 +81,11 @@ T_START = time.time()
 
 def configure_paths(out_root: Path, l2_root: Path | None,
                     pool: Path | None) -> None:
-    global DATA, L2, OUT, CANDIDATE_POOL, RUN_INFO
+    global DATA, L2, OUT, FE_DIR, CANDIDATE_POOL, RUN_INFO
     DATA = out_root.resolve()
     L2 = (l2_root or (DATA / "01_layer2")).resolve()
     OUT = DATA / "02_features"
+    FE_DIR = OUT / "features_1h"
     CANDIDATE_POOL = (pool or (ROOT / "data" / "03_reference"
                                / "candidate_pool.csv")).resolve()
     RUN_INFO = DATA / "00_config" / "sample_end.json"
@@ -117,6 +118,11 @@ def active_bounds(kl: pd.DataFrame) -> pd.DataFrame:
     """每个合约的网格范围：[首根 bar, 最后一个正成交额日的当日末] 。
 
     返回 DataFrame[symbol, g0, g1]。
+
+    ⚠️ 全程零成交额的合约会被【丢弃】：它的 `last_day` 是 NaT，
+    `pd.date_range(g0, NaT)` 会抛 ValueError 直接终止整个运行
+    （实测：ETHUSDT 全部 quote_volume=0 的 fixture → traceback at line 132）。
+    这种合约本来也不该进面板，但必须计入日志而不是让脚本崩掉。
     """
     d = kl[["symbol", "ts", "quote_volume"]].copy()
     d["day"] = d["ts"].dt.floor("D")
@@ -126,7 +132,7 @@ def active_bounds(kl: pd.DataFrame) -> pd.DataFrame:
     b = pd.concat([g0, last_day], axis=1)
     # 上界 = 最后一个正成交额日的 23:00（该日最后一根 bar）
     b["g1"] = b["last_day"] + pd.Timedelta(hours=23)
-    return b.reset_index()
+    return b[b["last_day"].notna()].reset_index()
 
 
 def dense_grid(sym: str, g0: pd.Timestamp, g1: pd.Timestamp) -> pd.DataFrame:
@@ -205,6 +211,15 @@ def build_symbol(sym: str, ks: dict, mis: dict, ois: dict, fus: dict,
         st["funding未join上"] = 0
     # interval 前向填充：非结算小时填【上一次结算公布的区间】
     before = int(base["funding_interval_hours"].isna().sum())
+    # 网格起点之前可能已有结算（实测 154 个，涉及 55 个合约）。LEFT JOIN 只看得见
+    # 网格内的结算，所以 g0 之后到首次网格内结算之间的小时会错误地留 null。
+    # 用最后一个【网格外】结算的区间做种子。
+    if f is not None and len(f):
+        pre = f[f["ts_funding"] < g0].sort_values("ts_funding")
+        if len(pre):
+            base["funding_interval_hours"] = base["funding_interval_hours"].fillna(
+                float(pre["funding_interval_hours"].iloc[-1]))
+            st["interval网格前播种"] = 1
     base["funding_interval_hours"] = base["funding_interval_hours"].ffill()
     st["interval回填"] = before - int(base["funding_interval_hours"].isna().sum())
     st["interval首结算前"] = int(base["funding_interval_hours"].isna().sum())
@@ -238,7 +253,7 @@ def conform(df: pd.DataFrame) -> pd.DataFrame:
 def write_chunk(ym: str, df: pd.DataFrame, *, do_validate: bool) -> tuple[int, int]:
     """写一个 chunk（与已有内容合并）。返回 (本次新增行数, 合并后总行数)。"""
     df = conform(df)
-    out = OUT / "features_1h" / f"year={ym[:4]}" / f"chunk={ym}.parquet"
+    out = FE_DIR / f"year={ym[:4]}" / f"chunk={ym}.parquet"
     added = len(df)
     if out.exists():
         old = pq.read_table(str(out), partitioning=None).to_pandas()
@@ -248,7 +263,8 @@ def write_chunk(ym: str, df: pd.DataFrame, *, do_validate: bool) -> tuple[int, i
     if do_validate:
         validate(df, "features_1h")
     out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_name(out.name + ".part")
+    # .part 名里带 PID：两个进程同时跑时不会互相覆盖暂存文件
+    tmp = out.with_name(f"{out.name}.{os.getpid()}.part")
     pq.write_table(pa.Table.from_pandas(df, preserve_index=False), tmp,
                    compression="zstd")
     os.replace(tmp, out)
@@ -295,15 +311,22 @@ def main() -> int:
             return 2
     log(f"候选池 {len(pool)} 个合约")
 
-    # 全量重建：先清掉本步骤的旧产出。
-    # 不能依赖 write_chunk 的"读回合并" —— 本轮若裁掉了某些行（如死尾），
-    # 旧的残留行会被合并进来，永远不会消失。
+    # 全量重建，但【不先删旧产出】—— 分两阶段写：
+    #   建到 features_1h.new → 全部成功后再换成 features_1h
+    # 为什么要这样：原先在建任何东西之前就 rmtree 整个面板，中途任何异常都会
+    # 留下一份"看起来合法"的残缺面板（每个 chunk 都过了 validate()），
+    # 而 sample_end.json 还写着上一轮的完整数字，下游无从察觉。
+    import shutil
     d_out = OUT / "features_1h"
-    if d_out.exists():
-        n_old = sum(1 for _ in d_out.rglob("*.parquet"))
-        import shutil
-        shutil.rmtree(d_out)
-        log(f"  清掉旧产出 {n_old} 个文件（全量重建）")
+    d_new = OUT / "features_1h.new"
+    d_old = OUT / "features_1h.old"
+    for p in (d_new, d_old):                      # 清掉上次中断的残留
+        if p.exists():
+            shutil.rmtree(p)
+    OUT.mkdir(parents=True, exist_ok=True)
+    log(f"  产出先写到 {d_new.name}/，成功后整体替换（避免残缺面板）")
+
+    globals()["FE_DIR"] = d_new
 
     # ---- 读 layer2 ----
     t0 = time.time()
@@ -381,14 +404,38 @@ def main() -> int:
     log(f"  裁掉死尾行           {n_trim:>12,}")
     log(f"  无 klines 的合约     {agg['无 klines']:>12,}")
 
-    # ---- 运行元信息 ----
+    # ---- 空产出 / 缺合约必须报错 ----
+    # 实测：池内合约完全缺席时，脚本只打印一行日志然后 exit 0，
+    # 面板静默缺合约，RUN_INFO 里也没有这个信息。
+    if agg["无 klines"]:
+        log("")
+        log(f"  ✗ 有 {agg['无 klines']} 个候选池合约没有可用的 klines —— "
+            f"它们不会出现在面板里。拒绝以'成功'结束。")
+        return 4
+    if agg["网格行"] == 0:
+        log("")
+        log(f"  ✗ 产出为 0 行 —— 检查 --l2-root 是否指对了：{L2}")
+        return 4
+
+    # ---- 两阶段提交：暂存目录整体替换正式目录 ----
+    # Windows 不能原子替换目录，所以先改名再换入；两次改名之间的窗口很窄，
+    # 且残留的 .new/.old 会在下次运行时被清掉。
+    if d_out.exists():
+        os.replace(d_out, d_old)
+    os.replace(d_new, d_out)
+    if d_old.exists():
+        shutil.rmtree(d_old, ignore_errors=True)
+    log(f"  已整体替换 {d_out.name}/（{len(chunks)} 个 chunk）")
+
+    # ---- 运行元信息（替换成功后写）----
     RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
     old_info = {}
     if RUN_INFO.exists():
         try:
             old_info = json.loads(RUN_INFO.read_text(encoding="utf-8"))
-        except Exception:                     # noqa: BLE001
-            old_info = {}
+        except json.JSONDecodeError as e:      # 只吞解析错误，其他照旧抛
+            log(f"  ⚠ {RUN_INFO.name} 解析失败（{e}）—— 保留原文件不动")
+            old_info = json.loads(RUN_INFO.read_text(encoding="utf-8"))
     old_info.update({
         "sample_end": args.sample_end,
         "step_5_build_features": {
@@ -400,6 +447,7 @@ def main() -> int:
             "bar_missing": agg["bar_missing"],
             "oi_missing": agg["oi_missing"],
             "dead_tail_trimmed": n_trim,
+            "symbols_without_klines": agg["无 klines"],
         },
     })
     RUN_INFO.write_text(json.dumps(old_info, ensure_ascii=False, indent=2),

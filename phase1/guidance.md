@@ -1,536 +1,264 @@
 # Phase 1 Guidance
 
-> 项目：THEO / FTEC5910 — **Price + Open Interest Regime Signal**
-> 更新：2026-09-29
-> **本文件是 Phase 1 编码的唯一依据。未在此定义的参数，编码时不得自创。**
+> THEO / FTEC5910 — **Price + Open Interest Regime Signal**
+> 更新：2026-10-02
+> **本文件是 Phase 1 的唯一依据。未在此定义的参数，编码时不得自创。**
 > 产出：**D1** — 干净、可复现、无前视的 Binance 永续面板数据集
 
 ---
 
-## 1. 目标与进度
+## 0. 一页速览
 
-**D1 = ① 干净面板（Parquet）② 缺失数据报告 ③ 数据字典 ④ 校验和 + 复现命令**
+**D1 是什么**：285 个 Binance USDT 本位永续、57 个月、逐小时的分析面板，
+外加缺失报告、数据字典、校验和。
 
-**非目标**：制度标注（Phase 2）· 事件研究（Phase 3）· 回测（Phase 5）
+| 指标 | 数值 |
+|---|---|
+| 主面板 `features_1h` | **7,253,002 行 / 19 列 / 57 个月** |
+| 合约数 | 候选池 **285**；曾当成员 **248** |
+| 样本窗口 | `2021-12-01` ~ `2026-08-31` |
+| 月度成员集 | 有成员的月份各 50 个，共 **2,700** 行 / 54 个月 |
+| 磁盘 | **2.2 GB / 1,440 个文件** |
+| 全流程实测 | 本地计算约 **28 分钟**（首次下载另需约 2 小时） |
 
-### 1.1 进度表
+**四件产出**
 
-**命名约定**：`Phase 1–5` = 项目阶段；`Step 0–6` = §4 的数据流；**脚本按作用命名，不用编号**。
+| # | 产出 | 位置 |
+|---|---|---|
+| ① | 干净面板 | `data/02_features/features_1h/` |
+| ② | 缺失报告 | `data/04_qa/{missing_files,gaps,coverage}.parquet` |
+| ③ | 数据字典 | `data/04_qa/data_dictionary.md` |
+| ④ | 校验和 + 复现命令 | `data/04_qa/checksums.sha256` · `data/REPRODUCE.md` |
 
-| Step | 脚本 | 产出 | 状态 |
-|---|---|---|---|
-| — | `config.py` · `lib/schema.py` | 设计参数 + 数据契约 | ✅ 已完成 |
-| 0–2 | `phase1/build_candidate_pool.py` | **候选池名单**（285 个合约） | ✅ 已完成 |
-| 3 | `phase1/fetch_market_data.py` | **raw 数据**（1.10 GB / 1,145 个 parquet） | ✅ 已完成 |
-| 4 | `phase1/build_layer2.py` | **第 2 层 4 张表**（546.8 MB / 228 个文件） | ✅ 已完成 |
-| 5 | `phase1/build_features.py` | **`features_1h`**（541.5 MB / 7,253,002 行 / 19 列） | ✅ 已完成 |
-| 6a | `phase1/build_universe.py` | **universe 四表**（`03_reference/`） | ✅ 已完成 |
-| 6b | `phase1/build_qa.py` | **质量与审计产出**（`04_qa/` + `REPRODUCE.md`） | ✅ 已完成 |
+**非目标**：制度标注（Phase 2）· 事件研究（Phase 3）· 回测（Phase 5）。
 
-**Phase 1 已全部完成。** D1 产出物见 §10.2，验收自测见 §11。
-
-**Step 2 实测：18,874 个文件 / 76 秒（缓存命中）/ 0 个未取得**（候选池 296 → 297 → 288 → **285**）。
-
-**Step 3 实测：345,472 个文件 / 两轮共 111 分钟 / 0 个 `retry_exhausted`。**
-（首轮旧版写法 109 分钟；改进为"一遍过"后，增量只需 341 秒。见 §5.3）
-
-**Step 4 实测：228 个文件 / 546.8 MB / 866 秒。**
-
-**Step 5 实测：57 个文件 / 7,253,002 行 / 541.5 MB / 285 秒。**
-裁掉死尾 321,737 行，密集化补 6,886 行（`bar_missing`）。
+**命名**：`Phase 1–5` = 项目阶段；`Step 0–6` = §2 的数据流；脚本按作用命名，不用编号。
+`data/` 的 `00_`–`04_` 只是**阅读顺序**，不是依赖链。
 
 ---
 
-## 2. 环境约束
+## 1. 做完的东西放在哪
 
-| 项 | 约束 |
-|---|---|
-| **下载方式** | **只能用 Python**（`urllib`）。本机 Windows schannel 故障，`curl` 与 `Invoke-WebRequest` **一律失败** |
-| 数据源 | `data.binance.vision`（文件直取，可达） |
-| REST API | `fapi.binance.com` **不可达**，本项目**不需要** |
-| 冻结的 `exchangeInfo` | `www.binance.com/fapi/v1/exchangeInfo`（Python 可达）—— 只用来取 `baseAsset`/`quoteAsset` 等元信息 |
-| 依赖 | 标准库 + `pandas` / `pyarrow`（实为 2.3.3 / 23.0.1） |
-
-**两条必须遵守的工程规则**：
-
-**① 构造 URL 时路径段必须做百分号编码。**
-归档里有中文名合约（`币安人生USDT`、`我踏马来了USDT`、`牛来USDT`、`龙虾USDT`）。
-未编码的非 ASCII 字符会让 `urllib` 抛 `UnicodeEncodeError`：
-
-```python
-def quote_seg(seg: str) -> str:
-    """非 ASCII 才编码 —— 普通合约名保持可读，与既有 manifest 一致。"""
-    try:
-        seg.encode("ascii")
-    except UnicodeEncodeError:
-        return urllib.parse.quote(seg, safe="")
-    return seg
+```
+Industrial Programme I/
+├─ config.py                 设计参数 —— 各阶段共用
+├─ lib/schema.py             数据契约 —— 各阶段共用
+├─ data/                     全部产出（Phase 2–5 的正式输入）
+│   ├─ 00_config/            manifest · sample_end.json
+│   ├─ 01_layer2/            4 张规范化源表
+│   ├─ 02_features/          features_1h —— 分析面板
+│   ├─ 03_reference/         候选池 + universe 四表
+│   ├─ 04_qa/                缺失报告 + 字典 + 校验和
+│   ├─ raw/                  五个源的原始 parquet
+│   └─ REPRODUCE.md          六条重跑命令
+├─ phase1/                   Phase 1 的代码 + 本文件
+└─ research_archive/         导师 note · 文献 · 提交件
 ```
 
-**② 只重试网络类失败。**
-`socket`/`URLError`/超时可重试；`UnicodeEncodeError`、`ValueError` 是编程错误，
-重试只会**把 bug 伪装成网络抖动**。`except Exception` 必须在它之前拦下这类异常。
-
-**探测资源是否存在时，必须带对照组** —— 否则无法区分「资源不存在」与「路径猜错」。
+`data/` 不进版本控制（2.2 GB，可由 `REPRODUCE.md` 完全重建）。
 
 ---
 
-## 3. 数据源
+## 2. 处理流程
 
-### 3.1 枚举归档（唯一可靠的合约清单来源）
+### 2.1 总表
 
-```
-https://s3-ap-northeast-1.amazonaws.com/data.binance.vision
-    ?list-type=2&prefix=<前缀>&delimiter=/&max-keys=1000
-    [&continuation-token=<上一页的 NextContinuationToken>]
-```
-
-- 返回 XML，用 `IsTruncated` / `NextContinuationToken` 翻页
-- **用途**：枚举归档里**存在过**的全部合约
-
-⚠️ **不要用 `exchangeInfo` 当合约清单**：它只保留当前挂牌 + 近期退市（约 130 天），
-更早下架的会被移除。实测 `exchangeInfo` 有 658 个 USDT 永续，**归档有 893 个**
-—— 差的那 241 个正包含 `LUNAUSDT` 等样本期内最重要的事件标的。
-用 `exchangeInfo` 会制造**幸存者偏差**。
-
-### 3.2 六个源
-
-| 源 | 日频 | 月频 | 表头 |
-|---|---|---|---|
-| `klines` | ✅ | ✅ | `open_time, open, high, low, close, volume, close_time, quote_volume, count, taker_buy_volume, taker_buy_quote_volume, ignore` |
-| `markPriceKlines` | ✅ | ✅ | 同上（12 列） |
-| `indexPriceKlines` | ✅ | ✅ | 同上（12 列） |
-| `premiumIndexKlines` | ✅ | ✅ | 同上。**不用**（见 §3.5） |
-| `metrics`（OI） | ✅ | ❌ **无** | `create_time, symbol, sum_open_interest, sum_open_interest_value, count_toptrader_long_short_ratio, sum_toptrader_long_short_ratio, count_long_short_ratio, sum_taker_long_short_vol_ratio` |
-| `fundingRate` | ❌ **无** | ✅ | `calc_time, funding_interval_hours, last_funding_rate` |
-
-**路径模板**
-
-```
-{CDN}/data/futures/um/{monthly|daily}/{source}/{SYM}/{interval}/{SYM}-{interval}-{period}.zip
-                                     ↑ 只有 4 个源有这一层         ↑ 只有这些源有
-```
-
-| 源 | 有 `{interval}/` 层 | 完整路径（BTCUSDT，已实测） |
-|---|---|---|
-| `klines` | ✅ | `monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-03.zip` |
-| `markPriceKlines` | ✅ | `monthly/markPriceKlines/BTCUSDT/1h/BTCUSDT-1h-2023-03.zip` |
-| `indexPriceKlines` | ✅ | `monthly/indexPriceKlines/BTCUSDT/1h/BTCUSDT-1h-2023-03.zip` |
-| `premiumIndexKlines` | ✅ | 同形 |
-| **`metrics`** | ❌ | `daily/metrics/BTCUSDT/BTCUSDT-metrics-2023-03-01.zip` |
-| **`fundingRate`** | ❌ | `monthly/fundingRate/BTCUSDT/BTCUSDT-fundingRate-2023-03.zip` |
-
-⚠️ 有该层的 4 个源**必须有** —— 漏掉就 404（这一步极易漏）。
-⚠️ `fundingRate` 的文件名里是**源名本身**，不是空、也不是 interval：
-`BTCUSDT-fundingRate-2023-03.zip`。写成 `BTCUSDT-2023-03.zip` 会**全部 404**
-—— 实测这样丢掉过 10,157 个文件。
-⚠️ `metrics` 同理：`BTCUSDT-metrics-2023-03-01.zip`。
-
-**归档实际存在的源**（S3 目录实测）：
-
-| 粒度 | 源 |
-|---|---|
-| `monthly` | `klines` · `markPriceKlines` · `indexPriceKlines` · `premiumIndexKlines` · **`fundingRate`** · `aggTrades` · `trades` · `bookTicker` |
-| `daily` | `klines` · `markPriceKlines` · `indexPriceKlines` · `premiumIndexKlines` · **`metrics`** · `aggTrades` · `trades` · `bookTicker` · `bookDepth` |
-
-- `monthly/metrics` **不存在**；`daily/fundingRate` **不存在**
-- `liquidationSnapshot` 在 `um` 下**完全不存在**；`bookTicker` 只覆盖约 316 个合约
-
-**「月频 / 日频」指文件的打包粒度，不是 bar 周期** —— 两者装的都是 1h bar。
-真正只有日频数据的只有 `metrics`。
-
-### 3.3 表头有无 → 必须逐文件检测
-
-| 源 | `2021-12` | `2022-03` | `2022-09` 起 |
-|---|---|---|---|
-| `klines` | 无表头 | 有 | 有 |
-| `markPriceKlines` / `indexPriceKlines` / `premiumIndexKlines` | 无 | **无** | 有 |
-| `metrics` / `fundingRate` | **始终有** | | |
-
-```python
-# 唯一正确的方式。不可按日期硬编码
-first = raw.split("\n", 1)[0].split(",", 1)[0].strip()
-has_header = not first.lstrip("-").replace(".", "").isdigit()
-```
-
-### 3.4 时间戳
-
-```
-open_time  = H                 # 官方 "Kline start time"  → 我们的 ts
-close_time = H + 1h - 1ms      # 官方 "Kline close time"，毫秒部分恒为 .999
-区间终点    = H + 1h            # 数据里没有，需自己算 = ts_end
-bar1.open_time - bar0.close_time = 1 ms   # 相邻 bar 无缝
-```
-
-时间戳为**毫秒 int**（`metrics.create_time` 例外，是字符串）。全程 **UTC**。
-
-### 3.5 OI 快照网格
-
-实测（BTC / ETH / SOL / DOGE，跨 2021-12 / 2022-03 / 2023-06 / 2024-05 / 2026-06）**全部一致**：
-
-- 每日文件 **288 行数据 + 1 行表头**
-- 100% 落在 5 分钟网格（`00:00, 00:05, …, 23:55`，末行恒为 `23:55:00`）
-- 整点快照必然存在
-- `sum_open_interest` 是**时点存量值**（非区间累计量）
-- 发布延迟 **1–3 分钟** → 对「bar 收盘后决策」的设计**不构成前视**
-
-### 3.6 样本窗口与硬约束
-
-| 项 | 事实 |
-|---|---|
-| **OI 归档起点** | **BTC = `2020-09-01`（连续 2220 天）；其余 284 个合约全部 = `2021-12-01`** |
-| **主样本** | **`2021-12-01` 起**。BTC 的额外历史**不做附录、不吃进任何产出**（见下方说明） |
-| `mark` / `index` / `klines` 时间戳 | **不完全重合** —— 实测双向不重合（`ICXUSDT` 有 96 小时只有 klines）。按 klines 左连接，缺处 `NaN` |
-| **月频 = 日频拼接** | **逐值完全相同**（抽 BTC 2023-03 的 4 个日文件，96 行逐字节相等） |
-| **月频 `fundingRate` 起点** | **`2020-01`** —— **早于** OI 起点，窗口内全程可用 |
-| 月频 `klines` 起点 | `2020-01`（BTC 80 个月） |
-| 月频文件**并非每月都齐** | 存在个别月份缺失 |
-| 文件**不可变** | 同文件两次下载 sha256 一致 |
-| `.CHECKSUM` | 各源均可得 |
-| `premiumIndexKlines` | **不用**：12 列中 8 列为 0 或常量 |
-| `fundingRate` 的 `calc_time` | **毫秒位不恒为 0**（实测 2240/5205 非零）→ 只能按**整秒截断** |
-| `bookTicker` / `liquidationSnapshot` | **USDT 本位不存在**。去杠杆确认改用 **OI 单小时跌幅** + **已实现波动率** |
-
-**`sample_start = 2021-12-01` 由 OI 归档的断崖唯一定死，不是权衡结果：**
-
-```
-OI 首月分布          各起点的 OI 覆盖率
-  2020-09   1 个       2020-01   0 / 285
-  2021-11   0 个       2021-09   1 / 285
-  ────── 断崖 ──────   2021-12 102 / 285
-  2021-12 101 个       2022-06 114 / 285
-```
-
-其余四源（`klines`/`mark`/`index`/`funding`）都有 101 个合约能回溯到 2020 ——
-**唯一卡住的是 OI**。往前推可多得约 100 万根 bar，但那段 OI 覆盖率仅 0.4%，
-而本项目研究的是 **Price + Open Interest**。
-
-**BTC 的 2020-01..2021-11 历史不做附录**（已决策）。它五个源齐全、技术上能做出
-15 个月单币 1h 面板，但对 285 币的面板研究增益有限，代价是 Step 4/5 多维护一条
-窗口不同的数据路径。**不引入这个复杂度。**
-
-### 3.7 发布节奏（`Last-Modified` 实测）
-
-| 数据 | 发布时点 |
-|---|---|
-| 日频 `metrics` | 每天 **06:39 GMT** |
-| 日频 klines / mark / index | 每天 **08:00–08:34 GMT** |
-| 月频 `fundingRate` | 次月 **1 日 08:24 GMT** |
-| 月频 klines / mark / index | 次月 **2 日 09:00–12:00 GMT** |
-
-**增量刷新的合适时点：每天 UTC 09:00 之后。**
-
----
-
-## 4. 流水线
-
-```
-Step 0  【枚举归档】S3 列表接口 → 全部存在过的合约
-           ↓
-Step 1  【硬过滤】剔非 USDT 本位、名称怪象、稳定币、代币化股票/商品
-        实测 893 → 858
-           ↓
-Step 2  【算候选池】拉月频 klines → 过草稿闸 → 逐月算中位报价成交额排名
-        → 取各月前 K 的并集 = 候选池
-        实测 831 → 18,874 个文件 → **候选池 285 个**
-           ↓
-Step 3  【精筛下载】只对候选池合约：日频 metrics(OI) + 月频 funding / mark / index
-           ↓
-Step 4  【第 2 层】4 张规范化表（§7.2）
-           ↓
-Step 5  【features_1h】19 列密集网格（§7.3）
-           ↓
-Step 6  【universe】资格判定 + PIT 成员（§6）+ D1 产出物
-```
-
-**为什么 Step 2 只下 `klines`**：它的产出**只是一个排名**，排名只用 `quote_volume`。
-mark/index/funding 归 Step 3（只对候选池合约）。**premium 永不下载。**
-
-**Step 2 实测：首轮 463 秒（VPN）／缓存命中 76 秒。18,874 个文件，0 个未取得。**
-`19,431 / 831 ≈ 23.4 个月/合约`（窗口有 57 个月）—— 多数合约上市较晚，没有全程数据。
-
----
-
-## 5. 参数
-
-### 5.1 设计参数（`config.py`，`frozen=True`）
-
-```python
-sample_start      = "2021-12-01"
-K                 = 50
-liq_window_days   = 30
-refresh_months    = 1
-buffer_L          = 0
-min_history_bars  = 2160      # 闸 2：90 天
-min_oi_coverage   = 0.90      # 闸 3①
-max_oi_gap_hours  = 48        # 闸 3②
-stablecoin_bases  = ("USDC","FDUSD","TUSD","BUSD","DAI","USDP","SUSD","USDD","PYUSD","EUR")
-```
-
-| 取值 | 依据 |
-|---|---|
-| `K=50` | 第 1 名与第 50 名流动性差 168 倍，切在合理档位 |
-| `liq_window_days=30` | 实测月换手 **18.9%**（60 天为 13.0%，更稳但更滞后） |
-| `refresh_months=1` | 滞后不进事件研究的问题，噪声才进 → 月度冻结 |
-| `min_history_bars=2160` | 90 天。note 要 rolling 60/70 分位与 25/75/90 分位，2160 个观测够估 p90 |
-| `min_oi_coverage=0.90` | 允许 30 天缺 3 天。**不取 1.0** —— 存在全市场级偶发缺失 |
-| `max_oi_gap_hours=48` | 实测最长连续缺失中位仅 10h，>48h 的只有 46 个合约（最长 7832h）。这条切开两侧 |
-
-**稳健性对照**：`liq_window_days ∈ {60, 90}`；`refresh_months = 3`；
-`min_history_bars ∈ {720, 4320}`。
-
-### 5.2 运行参数（CLI，不进 config）
-
-```bash
---sample-end 2026-10-31    # 必填，无默认；必须是月末日
-```
-
-**为什么强制显式**：若设默认值，就可能出现「忘了指定 → 结果没有明确样本边界」。
-每个结果必须携带样本截止日。
-
-**运行级元信息**写 `data/00_config/sample_end.json`（不冗余进 manifest）。
-
-### 5.3 下载参数
-
-| 参数 | 值 | 依据 |
-|---|---|---|
-| 并发 | **32** | 实测 16→32 吞吐已饱和 |
-| 连接超时 | 15 s | |
-| 读取超时 | **45 s** | 实测极端长尾 45.8s |
-| 重试次数 | **3** | |
-| 退避 | `2^attempt` 秒 + 0–1s 抖动 | 抖动必需 —— 并发同时失败会成尖峰 |
-
-**跑完对未取得项再补一轮** —— 把问题在同一次运行内解决，避免等到下次运行。
-
-**缓存必须原子写**：
-```python
-tmp = path + ".name" + ".part"; tmp.write_bytes(data); os.replace(tmp, path)
-```
-
-**缓存文件名必须含源名。** 键用 `{source}__{symbol}__{period}.zip`。
-若键里没有源名（只用 `{symbol}/{period}`），四个源会**共用同一个键**，
-后到的源会命中前一个源的缓存并把它当自己的数据。
-
-**百分号编码只用于 URL，不用于文件路径。**
-`quote_seg()` 是给 URL 用的（中文合约名不编码会让 `urllib` 抛 `UnicodeEncodeError`）。
-落盘时用原始合约名 —— NTFS 完全支持 Unicode，编码写进文件名毫无收益。
-
-#### 5.3.1 一遍过：下载即解压
-
-```
-✓ 一遍过   下载 → 就地解压 → 攒批 → 落盘 → 释放缓存 → 打进度戳
-                                                   ↑ 断点续传靠它
-```
-
-**禁止"先全下到缓存、再统一解压"的两阶段写法。** 那要读两遍磁盘，
-且第二遍没有进度记录，中断一次就得从头再来。
-
-| | 两阶段 | 一遍过 |
-|---|---|---|
-| 磁盘读 | 2 遍 | **1 遍** |
-| 中断损失 | 从头重来 | **< 1 分钟** |
-| 缓存释放 | 需手动删 | **随进度自动，跑完为空** |
-
-**打戳与删缓存必须走同一条路径**（都放在 `stamp()` 里）。
-若某分支打了戳却忘了删缓存，缓存永久残留；反之则重复下载。
-
-#### 5.3.2 网络：DNS 污染与 VPN
-
-**`s3-ap-northeast-1.amazonaws.com` 与 `www.binance.com` 的 DNS 被污染**
-（解析到 `130.211.15.150` / `128.242.245.244`，TCP 443 超时）。
-`data.binance.vision`（CloudFront）不受影响。
-
-
-| 环节 | 是否需要 VPN |
-|---|---|
-| **S3 枚举**（确定下载清单） | ✅ **需要** |
-| CDN 文件下载 | ❌ 不需要 |
-| 纯本地计算（Step 4–6） | ❌ 不需要 |
-
-**VPN 的代价**：CDN 吞吐 **140 → 89 文件/秒（慢 36%）**；
-并发 32 时约 13% 请求瞬时失败（重试可救）。
-
-**⚠️ VPN 下 S3 列表接口不稳定** —— 同一请求时返回 22 个键、时返回 0 个键，
-中文名合约（百分号编码路径）尤其容易触发。
-**所以枚举结果必须与「该合约是否已有数据」交叉验证**，且要能对单个合约补抓，
-不能只依赖一次枚举。
-
----
-
-## 6. Universe 构造
-
-### 6.1 四条资格闸（逐期、无前视）
-
-**必须是逐期判定** —— 用全生命周期的统计量（如整体覆盖率）作闸会引入前视。
-
-| # | 判据 | 阈值 |
-|---|---|---|
-| **1** | 非稳定币（按 `base_asset` 判，不按符号字面） | — |
-| **2** | ① 截至 M 月初已有 ≥ N 根 1h bar<br>② **最后活跃日 ≥ M 月初**（仍在交易） | `min_history_bars = 2160`（90 天） |
-| **3** | trailing 30 天内：① OI 覆盖率 ≥ N ② **最长连续缺失 ≤ 48h** | `min_oi_coverage = 0.90` · `max_oi_gap_hours = 48` |
-| **4** | 非代币化传统金融资产（**本项目追加**） | `exchangeInfo` 判据，见下 |
-
-**编号从 1 到 4 连续。** 原有的「流动性闸」（30 天内 `quote_volume > 0` 的天数 ≥ 15）
-已废除 —— 理由见下方"流动性为什么不设闸"。
-
-**闸 2 为什么是两条条件**：只数 bar 数**不够** —— 合约死后它的 bar 数不再增长，
-而阈值是固定的，于是 `3,912 > 2,160` **永远成立**。实测 `LUNAUSDT`（2022-05-12 停止交易）
-在旧的单条件下从 2022-07 起每月都"通过"。**所以必须同时要求"月初仍在交易"。**
-
-条件 ② 不是"流动性闸" —— 它只要求"月初之后还有成交"，不要求"成交足够多"。
-流动性由排名承担（见下）。
-
-**闸 2 为什么是 2160 bar**：note §6 要求 regime 阈值用 rolling 60/70 分位、§7 要求
-funding 状态用 trailing 25/75/90 分位。2160 个观测足以估计 p90；720 太薄。
-**代价**：样本前 3 个月（`2021-12` ~ `2022-02`）所有合约都"历史不足"，成员集为空。
-
-**闸 3 为什么用「连续缺失长度」而不是只有覆盖率**：
-
-| 候选判据 | 实测 | 结论 |
-|---|---|---|
-| OI 覆盖率 | 中位 0.9997；<0.90 的合约 35 个 | ✅ 采用 |
-| **最长连续缺失** | 中位 10h；**>48h 的 46 个合约**，最长 7832h | ✅ **采用** |
-| `oi == 0` 比例 | 中位 0.029%，**最高仅 0.264%**，无一超 0.5% | ❌ 不用作闸 |
-| 最长冻结 | p90 = 10h，**仅 1 个合约 >12h** | ❌ 不用作闸 |
-
-`oi == 0` 是**全市场发布事件**（实测 2022-03-07 一天 105 个合约同时为 0），
-不是单个合约的缺陷，用它作闸会误杀被波及的正常合约。**它记入缺失报告，不进闸。**
-
-**「缺 1 小时」与「缺 48 小时」对滚动窗口的破坏完全不同** —— 前者影响 1 个观测，
-后者让 48 个观测全无 OI。所以判据用**连续长度**。
-
-**流动性为什么不设闸**：note 的原文是 `Exclude illiquid contracts where transaction
-costs dominate` —— 这是**可交易性**判断，需要盘口数据；归档只有 OHLCV，**测不到成本**。
-而 note 自己提供了更好的机制：`Top 30–50 liquid`。**按流动性排名取前 K 即是流动性筛选。**
-原设计里的「30 天内 `quote_volume > 0` 的天数 ≥ 15」只挡"完全不交易"（实测仅触发 7 次），
-与"成本主导"不是一回事，已废除。
-
-**闸 4 的必要性**：归档里有大量**代币化传统金融资产** —— 美股（`TSLAUSDT` `NVDAUSDT`
-`GOOGLUSDT` 等）、港韩 A 股（`TENCENTUSDT` `SAMSUNGUSDT` `KORUUSDT`）、
-ETF（`SPYUSDT` `QQQUSDT` `SOXLUSDT`）、商品（`XAUUSDT` 金、`XAGUSDT` 银、
-`CLUSDT` 原油）、指数（`DEFIUSDT` `BTCDOMUSDT` `ALLUSDT` `BLUEBIRDUSDT`）、
-外汇（`USDBRLUSDT`）。它们能通过闸 1–3，但**不是加密资产**，混入会让结论无法解释。
-
-**判据用 `exchangeInfo` 的分类字段，不用手工名单：**
-
-| 字段 | 加密资产 | 传统金融 |
-|---|---|---|
-| `contractType` | `PERPETUAL` | `TRADIFI_PERPETUAL` |
-| `underlyingType` | `COIN` | `EQUITY` · `HK_EQUITY` · `KR_EQUITY` · `CN_EQUITY` · `COMMODITY` · `PREMARKET` · `FX` · `INDEX` |
-
-**通过闸 4 ⇔ `contractType == "PERPETUAL"` 且 `underlyingType == "COIN"`。**
-这一条在归档里剔掉 **216 个**非加密资产，保留 684 个。
-
-⚠️ **不用手工名单。** 候选池按排名滚动，新标的随时可能进池，
-手工名单每轮都要重新人工核对，必然漏。API 判据一次到位且自动跟进新增标的。
-
-⚠️ 该判据也排掉 `PERPETUAL/INDEX` 的**指数永续** —— 它们是合成品，不是单一资产。
-
-⚠️ **局限**：`exchangeInfo` 只含**当前挂牌**的合约，已下架的查不到。
-脚本里留了 `DELISTED_NON_CRYPTO` 兜底名单（当前为空 —— 实测池里查不到的那些
-合约全部是加密资产）。**新增合约时要复核**，脚本跑完会打印分类剔除统计供核对。
-
-**闸 2 / 闸 3 的两个易错点**：
-
-- **闸 2 用 bar 数，不用 `onboard_date`** —— 合约上市与 OI 归档**不同步**（BTC 差约 3 个月）
-- **闸 3 用 `sum_open_interest` 本身的空值率**，**不得**用那 4 个衍生字段
-  （大户多空比等）—— 它们 **2022 全年大面积为空**，用作闸会把 2022 整年误杀
-
-**排序即第二层流动性闸**：通过所有闸后取流动性前 K。
-
-### 6.2 PIT 规则
-
-```
-每月 M：
-  Step 1  排名量 liq(sym, 月初) = median(quote_volume) over [月初−30天, 月初)
-                                                          ↑ 严格开口，否则前视
-  Step 2  四条资格闸（§6.1）
-  Step 3  对通过闸的合约按 liq 降序排名
-  Step 4  取前 K = 50（无缓冲带）
-  Step 5  成员集在 M 月内【冻结】
-```
-
-**关键 1**：`liq` **逐日滚动**更新（保证无前视），成员集**按月冻结**
-（避免成员标记变成噪声）。这两件事必须分开。
-
-**关键 2**：**流动性度量的数据源全程用月频 klines，不换源** ——
-口径不一致会成循环定义。
-
-**关键 3**：**不要写 `if delisted: remove`，也不要维护下架名单。**
-下架合约由闸 2 的条件 ②（`最后活跃日 ≥ 月初`）自然地淘汰 —— 它停止交易后，
-下个月就不再合格。**下架币存活期的完整历史留在样本里。**
-
-### 6.3 候选池 ≠ 成员集
-
-```
-成员集    = 每个刷新期 50 个（逐月浮动）
-候选池    = 曾入过成员集的并集（实测 285 个）= Step 2 的产出 = 下载范围
-```
-
-**恒等式**：一个币只有排进前 K 才可能成为样本 ⇒ 候选池 = 所有前 K 名的并集。
-不需要任何额外门槛。
-
-**Step 2 的候选池是下界，不是最终成员集** —— 它只能做闸 2 的宽松草稿版
-（闸 3 需要 OI 数据，那时还没下）。Step 6 会用完整四条闸再筛一次。
-
-### 6.4 换手率（如实报出）
-
-K=50、30 天窗口、月度刷新 → **月换手 18.9%**（年化约 227%）。
-这是加密市场流动性排名的**真实性质**，非噪声。
-
----
-
-## 7. 数据契约
-
-> **权威定义在 `lib/schema.py`。** 本节讲语义，类型以代码为准。
-
-### 7.1 类型词汇表
-
-```
-"string"    →  pandas "string"（原生，不绑 pyarrow 后端）
-"float64"   →  pandas float64
-"timestamp" →  pandas datetime64[ns, UTC]
-"bool"      →  pandas bool
-```
-
-- **整数一律用 float64**：float64 精确表示到 2^53；而 `int8/int16/...` 不支持 NaN
-- **全部数据列允许 null**。唯一例外：**标识列强制非空** ——
-  主键为空即损坏（NaT 在 join 时静默匹配不上，那些行会无声消失）
-
-### 7.2 第 2 层：4 张规范化表
-
-| 表 | 主键 | 频率 | 源 | 列 |
+| Step | 脚本 | 输入 | 输出 | 实测 |
 |---|---|---|---|---|
-| `klines_1h` | `(symbol, ts)` | 1h 原生 | `klines` 月频 | `symbol`, `ts`, `ts_end`, OHLC, `volume`, `quote_volume`, `trades`, `taker_buy_volume`, `taker_buy_quote_volume` |
-| `mark_index_1h` | `(symbol, ts)` | 1h 原生 | `markPriceKlines` + `indexPriceKlines` | `symbol`, `ts`, `ts_end`, `mark_close`, `index_close` |
-| `oi_1h` | `(symbol, ts)` | 5m→1h 对齐 | `metrics` 日频 | `symbol`, `ts`, `ts_end`, `oi`, `oi_missing` |
-| `funding` | `(symbol, ts_funding)` | 8h 事件 | `fundingRate` 月频 | `symbol`, `ts_funding`, `funding_rate`, `funding_interval_hours` |
+| **0** | `build_candidate_pool.py` | S3 列表接口 | 归档合约 **893** | 秒级 |
+| **1** | 同上 | + `exchangeInfo` | 硬过滤后 **679** | 秒级 |
+| **2** | 同上 | 月频 `klines`（18,874 zip） | **候选池 285** | 463s / 缓存 76s |
+| **3** | `fetch_market_data.py` | 候选池 + S3 列表 | `raw/` **1,144 文件 / 1.10 GB** | 约 111 分钟 |
+| **4** | `build_layer2.py` | `raw/` | 4 张表 **228 文件 / 546.8 MB** | **847s** |
+| **5** | `build_features.py` | 4 张表 | `features_1h` **57 文件** | **357s** |
+| **6a** | `build_universe.py` | 面板 + 候选池 + manifest + `exchangeInfo` | universe 四表 | **451s** |
+| **6b** | `build_qa.py` | 面板 + manifest | 缺失报告 + 字典 + 校验和 | **30s** |
 
-- **四张表都存 `ts_end`**（= `ts + 1h`）：它是区间终点 / OI 对齐时刻 / 决策时刻 /
-  `funding` 的 join 键。不存的话 join 前要自己算，算错偏 1 小时且不报错。
-- **第 2 层是稀疏的** —— 只存源里真实存在的行，不发明行。密集网格是 `features_1h` 的职责。
-- **`mark_index_1h` 合并 mark 与 index**：实测两者时间戳完全重合，分表无收益。
+**六条命令按此顺序执行，Step 6b 必须最后跑**（原因见 §5.2）。
+
+**两个影响复现的环境事实**
+- **下载只能用 Python 的 `urllib`** —— 本机 Windows schannel 故障，`curl` / `Invoke-WebRequest` 一律失败。
+- **`s3-ap-northeast-1.amazonaws.com` 与 `www.binance.com` 的 DNS 被污染**，需要 VPN。
+  `data.binance.vision`（CloudFront）不受影响。
+- **需要 VPN 的步骤**：Step 0–3、**Step 6a**（要读 `exchangeInfo`，取不到即 exit 3）。
+  **不需要**：Step 4 / 5 / 6b。
+- 依赖：Python 3.12 + `pandas` 2.3.3 / `pyarrow` 23.0.1。
+
+### 2.2 逐步说明
+
+---
+
+#### Step 0–1 · 枚举与硬过滤
+
+**Step 0 输入**：`https://s3-ap-northeast-1.amazonaws.com/data.binance.vision?list-type=2&prefix=<前缀>&delimiter=/&max-keys=1000`
+返回 XML，用 `IsTruncated` / `NextContinuationToken` 翻页。
+
+**Step 0 输出**：归档里**存在过**的全部合约 —— **893** 个。
+
+**⚠️ 合约清单只能来自归档枚举，不能用 `exchangeInfo`。**
+`exchangeInfo` 只保留当前挂牌 + 近期退市（约 130 天）。实测归档有 893 个，
+而 679 个加密合约里只有 650 个能查到 —— 查不到的 29 个正包含 `LUNAUSDT` 等
+样本期内最重要的事件标的。**用它当清单会制造幸存者偏差。**
+
+**Step 1 处理**：五条硬过滤 —— 非 USDT 本位、名称怪象（交割 / `SETTLED` 后缀）、
+稳定币、代币化贵金属、代币化传统金融（分类字段判据）。实测 **893 → 679**。
+
+**为什么要先过滤**：归档里混着美股（`TSLAUSDT` `NVDAUSDT`）、港韩 A 股、
+ETF、商品、指数（`DEFIUSDT`）、外汇。它们不是加密资产，混入会让结论无法解释。
+
+⚠️ **各条过滤的逐项剔除数没有留存** —— 脚本会打印但不落盘，所以 893 → 679
+的 **214** 个差只能整体归因，不能拆到单条判据上。
+
+---
+
+#### Step 2 · 候选池
+
+**输入**：679 个合约 + 月频 `klines`（**18,874 个 zip**，这一步只下 `klines`）。
+
+**处理**
+```
+逐月 M：
+  1. liq = median(quote_volume) over [M月 − 30 天, M月初)     ← 严格开区间
+  2. 过草稿闸（闸 2① 的宽松版：bar 数够 + 有成交）
+  3. 按 liq 降序取前 K = 50
+候选池 = 各月前 50 名的并集
+```
+
+**输出**：`data/03_reference/candidate_pool.csv` —— 一列 `symbol`，285 行。
+
+```
+symbol
+1000BONKUSDT
+1000FLOKIUSDT
+...
+币安人生USDT          ← 归档里有中文名合约，URL 与文件系统都要能处理
+```
+
+**它代表什么**：**下载范围**，不是"好合约名单"。一个币只有排进过某月前 50
+才可能成为样本，所以候选池 = 所有前 50 名的并集，不需要额外门槛。
+
+**它同时是成员集的下界**：这一步只能做闸 2 的草稿版（闸 3 要 OI 数据，
+那时还没下）。Step 6a 会用完整四条闸再筛。
+
+**为什么只下 `klines`**：产出**只是一个排名**，排名只用 `quote_volume`。
+mark / index / funding 归 Step 3。**`premiumIndexKlines` 永不下载。**
+
+---
+
+#### Step 3 · 精筛下载
+
+**输入**：候选池 285 个合约 + S3 列表接口（确定该有哪些文件）。
+
+**处理**：只对候选池合约下载五个源，**一遍过**（§6.1）。
+
+**输出**：`data/raw/` —— **1,144 个 parquet / 1.10 GB**
+
+| 目录 | 文件数 | 粒度 |
+|---|---|---|
+| `raw/klines/symbol=XXX.parquet` | 285 | 1h bar，12 列源原样 |
+| `raw/markPriceKlines/symbol=XXX.parquet` | 284 | 同上 |
+| `raw/indexPriceKlines/symbol=XXX.parquet` | 284 | 同上 |
+| `raw/fundingRate/symbol=XXX.parquet` | 285 | 结算事件（4h 或 8h） |
+| `raw/metrics/year=YYYY.parquet` | 6 | **整点** OI 快照，按年合并 |
+
+**它代表什么**：zip 已就地解压清理，**原始 zip 不保留**。这一步之后不再需要网络。
+
+**`raw/` 里没有 `premiumIndexKlines`**：12 列中 8 列恒为 0 或常量。
+
+**`metrics` 只保留整点与 3 列**（`symbol` `create_time` `sum_open_interest`）。
+源是 5 分钟网格、8 列，本项目只用整点 OI。
+
+**为什么 `metrics` 按年合并而其他按合约**：`metrics` 是**逐合约逐日**的文件
+（`daily/metrics/{SYM}/{SYM}-metrics-{DAY}.zip`），下载范围共 **305,454 个**。
+逐日存会得到 30 多万个小文件。
+
+**进度记录**：`data/00_config/manifest.parquet` —— 355,524 行，逐文件一行（§7.3）。
+
+---
+
+#### Step 4 · 第 2 层（4 张规范化源表）
+
+**输入**：`data/raw/` 的 1,144 个 parquet。
+
+**处理**：统一时间戳、类型、列名 → 按 `(symbol, 月)` 分块落盘。
+
+**输出**：`data/01_layer2/` —— **228 个文件 / 546.8 MB**，路径
+`{表名}/year=YYYY/chunk=YYYY-MM.parquet`。
+
+| 表 | 主键 | 频率 | 行数 | 列 |
+|---|---|---|---|---|
+| `klines_1h` | `(symbol, ts)` | 1h 原生 | 7,567,853 | `symbol` `ts` `ts_end` `open` `high` `low` `close` `volume` `quote_volume` `trades` `taker_buy_volume` `taker_buy_quote_volume` |
+| `mark_index_1h` | `(symbol, ts)` | 1h 原生 | 7,567,853 | `symbol` `ts` `ts_end` `mark_close` `index_close` |
+| `oi_1h` | `(symbol, ts)` | 5m→1h | 7,567,853 | `symbol` `ts` `ts_end` `oi` `oi_missing` |
+| `funding` | `(symbol, ts_funding)` | 4h/8h 事件 | 1,229,941 | `symbol` `ts_funding` `funding_rate` `funding_interval_hours` |
+
+`klines_1h`（2022-01，前两行真值）
+```
+        symbol         ts      ts_end      open      high       low     close       volume  quote_volume   trades
+  1000SHIBUSDT 2022-01-01 00:00Z  ...01:00Z  0.033373  0.033890  0.033368  0.033823  522172816.0  17544580.0  28027.0
+  1000SHIBUSDT 2022-01-01 01:00Z  ...02:00Z  0.033830  0.033988  0.033718  0.033799  483119781.0  16350770.0  25360.0
+```
+
+`oi_1h`（同 chunk）
+```
+        symbol         ts      ts_end           oi  oi_missing
+  1000SHIBUSDT 2022-01-01 00:00Z  ...01:00Z  2.385715e+09       False
+```
+
+`funding`（同 chunk）—— **只有结算时刻有行**
+```
+        symbol ts_funding  funding_rate  funding_interval_hours
+  1000SHIBUSDT 2022-01-01 00:00Z        0.0001                     8.0
+  1000SHIBUSDT 2022-01-01 08:00Z        0.0001                     8.0
+```
+
+**它代表什么**：**四张表都以 `klines` 的网格为准** —— 实测前三张行数完全相同
+（**7,567,853**），mark / index / OI 缺的小时留 `NaN`，**不发明行、也不删行**。
+只有 `funding` 是稀疏事件表。
+
+**这就是第 2 层与 `features_1h` 的区别** —— 不在"稀疏 vs 密集"（两者都密集），
+而在**缺值怎么表达**：第 2 层用 `NaN`，`features_1h` 另加 `bar_missing` /
+`oi_missing` 布尔列，把「源里没有」与「值为空」分开。
+分成两层才能回答"这个 NaN 是源里没有，还是我们对齐错了"。
+
+**三条口径**
+- **都存 `ts_end` = `ts + 1h`**：区间终点 = OI 对齐时刻 = 决策时刻，也是 `funding`
+  的 join 键。不存就要每次自己算，算错偏 1 小时且不报错。
+- **OI 对齐规则是 `ts_end == create_time`**（实测确认：TLMUSDT 2021-12-01 的
+  bar `[00:00,01:00)` 的 `oi` = 102,744,323 = `create_time` 01:00 的快照）。
+  ⚠️ **`create_time` 秒位必须截断** —— 见 §5.1 规则 7。
 - **`klines_1h.trades` 来自源列 `count`**（改名）。
 
-### 7.3 `features_1h`
+**`mark_index_1h` 为什么合并**：两者都以 `klines` 网格为准，`(symbol, ts)` 集合一致。
+⚠️ **两者缺值率不同**（mark 0.28% vs index 3.00%），合表后大量
+"mark 有值而 index 为 `NaN`" 是正常的。
 
-**主键** `(symbol, ts)`　**分区** `year=YYYY/chunk=YYYY-MM.parquet`　**密集网格**
+---
 
-**19 列**：
-`symbol` `ts` `ts_end` `open` `high` `low` `close` `volume` `quote_volume`
-`trades` `taker_buy_volume` `taker_buy_quote_volume` `oi`
-`mark_close` `index_close` `funding_rate` `funding_interval_hours`
-`bar_missing` `oi_missing`
+#### Step 5 · `features_1h`（分析面板）
 
-| 列 | 语义 |
-|---|---|
-| `ts` | bar 起点 `H` |
-| `ts_end` | `ts + 1h`；区间终点 = OI 对齐时刻 = 决策时刻 |
-| `oi` | `OI(ts_end)`，**张数**（源列 `sum_open_interest`） |
-| `funding_rate` / `funding_interval_hours` | **仅 `00/08/16` 非空** |
-| `bar_missing` | 该小时在 `klines_1h` 中无对应行 |
-| `oi_missing` | 该小时 OI 快照不存在 |
+**输入**：`data/01_layer2/` 的 4 张表 + 候选池名单。
 
+**处理**
+```
+1. 密集网格：对每个候选池合约，从第一根 bar 铺到最后【正成交额】日的 23:00
+2. 死尾裁剪：合约停止交易后的零成交空行全部丢弃（原因见 §4.2）
+3. 四表 LEFT JOIN 到网格上
+```
+
+**输出**：`data/02_features/features_1h/year=YYYY/chunk=YYYY-MM.parquet`
+—— **57 个文件 / 541.5 MB / 7,253,002 行 / 19 列**。
+
+行数恒等式：`7,567,853（源行） − 321,737（死尾） + 6,886（补网格） = 7,253,002`
+
+**19 列**
+```
+symbol  ts  ts_end  open  high  low  close  volume  quote_volume  trades
+taker_buy_volume  taker_buy_quote_volume  oi  mark_close  index_close
+funding_rate  funding_interval_hours  bar_missing  oi_missing
+```
+
+**join 关系**
 ```sql
 features_1h = klines_1h
     LEFT JOIN mark_index_1h ON (symbol, ts)
@@ -538,72 +266,352 @@ features_1h = klines_1h
     LEFT JOIN funding        ON (symbol, ts_end = ts_funding)
 ```
 
-**不存的源列**：
+**三类行的真值**（BTCUSDT，2022-01）
+
+结算小时 —— `funding_rate` 非空（BTCUSDT 是 8h 合约）
+```
+ts = 2022-01-01 00:00Z   close = 46650.01   oi = 74940.944   funding_rate = 0.0001   interval = 8.0
+```
+普通小时 —— `funding_rate` 为 null，但 `funding_interval_hours` **仍有值**
+```
+ts = 2022-01-01 01:00Z   close = 46766.78   oi = 74695.212   funding_rate = NaN      interval = 8.0
+```
+缺 OI 的小时 —— bar 与价格齐全，只有 OI 为 null
+```
+ICPUSDT  ts = 2022-01-01 00:00Z   close = 25.00   oi = NaN   oi_missing = True
+```
+
+**它代表什么**：**这是 Phase 2–5 唯一的输入**。每个 `(symbol, ts)` 恰好一行，
+可以不做任何对齐检查就按小时 rolling / shift。
+
+**四个必须知道的语义**
+
+| 列 | 语义 |
+|---|---|
+| `ts` / `ts_end` | bar 起点 / 区间终点。**决策发生在 `ts_end`** |
+| `oi` | `OI(ts_end)`，**张数** |
+| `funding_rate` | **只在结算小时非空** → 全表 **83.4%** 为 null。结构性的，不是缺失 |
+| `bar_missing` / `oi_missing` | 该小时在源表里没有对应行。**值列为 null 时的原因标记** |
+
+**⚠️ 结算周期不是恒定的 8 小时。** 实测每合约众数间隔：
+**4h = 142 个，8h = 142 个，1h = 1 个**（91 个合约中途改过）。
+所以 `funding_rate` 非空的整点是 `00/04/08/12/16/20`（两组叠加）。
+**判断"是不是结算小时"要读 `funding_interval_hours`，不要硬编码小时表。**
+
+**`funding_rate` 不 ffill，`funding_interval_hours` 要 ffill**：
+前者是**结算事件**，填上一个值会让 Phase 2 误以为"每小时都有资金费率"；
+后者描述当前生效的周期，每小时都有意义。
+
+**不存的源列**
 
 | 源列 | 理由 |
 |---|---|
 | `sum_open_interest_value` | 与 `oi × close` 冗余 |
 | 4 个大户多空比字段 | 2022 全年大面积为空 |
 | `ignore` | 恒为 0 |
-| mark/index 的 OHLC 与 `volume`/`count` | `volume=0`、`count=3600`（常量） |
+| mark/index 的 OHLC 与 `volume` / `count` | `volume = 0`、`count = 3600`，常量 |
 
-**派生量**（`price_change` / `oi_change` 及 lookback `N`）**一律放 Phase 2**
-—— 否则改一次 `N` 就要重跑整条数据层。
+**派生量一律不做**：`price_change` / `oi_change` 及 lookback 全放 Phase 2 ——
+否则改一次参数就要重跑整条数据层。
 
-**`features_1h` 只含候选池合约**，但候选池合约的**所有小时**都保留。
-
-### 7.4 `validate()` 检查什么
-
-```python
-from lib.schema import validate, SchemaViolation
-validate(df, "features_1h")      # 失败抛 SchemaViolation，一次报全部问题
-```
-
-| # | 检查 | 挡住的静默错误 |
-|---|---|---|
-| 1 | 列名与**顺序**完全一致 | 列错位 |
-| 2 | dtype 与语义类型一致 | 类型漂移 |
-| 3 | 标识列**非空** | NaT 在 join 时静默不匹配，行无声消失 |
-| 4 | 主键**无重复** | 源文件存在完全一致的副本行 |
-| 5 | 主键**已排序** | 源文件时间戳非单调 |
-| 6 | **无整列为空** | 整列解析失败 |
-| 7 | 标识列落在**整小时** | 毫秒/秒单位搞混 |
-| 8 | `ts_end − ts == 1h` | 同上，独立第二道 |
-| 9 | 标识列为 tz-aware **UTC** | naive datetime |
-
-**失败时一次报全部问题**，不是遇到第一个就停。
-
-**不做的检查**：值域与跨列一致性（`oi_value/oi/close ≈ 1` 等）——
-它们是统计判断、阈值需标定。上面九条结构检查已覆盖会导致数值异常的**根因**。
+**范围**：只含候选池 285 个合约，但候选池合约的**所有小时**都保留。
 
 ---
 
-## 8. 数据质量规则
+#### Step 6a · Universe（资格判定 + PIT 成员）
 
-### 8.1 三个静默错误（必须处理，不会报错）
+**输入**：`data/02_features/features_1h/` + `data/03_reference/candidate_pool.csv`
++ `data/00_config/manifest.parquet`（决定评测哪些合约） + `exchangeInfo`。
 
-| # | 规则 | 说明 |
+⚠️ **需要网络。** `exchangeInfo` 取不到或返回条数 < 300（残包）都会 **exit 3**，
+不静默降级 —— 降级的后果是闸 4 全部放行，代币化股票会混进成员集。
+
+**处理**：**逐月**评测全归档 679 个合约的资格状态（§3.1），
+对通过的合约按流动性排名取前 50。
+
+**输出**：`data/03_reference/` 四个文件
+
+| 文件 | 行数 | 粒度 | 作用 |
+|---|---|---|---|
+| `master.parquet` | 679 | 一合约一行 | 台账：生命周期、分类、是否入池 |
+| `universe_eligibility.parquet` | 38,703 | 679 × 57 月 | **逐月四条闸的判定与理由**（审计用） |
+| `universe_membership.parquet` | 2,700 | 50 × 54 月 | 最终成员集 |
+| `member_changes.parquet` | 57 | 一月一行 | 进出记录与换手率 |
+
+`universe_eligibility` 的列 —— 每个闸一路布尔 + 汇总
+```
+symbol  month  base_asset  in_pool  liq  bars_before  last_active  oi_cov  oi_max_gap_h
+oi_null_days  obs_days  active_days
+g1  g2a  live  g2  g3a  g3b  g3  g4  eligible  fail_reason  rank
+```
+
+**两行真值 —— 同一合约、相邻两月、结论反转**
+```
+LUNAUSDT  2022-05  bars_before=3624  last_active=2022-05-12  g2a=T live=T g2=T  eligible=True   rank=3
+LUNAUSDT  2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  eligible=False  fail_reason=not_trading
+```
+`bars_before` 从 3,624 涨到 **3,912** 却仍 **> 2,160** ——
+**只数 bar 数永远挡不住死合约**。这就是闸 2② 存在的理由（§3.2）。
+
+`universe_membership`（前 3 行）
+```
+     symbol   month  rank           liq  bars_before  oi_cov  oi_max_gap_h  active_days
+   BTCUSDT  2022-03   1.0  4.649077e+08         2160     1.0             0           30
+   ETHUSDT  2022-03   2.0  2.154402e+08         2160     1.0             0           30
+  GALAUSDT  2022-03   3.0  4.615552e+07         2160     1.0             0           30
+```
+
+**它代表什么**：`membership` 是**唯一的择时口径** —— Phase 2–5 的分组、
+Phase 3 的事件样本、Phase 5 的回测标的都从它出发。
+`eligibility` 不是分析表，是**给人审计用的**，落选理由全在里面。
+
+**候选池 285 个合约的去向**：曾通过四条闸 **280** 个，曾当成员 **248** 个，
+另外 **32** 个通过过闸但从未排进前 50。
+
+**`membership` 只有 54 个月**：样本前 3 个月（`2021-12` ~ `2022-02`）没有成员，
+因为所有合约都"历史不足"。这三个月保留在 `eligibility` 里，可查可解释。
+
+---
+
+#### Step 6b · 质量与审计
+
+**输入**：`features_1h` + `data/00_config/manifest.parquet`。
+
+**处理**：检测用「日」，呈现用「连续缺口区间」。五类指标逐一算缺口与覆盖率。
+
+**输出**：`data/04_qa/` 五件 + `data/REPRODUCE.md`
+
+| 文件 | 行数 | 回答什么 |
 |---|---|---|
-| a | **读入后立即按时间戳排序** | 近期文件非单调（存在负间隔）。不排序则 `shift(1)` 静默算错 |
-| b | **去重** | `2020-09`→`2021-06` 有完全一致的副本行（576 行 / 288 唯一）。去重但**记录数量** |
-| c | **区分「确认 404」与「超时」** | 网络抖动会被误记为缺失 |
+| `missing_files.parquet` | 67 | **文件层**：归档里根本不存在的文件 |
+| `gaps.parquet` | 4,881 | **记录层**：哪里断了、断多久 |
+| `coverage.parquet` | 1,425 | **汇总层**：整体质量（285 × 5 指标） |
+| `data_dictionary.md` | — | 逐字段字典 + 全部已知口径 |
+| `checksums.sha256` | 1,440 | 产出完整性 |
+| `REPRODUCE.md` | — | 六条重跑命令 |
 
-### 8.2 已知脏点
+`gaps.parquet`（前三行）
+```
+       symbol metric           gap_start             gap_end  hours   days  started_before_sample
+1000BONKUSDT  index  2026-06-29 00:00Z  2026-06-29 23:00Z   24.0  1.000                  False
+1000BONKUSDT   mark  2026-06-29 00:00Z  2026-06-29 23:00Z   24.0  1.000                  False
+1000BONKUSDT     oi  2024-02-16 13:00Z  2024-02-16 22:00Z   10.0  0.417                  False
+```
 
-| 位置 | 问题 | 处理 |
+**五类指标**
+
+| 指标 | 缺口段数 | 覆盖率中位 | 说明 |
+|---|---|---|---|
+| `klines` | 92 | 1.0000 | 92 段 = 6,886 行补网格（`bar_missing`） |
+| `oi` | 819 | 0.9997 | 最长 7,573h（`币安人生USDT`） |
+| `mark` | 621 | 0.9981 | |
+| `index` | 826 | 0.9977 | |
+| `oi_zero` | 2,523 | 0.9997 | 值为 0，**不是缺失** |
+
+**它代表什么**：D1 的"干净"**不靠"没有缺失"证明，靠"缺失被完整记录"证明**。
+归档本身有空洞（67 个文件确实不存在），如实报出来比假装完整更可信。
+
+**`funding_rate` 不做缺口检查**：只在结算时刻有值，检查它会产生约 117 万个假缺口。
+**`oi_zero` 逐小时记录**：实测 2,523 段全部只持续 1 小时。
+
+---
+
+## 3. Universe 构造
+
+### 3.1 四条资格闸
+
+**逐月评测。用全生命周期统计量作闸会引入前视。**
+
+| # | 判据 | 阈值 | 单条拦下 |
+|---|---|---|---|
+| **1** | 非稳定币（按 `base_asset`，不按符号字面） | — | **0** |
+| **2①** | 截至 M 月初已有 ≥ N 根 1h bar | `min_history_bars = 2160`（90 天） | **28,942** |
+| **2②** | **最后活跃日 ≥ M 月初**（仍在交易） | `require_live_at_month_start` | **23,262** |
+| **3①** | trailing 30 天 OI 覆盖率 ≥ N | `min_oi_coverage = 0.90` | **28,964** |
+| **3②** | trailing 30 天最长连续缺失 ≤ N 小时 | `max_oi_gap_hours = 48` | **87** |
+| **4** | 非代币化传统金融资产 / 贵金属 | 分类字段 + base_asset 名单 | **114** |
+
+「单条拦下」是**各闸独立计数**（同一合约月可被多条拦下），不能相加。
+闸 2① 与闸 3① 几乎拦住同一批（新合约既无 90 天历史，也无 30 天 OI）。
+
+**逐闸递进的实测漏斗**（候选池 285 × 57 = **16,245** 合约月）
+```
+闸1  通过  16,245
+闸2① 通过   9,761
+闸2  通过   9,008      ← ①② 同时满足
+闸3  通过   8,915      ← 闸1·2①·2②·3①·3② 同时满足
+闸4  通过   8,915      ← 再加分类字段与贵金属名单
+```
+**闸 1 的「单条拦下 = 0」是意料之中**：候选池在 Step 1 就已经剔掉了稳定币与非加密资产。
+这两条闸的作用在 679 的全归档层面。
+
+**闸 3② 是最锋利的边界** —— 只剔掉 87 行，但剔掉的全是真正不可用的合约（§3.3）。
+
+**闸 2 与闸 3 的易错点**
+- **闸 2 用 bar 数，不用 `onboard_date`** —— 合约上市与 OI 归档**不同步**。
+- **闸 3 用 `sum_open_interest` 本身的空值率**，**不得**用那 4 个衍生字段 ——
+  它们 2022 全年大面积为空，用作闸会把 2022 整年误杀。
+
+**闸 4 是两条判据，缺一不可**
+
+| 字段 | 加密资产 | 传统金融 |
 |---|---|---|
-| 个别日期 | 缺失，或 287 行而非 288 | 记入缺失报告 |
-| **2022 全年** | 4 个大户多空比字段大面积空 | **不存这些列** |
-| 新币首日 | 从半天开始 | 按可用天数判定，非按上币日 |
-| 零成交额月 | 文件存在但 `quote_volume = 0` | 该合约该月不该进成员集 |
-| **下架合约的尾部空行** | 见下 | Step 5 裁到「最后活跃日」 |
-| **`oi = 0` 的行** | 2,906 行 / 48 天 | 全市场发布事件，记入缺失报告 |
-| **冻结的 `oi`** | 仅 1 个合约 >12h | 记入缺失报告 |
+| `contractType` | `PERPETUAL` | `TRADIFI_PERPETUAL` |
+| `underlyingType` | `COIN` | `EQUITY` · `HK_EQUITY` · `KR_EQUITY` · `CN_EQUITY` · `COMMODITY` · `PREMARKET` · `FX` · `INDEX` |
 
-#### 8.2.1 下架合约：`klines` 不停，`funding` / `mark` / `index` 会停
+⚠️ **分类字段挡不住代币化黄金**：Binance 把 `PAXGUSDT` / `XAUTUSDT` 标成
+`PERPETUAL` / `COIN`，与加密资产无法区分。实测 `PAXGUSDT` 因此通过了全部四条闸，
+并在 `2025-10` ~ `2026-08` **连续 11 个月进入成员集，最高排到第 13 名**。
+所以另加 `config.tokenized_tradfi_bases = ("PAXG", "XAUT")` 按 `base_asset` 再挡一次
+—— 实测这一条拦下 114 行，PAXG/XAUT 在成员集里的行数归零。
 
-**合约下架后，`klines` 归档会一直写「整月零成交的空行」到样本末端；而 `funding` /
-`mark` / `index` 在下架时就断了。**
+⚠️ **`exchangeInfo` 只含当前挂牌合约**：29 个已下架合约查不到，走
+`DELISTED_NON_CRYPTO` 兜底名单（**当前为空** —— 实测查不到的全是加密资产）。
+
+### 3.2 闸 2 为什么必须有第二条
+
+**只数 bar 数不够**：合约死后 bar 数不再增长，而阈值固定，于是 `3,912 > 2,160`
+**永远成立**。实测 `LUNAUSDT`（2022-05-12 停止交易）在单条件下从 2022-07 起
+每月都"通过" —— 它会一直留在成员集里，直到样本结束都在贡献同一个冻结的价格。
+
+**所以必须同时要求"月初仍在交易"。** 实测把滞后从 ∞ 降到 0。
+
+**为什么是 2,160 根**：导师 note §6 要求 regime 阈值用 **rolling 60/70 分位**、
+§7 要求 funding 状态用 **trailing 25/75/90 分位**。2,160 个观测足以估计 p90；720 太薄。
+
+**代价**：样本前 3 个月所有合约都"历史不足"，成员集为空。这三个月保留在
+`eligibility` 里，不作弊往前补。
+
+⚠️ **已知局限（已接受）**：`live` 用的是**全样本**的 `last_active >= 月初`，
+所以它回答的是"月初之后还交易过"，而不是"月初当下在交易"。
+一个中途长期停摆、后来又复活的合约会被判成 live（实测 `LITUSDT` 2025-02
+停摆 10 个月仍 `live=True`）。实测这类情况 **26 个合约月 / 6 段停摆**，
+其中只有 1 个进入了排名（rank 154 > 50），**对成员集零影响**。
+改成纯 PIT 判据会引入一个任意的"活跃回溯窗口"参数并新增 12 个成员，
+故保留现状并在此声明。
+
+### 3.3 闸 3 为什么用「连续缺失长度」
+
+| 候选判据 | 实测 | 结论 |
+|---|---|---|
+| OI 覆盖率 | 中位 0.9997；`coverage.parquet` 里 < 0.90 的合约 **6 个** | ✅ 采用 |
+| **最长连续缺失** | 中位 1h；**> 48h 的 62 段 / 46 个合约**，最长 7,573h | ✅ **采用** |
+| `oi == 0` 比例 | 中位 0.0292%，**最高仅 0.2556%** | ❌ 不用作闸 |
+| 最长冻结 | p90 = 10h，仅 1 个合约 > 12h | ❌ 不用作闸 |
+
+**「缺 1 小时」与「缺 48 小时」对滚动窗口的破坏完全不同** —— 前者影响 1 个观测，
+后者让 48 个观测全无 OI。所以判据用**连续长度**，不是比例。
+
+**`oi == 0` 为什么不进闸**：它是**全市场发布事件**，不是单个合约的缺陷。
+实测 2022-03-07 一天有 **105 个合约同时为 0**（15:00–00:00），
+用它作闸会误杀被波及的正常合约。**记入缺失报告，不进闸。**
+
+**闸 3② 剔除的 93 行长什么样**（修复前口径，现为 87 行）
+```
+    ICPUSDT  2022-02  oi_cov = 0.0  oi_max_gap_h = 720
+   LITUSDT  2025-05  oi_cov = 0.0  oi_max_gap_h = 720
+币安人生USDT  2026-03  oi_cov = 0.0  oi_max_gap_h = 720
+```
+**覆盖率 0.0 且连续缺失 720 小时**（= 整个 30 天窗口）——
+这些合约在窗口内**一根 OI 都没有**。
+
+⚠️ **闸 3 的分母是"窗口内面板里存在的小时数"，不是 720**。
+因为死尾已被裁掉，合约死后的小时不算"缺失"。实测 `LUNAUSDT 2022-06`
+报 `oi_cov = 0.966`、`gap = 9h`，而那个窗口里 30 天有 19 天根本没有数据。
+今天这些行全被闸 2①/2② 挡住（`eligible = 0`，`members = 0`），
+但**审计表里的数字是偏乐观的**，读 `eligibility` 时要留意。
+
+### 3.4 流动性为什么不设闸
+
+导师 note 原文是 `Exclude illiquid contracts where transaction costs dominate` ——
+这是**可交易性**判断，需要盘口数据；归档只有 OHLCV，**测不到成本**。
+
+而 note 自己提供了更好的机制：`Top 30–50 liquid`。
+**按流动性排名取前 K 即是流动性筛选。**
+
+⚠️ **`(high − low) / close` 不是交易成本的代理** —— 它是**已实现波动率**
+（BTCUSDT 逐小时中位 **0.5656%**），比真实价差高两个数量级。
+`coverage.parquet` 里存的是 `median_daily_qv`（**逐小时 `quote_volume` 的中位数**），
+一个流动性诊断量，**不设闸**。
+
+### 3.5 PIT 规则（无前视的全部实现）
+
+```
+每月 M：
+  1. liq(sym, 月初) = median(quote_volume) over [月初 − 30 天, 月初)   ← 严格开区间
+  2. 四条资格闸（逐月重评）
+  3. 通过的合约按 liq 降序排名
+  4. 取前 K = 50（无缓冲带）
+  5. 成员集在 M 月内【冻结】
+```
+
+**关键 1**：`liq` **逐日滚动**更新，成员集**按月冻结**。这两件事必须分开。
+
+**关键 2**：**流动性度量全程用月频 `klines`，不换源** —— 口径不一致会成循环定义。
+
+**关键 3**：**不写下架名单。** 下架合约由闸 2② 自然淘汰：
+它停止交易后，下个月就不再合格。**下架币存活期的完整历史留在样本里** ——
+这正是研究所需（`LUNAUSDT` 就是靠这条留在 2022-05）。
+
+**关键 4**：`oi` 用 `OI(ts_end)`，发布延迟 1–3 分钟，对"bar 收盘后决策"不构成前视。
+
+### 3.6 候选池 ≠ 成员集
+
+```
+成员集 = 每个刷新期 50 个（逐月浮动）
+候选池 = 曾入过成员集的并集（285 个）= Step 2 的产出 = 下载范围
+```
+
+**恒等式**：一个币只有排进前 K 才可能成为样本 ⇒ 候选池 = 所有前 K 名的并集。
+
+### 3.7 换手率（如实报出）
+
+K=50、30 天窗口、月度刷新 → **月换手均值 18.7%（中位 16.0%），年化约 224%**。
+这是加密市场流动性排名的**真实性质**，不是噪声 —— 它支撑 Phase 2 用**月度**
+而非日度重算成员集。
+
+---
+
+## 4. 数据质量：不处理就会静默算错的事
+
+### 4.1 七个静默错误
+
+**共同点：它们都不报错，只会让数值悄悄变错。**
+
+| # | 规则 | 不做的后果 |
+|---|---|---|
+| 1 | **读入后按时间戳排序** | 近期文件非单调（存在负间隔），`shift(1)` 静默算错 |
+| 2 | **去重** | `2020-09`~`2021-06` 有完全一致的副本行（576 行 / 288 唯一） |
+| 3 | **区分「确认 404」与「超时」** | 网络抖动被误记为缺失，永久漏文件 |
+| 4 | **逐文件检测表头有无** | 按日期硬编码必然错（§4.3） |
+| 5 | **URL 路径段编码，文件路径不编码** | 中文合约名让 `urllib` 抛 `UnicodeEncodeError`；编码进文件名毫无收益 |
+| 6 | **缓存键必须含源名** | 四个源共用同一键，后到的源命中前一个源的缓存 |
+| 7 | **OI 的 `create_time` 秒位必须截断** | 1,147 行 OI 被静默丢成 `oi_missing`（详见下） |
+
+**规则 3 的实现**：`retry_exhausted` 是**待办**，不是缺失，
+**不得进入最终缺失报告**。完成后要补跑。
+
+**规则 3 的加强**：`parse_zip` 的失败**必须抛异常**，不能返回 `None`。
+原来"下载到了但读不懂"和"压缩包里没有整点行"走同一条分支（打戳 `ok` + 释放缓存），
+于是 813 个 (合约,月) 被永久记为完成而 `data/raw` 里一行都没有、缓存也已删除，无法追查。
+现在解析失败归 `retry_exhausted`，**保留缓存、不打戳**。
+
+**规则 5 的陷阱（反向）**：`quote_seg()` 只用于 **CDN 下载 URL**。
+S3 列表接口的 `prefix` 必须传**原始合约名** —— 它内部的 `urlencode` 会编码一次，
+提前编码就成了双重编码，服务端解码后拿到字面量 `%E5%B8%81…`，永远匹配不到真实 key。
+**后果不是报错，而是该合约一个文件都枚举不到、且不留任何 manifest 记录。**
+实测这样静默丢掉过 1 个候选池合约（`币安人生USDT`）的全部 mark / index / OI。
+
+**规则 7 的细节**：`metrics.create_time` 秒位不恒为 0（实测 **4,138 行 / 64 个合约**，
+如 `TLMUSDT 2022-05-09 11:00:59`），其中 **1,147 行是该合约该小时唯一的快照**。
+不截断就会匹配不上任何 `ts_end`，被静默记成 `oi_missing=True`，
+并把该合约的 OI 序列人为拉长（`TLMUSDT` 的 39 小时冻结即由此而来）。
+**修法是 `floor("h")` 之后再合并。**
+
+### 4.2 下架合约：`klines` 不停，`funding` / `mark` / `index` 会停
+
+**合约下架后，`klines` 归档会一直写「整月零成交的空行」到样本末端；
+而 `funding` / `mark` / `index` 在下架时就断了。**
 
 | 合约 | `klines` 末月 | 末月成交额 | `funding` 末月 |
 |---|---|---|---|
@@ -612,96 +620,251 @@ validate(df, "features_1h")      # 失败抛 SchemaViolation，一次报全部�
 | `WAVESUSDT` | 2026-08 | **0** | 2025-06 |
 | `MATICUSDT` | 2024-09 | 3.8 亿（正常） | **2026-08** ← 方向相反 |
 
-规模：**446 个 (合约,月) 组合整月零成交，涉及 38 个合约**；
-`AGIXUSDT` / `OCEANUSDT` / `WAVESUSDT` 各 26 个月零成交。
+规模：**446 个 (合约, 月) 组合整月零成交，涉及 38 个合约**；
+`AGIXUSDT` / `OCEANUSDT` / `WAVESUSDT` 各 26 个月。
 
-**三个直接后果：**
-
+**三个直接后果**
 1. **判活看 trailing 30 天的 `quote_volume`，不看有没有 bar，也不看
-   `exchangeInfo` 的 `status`。** 死合约的退出靠闸 2（§6.2 关键 3）。
-2. **`funding` 表允许超出 `klines` 网格**（实测 7,911 行 / 0.64%，
-   其中 6,916 行是下架合约的尾部结算）。它是事件表，**不按网格裁**。
-3. **`mark` / `index` 的覆盖率缺口（0.28% / 3.00%）主要来自这里** ——
-   死合约的尾部空行有 bar 但没有 mark/index。
+   `exchangeInfo` 的 `status`。** 死合约的退出靠闸 2②。
+2. **`funding` 表允许超出 `klines` 网格**（实测 7,911 行 / 0.64%，其中 6,916 行是
+   下架合约的尾部结算）。它是事件表，**不按网格裁**。
+3. **`index` 的覆盖率缺口主要来自这里** —— 死尾的 321,737 行里，**84.9%** 的
+   `index` 空值落在其中；`mark` 不受影响（只有 3.3% 落在死尾）。
+   这也是 `features_1h` 要**裁死尾**的原因。
 
+### 4.3 表头有无：必须逐文件检测
 
-### 8.3 缺失数据报告
+| 源 | 2021-12 | 2022-03 | 2022-09 起 |
+|---|---|---|---|
+| `klines` | 无表头 | 有 | 有 |
+| `markPriceKlines` / `indexPriceKlines` | 无 | **无** | 有 |
+| `metrics` / `fundingRate` | **始终有** | | |
 
-**检测用「日」，呈现用「连续缺口区间」**（不按日、也不按月）。
+```python
+# 唯一正确的方式。不可按日期硬编码
+first = raw.split("\n", 1)[0].split(",", 1)[0].strip()
+has_header = not first.lstrip("-").replace(".", "").isdigit()
+```
 
+### 4.4 缺失报告的口径
+
+**检测用「日」，呈现用「连续缺口区间」。**
 - 纯月粒度太粗：`覆盖率 29/30` 看不出缺的是哪天
 - 纯日粒度表爆炸：约 200 万行，99% 是「正常」
 
-**缺口区间表**（相邻缺失日合并成一条）：
+`gaps.parquet` 按 `(symbol, metric, gap_start)` 排序 —— 按长度降序会把同一合约的
+缺口打散，看不出"这个合约在哪段时间整体劣化"。`started_before_sample` 列区分
+「从样本起点就缺」与「中途坏了」。
 
-| symbol | source | gap_start | gap_end | days | category |
-|---|---|---|---|---|---|
-| BTCUSDT | metrics | 2025-04-15 | 2025-04-15 | 1 | `confirmed_404` |
+**五类缺失必须严格区分**
 
-**五类必须严格区分**：
-
-| category | 算真缺失? |
+| category | 算真缺失？ |
 |---|---|
-| `confirmed_404` | ✅ 是 |
-| **`retry_exhausted`** | ❌ **不是** —— 是待办，**不得进入最终缺失报告** |
+| `confirmed_404` | ✅ 是（实测 67 条，全部是 `metrics`） |
+| `retry_exhausted` | ❌ **不是** —— 是待办 |
 | `partial_rows`（行数 < 288） | ⚠️ 记录 |
 | `field_empty` | ⚠️ 记录 |
 | `zero_volume` | ⚠️ 记录 |
 
-**另配覆盖率汇总表**：明细回答「哪里缺」，汇总回答「整体质量如何」。
+### 4.5 其它已知脏点
+
+| 位置 | 问题 | 处理 |
+|---|---|---|
+| 个别日期 | 缺失，或 287 行而非 288 | 记入缺失报告 |
+| **2022 全年** | 4 个大户多空比字段大面积空 | **不存这些列** |
+| 新币首日 | 从半天开始 | 按可用天数判定，非按上币日 |
+| 零成交额月 | 文件存在但 `quote_volume = 0` | 该合约该月不该进成员集 |
+| `oi = 0` | 2,523 行 / 48 天 | 全市场事件，记入缺失报告 |
+| 冻结的 `oi` | 仅 1 个合约 > 12h | 记入缺失报告 |
 
 ---
 
-## 9. 增量更新
+## 5. 数据契约与验收
 
-### 9.1 数据源优先级
+### 5.1 类型与 `validate()`
+
+```
+"string"    →  pandas "string"        "float64"   →  pandas float64
+"timestamp" →  datetime64[ns, UTC]    "bool"      →  pandas bool
+```
+**整数一律用 float64**（精确到 2^53；`int8/…` 不支持 NaN）。
+**全部数据列允许 null**，唯一例外：**标识列强制非空** ——
+主键为空即损坏（`NaT` 在 join 时静默匹配不上，那些行会无声消失）。
+
+```python
+from lib.schema import validate, SchemaViolation
+validate(df, "features_1h")      # 失败抛 SchemaViolation，一次报全部问题
+```
+
+九条结构检查：列名与**顺序** · dtype · 标识列非空 · 主键**无重复** · 主键**已排序** ·
+**无整列为空** · 标识列落在整小时 · `ts_end − ts == 1h` · 标识列 tz-aware UTC。
+
+**不做值域与跨列一致性检查**（`oi_value / oi / close ≈ 1` 等）——
+它们是统计判断、阈值需标定。上面九条已覆盖会导致数值异常的**根因**。
+
+⚠️ 「无整列为空」**只在一个 chunk 含多个合约时才判** ——
+单合约某月本来就可能整列无数据（实测 `TLMUSDT` 2022-07 归档里一根 OI 都没有），
+否则 `--subset <单合约>` 的冒烟必然误报。
+
+**时间戳口径**
+```
+open_time  = H                 # 官方 "Kline start time"  → 我们的 ts
+close_time = H + 1h − 1ms      # 毫秒部分恒为 .999
+区间终点    = H + 1h            # 数据里没有，自己算 = ts_end
+```
+毫秒 int（`metrics.create_time` 例外，是字符串）。全程 **UTC**。
+**OI 快照网格**：每日文件 **288 行 + 1 行表头**，100% 落在 5 分钟网格，
+整点快照必然存在，`sum_open_interest` 是**时点存量值**。
+
+### 5.2 自测与产出完整性
+
+```bash
+python config.py            # 8 项：validate_sample_end 行为 + Config frozen
+python -m lib.schema        # 65 项：round-trip / validate 放行 / validate 捕获 / 结构自检
+
+# 重算 1,440 个产出文件的 SHA256；0 个不一致则退出码 0
+python phase1/build_qa.py --out-root data --sample-end 2026-08-31 --verify
+```
+**实测：`核验 1,440 个文件：全部一致`，退出码 0。**
+
+**校验和是本流程最后一个写盘动作** —— 它此前写入的每一个文件
+（含 `00_config/sample_end.json` 的运行元信息）都被纳入哈希。
+因此**重跑 Step 3–6a 之后必须重跑 Step 6b**，否则校验和失效。
+
+### 5.3 端到端复现
+
+```bash
+# 见 data/REPRODUCE.md，六条命令
+python phase1/build_candidate_pool.py --sample-end 2026-08-31   # Step 0–2
+python phase1/fetch_market_data.py    --sample-end 2026-08-31   # Step 3
+python phase1/build_layer2.py   --out-root data --sample-end 2026-08-31
+python phase1/build_features.py --out-root data --sample-end 2026-08-31
+python phase1/build_universe.py --out-root data --sample-end 2026-08-31
+python phase1/build_qa.py       --out-root data --sample-end 2026-08-31
+```
+
+**`--out-root` 是必填的，不是可选项** —— 环境变量不跨 shell 保留，
+早期用环境变量重定向，导致冒烟结果三次污染正式目录。显式参数无法"忘记设置"。
+
+**Step 4 与 Step 5 是全量重建**（先清旧产出）。`--subset` 加 `--keep-existing`
+才是"只处理部分合约"的冒烟模式，此时收尾的交叉校验只对该批次有意义。
+
+---
+
+## 6. 时间优化
+
+**全流程本地计算约 28 分钟**（Step 4 = 847s，Step 5 = 357s，Step 6a = 451s，Step 6b = 30s）。
+四个优化点，各自的收益都是实测的：
+
+### 6.1 一遍过：下载即解压（Step 3，最大的一个）
+
+```
+✓ 一遍过   下载 → 就地解压 → 攒批 → 落盘 → 释放缓存 → 打进度戳
+                                                    ↑ 断点续传靠它
+```
+
+**禁止「先全下到缓存、再统一解压」的两阶段写法**
+
+| | 两阶段 | 一遍过 |
+|---|---|---|
+| 磁盘读 | 2 遍 | **1 遍** |
+| 中断损失 | 从头重来 | **< 1 分钟** |
+| 缓存释放 | 需手动删 | **随进度自动，跑完为空** |
+
+**打戳与删缓存必须走同一条代码路径**（都放在 `stamp()` 里）。
+若某分支打了戳却忘了删缓存，缓存永久残留；反之则重复下载。
+
+### 6.2 按合约预分组，不做逐合约全表扫描
+
+两个地方踩过同一个坑，修法相同：
+
+| 位置 | 反面写法 | 实测 | 改为 | 实测 |
+|---|---|---|---|---|
+| Step 4 读 `metrics` | 每个合约重读 6 个年度文件 | **289s** | 读一次 + 按合约预分组 | **< 2s** |
+| Step 6a 建 `master` | 679 次全表布尔过滤 | **310s** | 一次 `groupby(symbol)` | **48s** |
+
+**判据：只要出现"对每个合约扫一遍全表"，就一定会慢一个数量级。**
+
+### 6.3 单遍读盘 + 原子写
+
+Step 5/6a 都是"读一次全部 chunk → 内存里聚合 → 按合约切片",不在循环里反复
+`read_parquet`。每个 chunk 先写 `.part`（**名字带 PID**）再 `os.replace`。
+
+### 6.4 下载参数
+
+| 参数 | 值 | 依据 |
+|---|---|---|
+| 并发 | **32** | 实测 16 → 32 吞吐已饱和 |
+| 读取超时 | **45 s** | 实测极端长尾 45.8 s |
+| 重试次数 | **3** | 只重试网络类失败 |
+| 退避 | `2^attempt` 秒 + 0–1 s 抖动 | 抖动必需 —— 并发同时失败会成尖峰 |
+
+**跑完对未取得项再补一轮**，把问题在同一次运行内解决。
+
+**VPN 的代价**：CDN 吞吐 **140 → 89 文件/秒（慢 36%）**；并发 32 时约 13% 请求瞬时失败。
+
+⚠️ **VPN 下 S3 列表接口不稳定** —— 同一请求时返回 22 个键、时返回 0 个键。
+**所以枚举结果必须与「该合约是否已有数据」交叉验证**，且要能对单个合约补抓。
+
+---
+
+## 7. 增量更新
+
+### 7.1 数据源优先级
 
 ```
 对每个 (symbol, 时间戳):
     该月的【月频文件】在 manifest 中 status = ok   →  用月频
-    否则                                        →  用日频补
-    两者都没有                                   →  该时间戳不存在
+    否则                                          →  用日频补
+    两者都没有                                     →  该时间戳不存在
 ```
+因**月频 = 日频拼接（逐值完全相同）**，两者可自由混用，**增量不必等月份结束**。
 
-因**月频 = 日频拼接（逐值相同）**，两者可自由混用，**增量不必等月份结束**。
+**发布节奏（`Last-Modified` 实测）**：日频 `metrics` 每天 06:39 GMT；
+日频 klines / mark / index 每天 08:00–08:34 GMT；月频 `fundingRate` 次月 1 日 08:24 GMT；
+月频 klines / mark / index 次月 2 日 09:00–12:00 GMT。
+→ **刷新的合适时点：每天 UTC 09:00 之后。**
 
-### 9.2 流程
+### 7.2 流程
 
 ```
-【A】更新合约清单      归档枚举 → 新增/下架的合约
-【B】确定该有哪些文件    候选池 × 存续期 × [sample_start, sample_end]
-【C】与 manifest 对账    跳过 status=ok；跳过 confirmed_404（TTL 内）
-【D】下载缺失的          月频（若有）+ 日频（补不完整月）
-【E】增量建第 2 层       只处理尚未并入的文件
-【F】增量建 features_1h  upsert 到受影响的 chunk
-【G】建 universe 表
+【A】更新合约清单   归档枚举 → 新增 / 下架的合约（需要 VPN）
+【B】确定该有哪些文件  候选池 × 存续期 × [sample_start, sample_end]
+【C】与 manifest 对账  跳过 status = ok；跳过 confirmed_404
+【D】下载缺失的        月频（若有）+ 日频（补不完整月）
+【E】重建第 2 层
+【F】重建 features_1h
+【G】重建 universe → 重跑 Step 6b
 ```
+**`sample_end` 只决定裁剪边界，不决定数据来源。**
 
-**`sample_end` 决定裁剪边界，不决定数据来源。**
+### 7.3 `manifest` 表结构
 
-### 9.3 `manifest` 表结构
+`data/00_config/manifest.parquet` —— 逐文件一行，断点续传的唯一依据。
 
 | 列 | 含义 |
 |---|---|
 | `source` / `symbol` / `period` / `granularity` | 定位 |
 | `remote_path` / `filename` | **重下时唯一依据** |
 | `status` | `ok` / `confirmed_404` / `retry_exhausted` |
-| `checksum_official` / `checksum_verified` / `bytes` | 校验 |
-| `first_seen_at` / `last_probed_at` / `downloaded_at` | 时间戳 |
-| `dup_rows_removed` | 该文件解析时去除的重复行数 |
-| `layer2_built_at` | 是否已并入第 2 层（增量解析的入口） |
+| `bytes` / `downloaded_at` | 大小与下载时刻 |
+| `raw_written_at` | **已并入 `raw/` 的进度戳** |
 
-### 9.4 三个边界
+**manifest 中途就会落盘**（每 2,000 个文件一次），不是跑完才写 ——
+否则 SIGKILL / 断电会丢掉全部进度戳，而缓存早已删除，下次要把几十万个文件重下。
 
-**① `confirmed_404` 需 TTL 重探（7 天）**
-月频文件在次月 1–2 日才发布，且并非每月都齐。若永久缓存 404 会**永久漏掉**该文件。
+### 7.4 四个边界
 
-**② `upsert` 而非覆盖**
-新月份数据会落在已有年份分区里：读现有 chunk → 合并 → 按主键去重 → 原子写回。
+**① `confirmed_404` 需要 TTL 重探 —— 尚未实现，是已知缺口。**
+月频文件在次月 1–2 日才发布，且并非每月都齐。永久缓存 404 会**永久漏掉**该文件。
+现状：67 条 `confirmed_404` 里有 **32 条带 `raw_written_at` 戳**，
+而续传逻辑把"有戳"当已完成，于是这 32 条**永久跳过**。**换月增量前要补 TTL。**
 
-**③ chunk 按「月」切**
-因 `sample_end` 只用完整月，月是天然原子单位：**完整月的 chunk 一旦写完永不改变**，
-每次增量只重写受影响的那一两个 chunk。
+**② 增量 `features_1h` 需要 upsert —— 当前是全量重建，是已知缺口。**
+正确做法是"读现有 chunk → 合并 → 按主键去重 → 原子写回"。
+现状每次删掉整个面板重建 57 个 chunk（约 357 秒）。**正确性没问题，代价是时间。**
+
+**③ chunk 按「月」切，完整月的 chunk 写完永不改变。**
 
 | 状态 | 哪些 | 行为 | 不变量 |
 |---|---|---|---|
@@ -710,141 +873,106 @@ validate(df, "features_1h")      # 失败抛 SchemaViolation，一次报全部�
 
 ⚠️ 新上市合约首月不满整月。**行数不变量按 `(chunk, symbol)` 判定，不按 chunk 总行数。**
 
-### 9.5 第 2 层的构建顺序是硬性要求
-
-`layer2_built_at` 是**单一时间戳**，因此：
-
-```
-解析 mark ✓  →  解析 index ✓  →  合并  →  写 mark_index_1h parquet ✓
-                                          →  最后写 layer2_built_at
-```
-
-时间戳必须**最后写**，且失败时**不写**。否则 `mark` 成功而 `index` 失败时，
-该文件会被标记为「已建」，**`index` 的数据永久丢失且不报错**。
+**④ 第 2 层的构建顺序是硬性要求**：增量时 `layer2_built_at` 是**单一时间戳**，
+必须**最后写，且失败时不写**。否则 `mark` 成功而 `index` 失败时，该文件会被标记为
+「已建」，**`index` 的数据永久丢失且不报错**。
 
 ---
 
-## 10. 文件夹结构
+## 8. 关键决策与预设问题
 
-### 10.1 项目根目录
+### 8.1 为什么样本从 `2021-12-01` 开始
 
-**判据只有一条：这个东西只被本阶段用，还是被两个以上阶段用。**
-只被本阶段用的（Phase 1 的六个脚本、本文件）放 `phaseN/`；
-被两个以上阶段用的（`config.py`、`lib/schema.py`）放根目录。
-`phase2/`–`phase5/` 目前为空，代码开始写时才建文件。
+**由 OI 归档的断崖唯一定死，不是权衡结果**
 
 ```
-Industrial Programme I/
-│
-├─ config.py                     设计参数 —— 各阶段共用，故在根
-├─ lib/schema.py                 数据契约 —— 各阶段共用，故在根
-│
-├─ data/                         全部产出（见 §10.2）
-│
-├─ phase1/                       Phase 1 的全部内容：代码 + 本文件
-│   ├─ build_candidate_pool.py   Step 0–2  候选池 + raw 下载
-│   ├─ fetch_market_data.py      Step 3    逐文件下载状态
-│   ├─ build_layer2.py           Step 4    4 张规范化表
-│   ├─ build_features.py         Step 5    features_1h
-│   ├─ build_universe.py         Step 6a   universe 表
-│   ├─ build_qa.py               Step 6b   质量与审计产出
-│   └─ guidance.md               本文件
-│
-├─ phase2/ · phase3/ · phase4/ · phase5/
-│
-├─ research_archive/             规划期材料（导师 note、文献、提交件）
-└─ .vscode/ · .gitattributes · .gitignore · .git/
+各起点的 OI 覆盖率          OI 首月分布（当前产出可核）
+  2020-01    0 / 285         2021-12   103 个   ← 断崖
+  2021-09    1 / 285         2022-01     1 个
+  2021-12  103 / 285         2022-02     3 个
+  2022-06  114 / 285         2022-03     3 个
 ```
+2021-12 那 103 个的明细：**100 个恰好始于 `2021-12-01`**，3 个在 12 月下旬
+（`ICPUSDT` `PEOPLEUSDT` `ROSEUSDT`）。另有 1 个池内合约完全没有 OI 数据。
 
-**`data/` 留在根、不放进 `phase1/`**：它不是 Phase 1 的私有产物。
-`02_features/` 与 `03_reference/` 是 Phase 2–5 的正式输入，
-把它们埋在 `phase1/` 下面会让下游写成 `../phase1/data/...`，
-既啰嗦又暗示「这是 Phase 1 的东西」。
+其余四源（`klines` / `mark` / `index` / `funding`）都有 102 个合约能回溯到 2020 ——
+**唯一卡住的是 OI**。往前推可多得约 100 万根 bar，但那段 OI 覆盖率仅 0.4%，
+而本项目研究的是 **Price + Open Interest**。
 
-**阶段说明书随阶段走**：本文件是 Phase 1 的说明书，故在 `phase1/`；
-Phase 2 写自己的 `phase2/guidance.md`。根目录只留四个阶段共用的东西。
+⚠️ **左列的断崖数字来自归档侧侦察探测，不在当前产出里。** Step 3 按样本窗口
+裁剪下载范围，所以 `raw/metrics/` 最早只有 2021-12 —— 左列无法从现有产出复核，
+右列可以。
 
-**脚本从 `phase1/` 运行时的 import**：脚本首行加
-```python
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-```
-（Phase 2–5 同理用 `parent.parent`。）
+**BTC 的 2020-01 ~ 2021-11 历史不做附录**（已决策）：五个源齐全、技术上能做出
+**23 个月**单币 1h 面板，但对 285 币的面板研究增益有限，代价是多维护一条
+窗口不同的数据路径。**不引入这个复杂度。**
 
-### 10.2 `data/` 内部
+### 8.2 关键的取舍表
 
-```
-data/
-│
-├─ 00_config/                          构建元信息
-│   ├─ sample_end.json                 {sample_end, config_snapshot, run_at, 各阶段计数}
-│   └─ manifest.parquet                逐文件下载状态（断点续传的唯一依据）
-│
-├─ 01_layer2/                          4 张规范化源表（小时粒度）
-│   ├─ klines_1h/year=YYYY/chunk=YYYY-MM.parquet
-│   ├─ mark_index_1h/year=YYYY/chunk=YYYY-MM.parquet
-│   ├─ oi_1h/year=YYYY/chunk=YYYY-MM.parquet
-│   └─ funding/year=YYYY/chunk=YYYY-MM.parquet
-│
-├─ 02_features/
-│   └─ features_1h/year=YYYY/chunk=YYYY-MM.parquet
-│
-├─ 03_reference/                       分析与审计用的参考表
-│   ├─ candidate_pool.csv              285 个合约
-│   ├─ master.parquet                  一合约一行（679）
-│   ├─ universe_eligibility.parquet    一合约 × 一月（38,703）
-│   ├─ universe_membership.parquet     (symbol, month)（2,700）
-│   └─ member_changes.parquet          逐月进出记录（57）
-│
-├─ 04_qa/                              质量与审计
-│   ├─ missing_files.parquet           归档空洞（67）
-│   ├─ gaps.parquet                    缺口明细（5,769）
-│   ├─ coverage.parquet                逐合约覆盖率（1,425）
-│   ├─ data_dictionary.md              字段字典与全部已知口径
-│   ├─ checksums.sha256                1,440 个产出文件的 SHA256
-│   └─ REPRODUCE.md                    六条重跑命令
-│
-└─ raw/                                五个源的原始 parquet
-```
+| 决策 | 选择 | 代价 / 被放弃的 |
+|---|---|---|
+| 初始样本窗口 | `2021-12-01` | 放弃约 100 万根 bar（OI 覆盖 0.4%） |
+| 月度成员数 | 前 50 | 第 1 名与第 50 名流动性差 **205 倍**（中位） |
+| 成员集刷新 | 月度冻结 | 月换手 18.7%，滞后一个月 |
+| 历史长度 | 2,160 bar | 样本前 3 个月无成员 |
+| OI 质量 | 覆盖率 + 连续长度双闸 | 剔掉 46 个合约 |
+| 流动性 | **只靠排名，不设闸** | 无法度量真实交易成本 |
+| 数据分层 | 源表与面板分离 | 多一层磁盘（546.8 MB） |
+| 派生量 | 全部推到 Phase 2 | Phase 2 每次改参数要重算，数据层不用重跑 |
+| 死尾 | 裁掉 | 与 `funding` 的越界行口径不同，需在字典里说明 |
+| `live` 判据 | 全样本 `last_active` | 非纯 PIT（§3.2 已声明，对成员集零影响） |
 
-**编号从 00 连到 04，不跳号；`raw/` 不编号** ——
-它按数据源分目录（`klines/`、`metrics/`…），与编号层的含义不同。
+### 8.3 预设问题
 
-**不保留 RAW 归档**（zip 镜像、`oi_5m` 全量均不存）。
-**下载缓存是临时的，用完即清。**
+**Q：候选池 285 个，为什么成员只有 2,700 行（50 × 54）？**
+候选池是"曾进过前 50 的并集"，是一个**下界**。每月只有 50 个在册，
+且样本前 3 个月因历史不足为空。285 个合约里曾通过全部闸的只有 280 个，
+真正当过成员的 248 个。
 
-**`universe_*` 放 `03_reference/`**：其粒度是**日**与**合约**，
-与 `features_1h` 的**小时**粒度不同，不能混放。
+**Q：`funding_rate` 83.4% 是 null，数据有问题吗？**
+不是。它是**结算事件**，只在结算小时有值。实测非空占 16.65%，
+与"8h 合约 3 次/天 + 4h 合约 6 次/天"的理论值一致。
+`funding_interval_hours` 已 ffill，每小时都可用。
 
-**`04_qa/` 放最后**：它是**对 00–03 的检查**，不是流水线的一环，
-放在参考表之后表示「读完上面这些再看这里」。
+**Q：`oi == 0` 的记录怎么处理的？**
+记入缺失报告（`metric = "oi_zero"`，逐小时），**不进闸**。
+它是全市场发布事件 —— 实测 2022-03-07 有 105 个合约同时为 0。
+发生率中位 0.029%，最高 0.256%。
 
----
+**Q：为什么 `klines` 有 92 段缺口，覆盖率中位却是 1.0000？**
+这 92 段就是 Step 5 补出来的 `bar_missing` 网格（6,886 行，占 0.09%）。
+覆盖率中位 1.0000 是四舍五入后的结果，明细在 `gaps.parquet`。
 
-## 11. 自测与验收
+**Q：怎么证明没有前视？**
+四处：① `liq` 用严格开区间 `[月初−30天, 月初)`；② 四条闸逐月重评；
+③ `oi` 用 `OI(ts_end)`，发布延迟 1–3 分钟，bar 收盘后可得；
+④ 成员集按月冻结，冻结发生在月初。
+**一处例外已在 §3.2 声明**：`live` 用全样本 `last_active`。
 
-### 11.1 单元自测
+**Q：为什么要分第 2 层和 `features_1h` 两层？**
+理由是**口径可分别审计**：第 2 层回答"源里到底有什么"（用 `NaN`），
+`features_1h` 回答"分析时看到什么"（密集、对齐、带缺失标记）。
+合并成一层后，"这个 NaN 是源里没有，还是我们对齐错了"就无法回答。
 
-```bash
-python config.py            # 8 项：validate_sample_end 行为 + Config frozen
-python -m lib.schema        # 65 项：round-trip / validate 放行 / validate 捕获 / 结构自检
-```
+**Q：`(high − low) / close` 能不能当交易成本代理？**
+不能。它是**已实现波动率**（BTCUSDT 逐小时中位 0.5656%），比真实价差高两个数量级。
+`coverage.parquet` 里的 `median_daily_qv` 是逐小时成交额中位数，不设闸。
 
-**退出码 0 = 全过。** 两项都不碰 `data/`，随时可跑。
+**Q：为什么代币化黄金要单独挡一次？**
+因为 `exchangeInfo` 把 `PAXG` / `XAUT` 标成 `PERPETUAL` / `COIN`，
+与加密资产无法区分。实测 `PAXGUSDT` 因此在成员集里连续待了 11 个月。
+它们是黄金凭证，不是加密资产，必须按 `base_asset` 再挡一次。
 
-`build_candidate_pool.py` 的核验开关：
-- `--skip-download` —— 只用已有缓存重算
-- `--subset SYM [SYM ...]` —— 只处理指定合约
+**Q：整个流程要跑多久？**
+首次约 2.5–3 小时（Step 2 约 8 分钟 + Step 3 约 111 分钟 + Step 4–6b 约 28 分钟）。
+增量只加一个月约 **10 分钟**。
 
-### 11.2 产出完整性
+**Q：为什么 `metrics` 要额外抓 284 个对齐日文件？**
+因为 bar `[ts, ts_end)` 配 `OI(ts_end)`，样本末端的最后一根 bar 需要**次日**的
+OI 文件。只抓到 `sample_end` 会让最后一根 bar 永远缺 OI。
+每个池内合约补 1 天，实测 284 行。
 
-```bash
-# 重算 1,440 个产出文件的 SHA256；0 个不一致则退出码 0
-python phase1/build_qa.py --out-root data --sample-end 2026-08-31 --verify
-```
-
-**实测：`核验 1,440 个文件：全部一致`，退出码 0。**
-
-**校验和是本流程最后一个写盘动作**，它此前写入的每一个文件（含
-`00_config/sample_end.json` 的运行元信息）都被纳入哈希。
-因此**重跑 Step 3–6a 之后必须重跑 Step 6b**，否则校验和失效。
-
+**Q：`funding_rate` 是不是只该在 `00/08/16` 有值？**
+不是。实测 **142 个合约是 4 小时结算**（`00/04/08/12/16/20`），142 个是 8 小时，
+1 个是 1 小时。**硬编码 `00/08/16` 会漏掉一半合约的一半结算。**
+必须读 `funding_interval_hours`。

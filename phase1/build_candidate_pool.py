@@ -255,6 +255,11 @@ def hard_filter(usdt: set[str], info: dict, cfg: cfg_mod.Config,
         if base and base in cfg.stablecoin_bases:
             drop(s, "稳定币")
             continue
+        # 闸 4 第二道：代币化贵金属（exchangeInfo 把它们标成 PERPETUAL/COIN，
+        # 分类字段挡不住 —— 实测 PAXGUSDT 曾在成员集里连续 11 个月）
+        if base and base in cfg.tokenized_tradfi_bases:
+            drop(s, f"代币化传统金融（{base}）")
+            continue
         # 闸 4：排除代币化传统金融资产（见文件头 CRYPTO_* 常量处的说明）
         if s in DELISTED_NON_CRYPTO:
             drop(s, "非加密资产（兜底名单）")
@@ -523,7 +528,11 @@ def main() -> int:
     log(f"        逐月排名完成；被草稿闸挡下的 (合约,月) 组合 {n_gated_month:,}")
 
     # ---- 产出 ----
-    pd.DataFrame({"symbol": sorted(union)}).to_csv(CANDIDATE_POOL, index=False)
+    # 原子写：candidate_pool.csv 是 Step 3 的输入，撕裂的文件会让 Step 3
+    # 静默处理一个被截断的池子（fetch 用 read_text().split() 读它，不会报错）。
+    tmp = CANDIDATE_POOL.with_name(f"{CANDIDATE_POOL.name}.{os.getpid()}.part")
+    pd.DataFrame({"symbol": sorted(union)}).to_csv(tmp, index=False)
+    os.replace(tmp, CANDIDATE_POOL)
 
     # manifest：逐文件状态（§9.3 的核心字段），供断点续传与排查
     now = datetime.now(timezone.utc).isoformat()
@@ -564,7 +573,9 @@ def main() -> int:
     n_fail = int((mf["status"] != "ok").sum())
     log(f"\nmanifest -> {MANIFEST}  ({len(mf):,} 行，非 ok {n_fail:,})")
 
-    RUN_INFO.write_text(json.dumps({
+    # 原子写：sample_end.json 里存着 config_snapshot，撕裂会让下游读不到设计参数。
+    tmp = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
+    tmp.write_text(json.dumps({
         "sample_end": args.sample_end,
         "sample_start": cfg.sample_start,
         "config_snapshot": cfg.snapshot(),
@@ -574,6 +585,7 @@ def main() -> int:
         "candidate_pool_size": len(union),
         "download_status": statuses if not args.skip_download else {},
     }, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, RUN_INFO)
 
     # ---- 运行摘要（§8.3：★ 未取得 绝不能算进缺失）----
     cnt: dict[str, int] = {}

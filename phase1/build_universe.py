@@ -214,12 +214,15 @@ def main() -> int:
         log("  取 exchangeInfo（闸 4 判据）…")
         info = fetch_exchange_info()
         log(f"    {len(info)} 条")
-        if not info:
-            # 不能静默降级：没有 exchangeInfo 就没有 underlyingType，
-            # 闸 4 会把【全部】代币化资产判成加密资产放进池子。
+        # 不能静默降级：没有 exchangeInfo 就没有 underlyingType，
+        # 闸 4 会把【全部】代币化资产判成加密资产放进池子。
+        # 两种失败都要拦住：完全取不到（0 条），以及截断但合法的残包 ——
+        # 后者会让闸 4 对缺记录的合约静默放行。Binance 当前挂牌的 USDT 永续
+        # 远超 300 个，低于此数一定是残包。
+        if len(info) < 300:
             log("")
-            log("  ✗ exchangeInfo 取不到 —— 闸 4 无法判定，拒绝继续。")
-            log("    需要 VPN（见 §5.3.2：www.binance.com 的 DNS 被污染）。")
+            log(f"  ✗ exchangeInfo 只有 {len(info)} 条（< 300）—— 取不到或残包，拒绝继续。")
+            log("    需要 VPN（www.binance.com 的 DNS 被污染，见 guidance §2.1）。")
             log("    若只想跑通流程做冒烟，加 --no-schema-note。")
             return 3
 
@@ -230,6 +233,11 @@ def main() -> int:
     # exchangeInfo 只含当前挂牌的合约。实测池里查不到的那些【全部】是加密资产，
     # 所以名单为空；若将来发现查不到的里面有非加密资产，加进来。
     DELISTED_NON_CRYPTO: set[str] = set()
+
+    # ---- 闸 4 的第二道判据：代币化贵金属（按 base_asset）----
+    # exchangeInfo 把 PAXG/XAUT 标成 PERPETUAL/COIN，与加密资产无法区分，
+    # 系统提示词之外的判据必须补上这一条（实测 PAXGUSDT 曾入选 11 个月）。
+    TOKENIZED_TRADFI = set(cfg.tokenized_tradfi_bases)
 
     # ---- 逐月 ----
     log("")
@@ -289,6 +297,8 @@ def main() -> int:
             else:
                 # 已下架 → exchangeInfo 查不到。实测池里查不到的合约全是加密资产
                 g4 = s not in DELISTED_NON_CRYPTO
+            # 第二道：分类字段把代币化黄金也算成 COIN，必须按 base_asset 再挡一次
+            g4 = g4 and base not in TOKENIZED_TRADFI
 
             reasons = []
             if not g1:
@@ -365,13 +375,20 @@ def main() -> int:
         sub_e = elig_by_sym.get(s)
         reason = ""
         if sub_e is not None and len(sub_e):
-            bad = sub_e[sub_e["fail_reason"] != ""]
-            if len(bad):
-                reason = bad["fail_reason"].iloc[0]
-            elif not sub_e["eligible"].any():
-                reason = "not_ranked_in_top_K"
+            # 顺序很重要：先问"它到底进没进过宇宙"。
+            # 原来先取第一个非空的 fail_reason，而 2021-12 没有任何合约能过闸，
+            # 于是 bad 永远非空 —— 248 个【真的当过成员】的合约全被标成 dropped。
+            if sub_e["eligible"].any() and sub_e["rank"].notna().any():
+                reason = ""
             elif not sub_e["in_pool"].any():
                 reason = "not_in_candidate_pool"
+            elif not sub_e["eligible"].any():
+                reason = "never_eligible"
+            elif sub_e["rank"].isna().all():
+                reason = "never_ranked_in_top_K"
+            else:
+                bad = sub_e[sub_e["fail_reason"] != ""]
+                reason = bad["fail_reason"].iloc[0] if len(bad) else "unknown"
         mrows.append({
             "symbol": s,
             "base_asset": base,

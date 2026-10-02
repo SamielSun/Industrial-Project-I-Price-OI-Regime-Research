@@ -388,11 +388,17 @@ def validate(
             problems.append(f'标识列 "{tcol}" 存在非整点的时间戳，期望全部落在整小时')
 
     # ---- 6. 无整列为空 ----
-    for c in common:
-        if n_rows > 0 and df[c].isna().all():
-            problems.append(
-                f'列 "{c}" 整列为空（{n_rows} 行全 NaN）。'
-                f"多半是解析失败 —— 这类错误不会自然发生。")
+    # 只在一个 chunk 含多个合约时才有意义：规则要挡的是"整列解析失败"。
+    # 单合约的 chunk 里某一列全空是正常的 —— 实测 TLMUSDT 在 2022-07 归档里
+    # 一根 OI 都没有，整列自然为空。若在单合约下也判失败，
+    # --subset <一个合约> 的冒烟运行必然误报。
+    n_syms = df["symbol"].nunique() if "symbol" in df.columns else n_rows
+    if n_syms > 1:
+        for c in common:
+            if n_rows > 0 and df[c].isna().all():
+                problems.append(
+                    f'列 "{c}" 整列为空（{n_rows} 行 / {n_syms} 个合约全 NaN）。'
+                    f"多半是解析失败 —— 这类错误不会自然发生。")
 
     # ---- 4 & 5. 主键唯一 + 排序 ----
     pk = [k for k in schema.primary_key if k in df.columns]
