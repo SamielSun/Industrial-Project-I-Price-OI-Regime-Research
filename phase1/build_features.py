@@ -290,7 +290,6 @@ def main() -> int:
     configure_paths(Path(args.out_root),
                     Path(args.l2_root) if args.l2_root else None,
                     Path(args.pool) if args.pool else None)
-    cfg = cfg_mod.Config()
     cfg_mod.validate_sample_end(args.sample_end)
 
     log("=" * 78)

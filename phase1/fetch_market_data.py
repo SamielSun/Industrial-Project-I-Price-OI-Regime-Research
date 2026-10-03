@@ -93,12 +93,10 @@ READ_TIMEOUT = 45
 RETRIES = 3
 BACKOFF_BASE = 2
 
-# 攒够这么多行就落盘一次。50 万行 ≈ 几十 MB，安全。
+# 攒够这么多行就落盘一次（落盘后随即释放该批缓存）。
+# 50 万行 ≈ 几十 MB，安全。**这是"一遍过"能保持磁盘占用有界的关键** ——
+# 缓存的释放由落盘触发，所以缓存不会被撑到 3.9 GB。
 FLUSH_ROWS = 500_000
-
-# 同时留在磁盘上的 zip 数量上限。超出就先落盘一批再继续。
-# 这是"一遍过"能保持磁盘占用有界的关键：缓存不会被撑到 3.9 GB。
-CACHE_SOFT_LIMIT = 20_000
 
 # 线程池在途任务上限（保持内存有界）
 INFLIGHT = CONCURRENCY * 8
@@ -706,7 +704,6 @@ def main() -> int:
         run_pass(todo_d, "日频 metrics (OI)")
 
         # 补跑一轮未取得项（§6.4：把问题在同一次运行内解决）
-        remote_of = {(j[0], j[1], j[2]): j[3] for j in todo_m + todo_d}
         retry_jobs = [j for j in todo_m + todo_d
                       if status.get((j[0], j[1], j[2])) == "retry_exhausted"]
         if retry_jobs:

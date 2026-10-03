@@ -15,7 +15,7 @@ from __future__ import annotations
 import calendar
 import dataclasses
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date
 from typing import Any, Sequence
 
 
@@ -115,18 +115,6 @@ def is_month_end(s: str) -> bool:
         return False
     last = calendar.monthrange(d.year, d.month)[1]
     return d.day == last
-
-
-def last_complete_month(today: date | None = None) -> date:
-    """今天之前最后一个【完整】月的月末日。
-
-    注意：这只是给人工参考的便利函数。--sample-end 必须显式传入，
-    不存在自动取值（§5.3：强制显式使每个结果必然携带样本边界）。
-    """
-    today = today or datetime.now().date()
-    first_of_this_month = today.replace(day=1)
-    last_month_end = first_of_this_month - timedelta(days=1)
-    return last_month_end
 
 
 class ConfigViolation(ValueError):

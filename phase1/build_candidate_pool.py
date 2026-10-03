@@ -14,8 +14,8 @@ build_candidate_pool —— 选出「后面要为哪些合约下数据」
 
 为什么需要它
 ------------
-Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，
-约 85 万次请求 / 10 GB。不先筛一遍就会对全部合约下，绝大部分是浪费。
+Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，实测 336,650 个文件。
+不先筛一遍就会对全部 679 个合约下，绝大部分是浪费。
 本脚本用几分钟的轻量下载，换掉后面大部分浪费。
 
 产出
@@ -67,7 +67,6 @@ S3_API = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
 CDN = "https://data.binance.vision"
 
 CONCURRENCY = 32          # 实测 16→32 吞吐已饱和
-CONNECT_TIMEOUT = 15      # s
 READ_TIMEOUT = 45         # s；实测 max=45.8s 是极端长尾
 RETRIES = 3               # 合计最多 3 次尝试
 BACKOFF_BASE = 2          # 2^attempt 秒
