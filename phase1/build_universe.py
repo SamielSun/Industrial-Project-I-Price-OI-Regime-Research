@@ -253,7 +253,7 @@ def main() -> int:
     ap.add_argument("--sample-end", required=True, help="样本截止日，必须是月末")
     ap.add_argument("--subset", nargs="+", default=None, help="只处理这些合约（冒烟）")
     ap.add_argument("--no-schema-note", action="store_true",
-                    help="跳过 exchangeInfo（闸 4 退化为只查兜底名单）")
+                    help="跳过 exchangeInfo（闸 4 失效，全部合约按加密资产放行）")
     ap.add_argument("--refresh-exchange-info", action="store_true",
                     help="强制联网重取 exchangeInfo 并覆盖快照（默认用快照；"
                          "快照不存在才联网）")
@@ -318,7 +318,8 @@ def main() -> int:
     ei_src = {"from": "skipped", "snapshot_path": "", "fetched_at": "", "digest": ""}
     if args.no_schema_note:
         info = {}
-        log("  --no-schema-note：跳过 exchangeInfo，闸 4 只查兜底名单")
+        log("  --no-schema-note：跳过 exchangeInfo —— 闸 4 失效，全部合约放行。"
+            "仅供离线跑通流程，不可用于正式产出。")
     else:
         info, ei_src = load_or_fetch_exchange_info(
             args.refresh_exchange_info,
@@ -337,12 +338,6 @@ def main() -> int:
 
     # ---- 稳定币（闸 1）----
     stable = set(cfg.stablecoin_bases)
-
-    # ---- 闸 4 的兜底名单（exchangeInfo 查不到的已下架合约）----
-    # exchangeInfo 只含【当前挂牌】的合约。实测 679 个评测对象里有 29 个查不到
-    # （全部是下架的加密资产），所以名单为空。若将来发现查不到的里面有非加密
-    # 资产，把 symbol 加到这里。见 guidance §3.1。
-    DELISTED_NON_CRYPTO: set[str] = set()
 
     # ---- 逐月 ----
     log("")
@@ -396,18 +391,17 @@ def main() -> int:
             g3a = (pd.notna(r["oi_cov"]) and r["oi_cov"] >= cfg.min_oi_coverage)
             g3b = r["oi_max_gap_h"] <= cfg.max_oi_gap_hours
             g3 = g3a and g3b
-            if rec is not None:
-                # 闸 4 的判据【只有分类字段】。代币化股票/ETF/商品/外汇是
-                # TRADIFI_PERPETUAL，合成指数永续是 PERPETUAL/INDEX，都被挡住。
-                # 故意的例外：PAXG/XAUT 被标成 PERPETUAL/COIN，按此判据放行 ——
-                # 它们是链上发行的加密原生合约（24/7、无收盘时段），
-                # 属于 note 所说的 "crypto perpetual futures"；
-                # 反之代币化股票有交易时段，闭市时 OI/资金费率语义会变。
-                g4 = (rec.get("contractType") == "PERPETUAL"
-                      and rec.get("underlyingType") == "COIN")
-            else:
-                # 已下架 → exchangeInfo 查不到。实测池里查不到的合约全是加密资产
-                g4 = s not in DELISTED_NON_CRYPTO
+            # 闸 4 的判据【只有分类字段】。代币化股票/ETF/商品/外汇是
+            # TRADIFI_PERPETUAL，3 个合成指数永续是 PERPETUAL/INDEX，都被挡住。
+            # 故意的例外：PAXG/XAUT 被标成 PERPETUAL/COIN，按此判据放行 ——
+            # 它们是链上发行的加密原生合约（24/7、无收盘时段），
+            # 属于 note 所说的 "crypto perpetual futures"；
+            # 反之代币化股票有交易时段，闭市时 OI/资金费率语义会变。
+            # 分类表里查不到的（实测 29 个）按加密资产处理：它们是已下架的合约
+            # （exchangeInfo 只含当前挂牌），而池里的非加密标的都是近年才上的，
+            # 不会出现在下架名单里。
+            g4 = rec is None or (rec.get("contractType") == "PERPETUAL"
+                                 and rec.get("underlyingType") == "COIN")
 
             reasons = []
             if not g1:
