@@ -3,7 +3,7 @@
 """
 fetch_market_data —— 为候选池合约下载全部可用历史，存成 raw 数据
 
-它在 Phase 1 中的位置：Step 3（见 phase1/guidance.md §1.1 进度表与 §4 流水线）。
+它在 Phase 1 中的位置：Step 3（见 phase1/guidance.md §2 处理流程）。
 
 做什么
 ------
@@ -52,7 +52,7 @@ OCEANUSDT / REEFUSDT / RENUSDT / UNFIUSDT）的 indexPrice 与 fundingRate
   python phase1/fetch_market_data.py --sample-end 2026-08-31 --list-only
   python phase1/fetch_market_data.py --sample-end 2026-08-31 --keep-cache
 
-依据：phase1/guidance.md §2（工程规则）§3（数据源）§5.3（下载参数）§8.3（缺失分类）
+依据：phase1/guidance.md §4.1（工程规则）§2.2 Step 3（数据源与路径）§6.4（下载参数）§4.4（缺失分类）
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # 项目根：
 import config as cfg_mod                                     # noqa: E402
 
 # ============================================================================
-# 常量（依据见 §5.3）
+# 常量（下载参数依据见 §6.4）
 # ============================================================================
 
 S3_API = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
@@ -111,7 +111,7 @@ MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 
-# 月频源：(名字, 是否有 {interval}/ 层)。依据 §3.2 —— 漏掉该层就 404。
+# 月频源：(名字, 是否有 {interval}/ 层)。漏掉该层就 404。
 MONTHLY_SOURCES = [
     ("klines", "1h"),
     ("markPriceKlines", "1h"),
@@ -120,7 +120,7 @@ MONTHLY_SOURCES = [
 ]
 DAILY_SOURCE = "metrics"
 
-# metrics 原始 8 列里只保留前两列（其余 6 列 2022 全年大面积为空，§7.3 决定不用）
+# metrics 原始 8 列里只保留前两列（其余 6 列 2022 全年大面积为空，故不存）
 METRICS_KEEP = ["create_time", "sum_open_interest"]
 
 MONTH_RE = re.compile(r"-(\d{4}-\d{2})\.zip$")
@@ -136,7 +136,7 @@ def log(msg: str) -> None:
 
 
 # ============================================================================
-# 网络层（§2 的两条工程规则）
+# 网络层（§4.1 的两条工程规则）
 # ============================================================================
 
 def quote_seg(seg: str) -> str:
@@ -205,7 +205,7 @@ def s3_keys(prefix: str) -> list[str]:
 def monthly_path(src: str, interval: str | None, sym: str, ym: str) -> str:
     """月频文件的 URL 路径。四个源的命名规则【不同】，不能套用。
 
-    实测（§3.2）：
+    实测：
       klines / markPriceKlines / indexPriceKlines
           monthly/{src}/{sym}/{itv}/{sym}-{itv}-{ym}.zip
       fundingRate（无 {itv}/ 层）
@@ -286,7 +286,7 @@ def enum_metrics(sym: str) -> set[str]:
 
 
 # ============================================================================
-# 解析（表头有无【逐文件检测】，不可按日期硬编码 —— §3.3）
+# 解析（表头有无【逐文件检测】，不可按日期硬编码 —— §4.3）
 # ============================================================================
 
 KLINES_COLS = ["open_time", "open", "high", "low", "close", "volume",
@@ -705,7 +705,7 @@ def main() -> int:
         run_pass(todo_m, "月频 klines/mark/index/funding")
         run_pass(todo_d, "日频 metrics (OI)")
 
-        # 补跑一轮未取得项（§5.3：把问题在同一次运行内解决）
+        # 补跑一轮未取得项（§6.4：把问题在同一次运行内解决）
         remote_of = {(j[0], j[1], j[2]): j[3] for j in todo_m + todo_d}
         retry_jobs = [j for j in todo_m + todo_d
                       if status.get((j[0], j[1], j[2])) == "retry_exhausted"]

@@ -3,7 +3,7 @@
 """
 build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
 
-它在 Phase 1 中的位置：Step 4（见 phase1/guidance.md §1.1 进度表与 §4 流水线）。
+它在 Phase 1 中的位置：Step 4（见 phase1/guidance.md §2 处理流程）。
 
 做什么
 ------
@@ -14,7 +14,7 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
     oi_1h           (symbol, ts)          5 列 —— 左连接到 klines 网格
     funding         (symbol, ts_funding)  4 列 —— 事件表，独立于网格
 
-核心设计（全部为已决策项，依据见 phase1/guidance.md §7.2）
+核心设计（全部为已决策项，依据见 phase1/guidance.md §2.2 Step 4）
 -----------------------------------------------------------
 1. **网格 = klines_1h 实际存在的 ts**。稀疏，不发明行。
    `features_1h`（Step 5）才密集化。
@@ -38,7 +38,7 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
    · mark/index 缺小时 → `NaN`（价格是连续量，填充等于发明数据）
    · OI 缺快照 → `NaN` + `oi_missing=True`（有这一列就是为了保留"缺"与"不存在"的区分）
 
-6. **全量重建**，不做增量（`layer2_built_at` 留到 §9 真正做增量时再加）。
+6. **全量重建**，不做增量（`layer2_built_at` 留到真正做增量时再加，见 guidance.md §7.4）。
 
 产出
 ----
@@ -50,7 +50,7 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
   python phase1/build_layer2.py --sample-end 2026-08-31
   python phase1/build_layer2.py --sample-end 2026-08-31 --subset BTCUSDT
 
-依据：phase1/guidance.md §6（闸）§7.2（四张表）§7.4（validate）§8（质量规则）
+依据：phase1/guidance.md §2.2 Step 4（四张表）§4（质量规则）§5.2（validate）
 """
 
 from __future__ import annotations
@@ -249,7 +249,7 @@ def build_symbol(sym: str, years: list[int]
     fu = read_monthly("fundingRate", sym)
     if fu is not None and not fu.empty:
         fu = fu.sort_values("ts", ignore_index=True)
-        # 毫秒位不恒为 0 —— 只能按整秒截断（§3.6）
+        # 毫秒位不恒为 0 —— 只能按整秒截断
         tf = fu["ts"].dt.floor("s")
         stats["funding毫秒非零"] = int((fu["ts"].dt.microsecond != 0).sum())
         f = pd.DataFrame({

@@ -3,12 +3,12 @@
 """
 build_candidate_pool —— 选出「后面要为哪些合约下数据」
 
-它在 Phase 1 中的位置：Step 0–2（见 phase1/guidance.md §1.1 进度表与 §4 流水线）。
+它在 Phase 1 中的位置：Step 0–2（见 phase1/guidance.md §2 处理流程）。
 
 做什么
 ------
   1. 枚举归档（S3 列表接口）→ 全部存在过的 USDT 永续合约
-  2. 硬过滤 → 剔非 USDT 本位、名称怪象、稳定币、代币化股票/商品
+  2. 硬过滤 → 剔非 USDT 本位、名称怪象、稳定币、非加密资产（股票/ETF/商品/外汇）
   3. 拉月频 klines（只为读 quote_volume）→ 过草稿闸 → 逐月算流动性排名
      → 取各月前 K → 并集 = 候选池
 
@@ -31,7 +31,7 @@ Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，
   python phase1/build_candidate_pool.py --sample-end 2026-08-31 --skip-download  # 只用缓存重算
   python phase1/build_candidate_pool.py --sample-end 2026-08-31 --subset A B C   # 冒烟/核验
 
-依据：phase1/guidance.md §3.1（枚举）、§6（四条闸与排名）、§5.3（下载参数）
+依据：phase1/guidance.md §2.2 Step 0（枚举）、§3（四条闸与排名）、§6.4（下载参数）
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ import config as cfg_mod                                     # noqa: E402
 # 不构造任何齐备的 DataFrame。schema 契约从 Step 4（建第 2 层表）起强制。
 
 # ============================================================================
-# 常量（依据见 §5.3）
+# 常量（下载参数依据见 §6.4）
 # ============================================================================
 
 S3_API = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
@@ -81,31 +81,27 @@ MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 
-# 闸 4：排除代币化传统金融资产（股票 / ETF / 商品 / 指数）。
+# 闸 4 的判据：只有 exchangeInfo 的分类字段，不设手工名单。
 #
-# 判据来自 exchangeInfo 的两个字段（实测于 2026-09）：
-#     contractType    PERPETUAL（加密）  vs  TRADIFI_PERPETUAL（传统金融）
-#     underlyingType  COIN（加密）       vs  EQUITY / KR_EQUITY / HK_EQUITY /
-#                                          CN_EQUITY / COMMODITY / PREMARKET /
-#                                          FX / INDEX
-#   判据：**contractType == "PERPETUAL" 且 underlyingType == "COIN"** 才算加密资产。
+#     contractType    PERPETUAL（加密）   vs  TRADIFI_PERPETUAL（传统金融）
+#     underlyingType  COIN（加密）        vs  EQUITY / HK_EQUITY / KR_EQUITY /
+#                                            CN_EQUITY / COMMODITY / PREMARKET /
+#                                            FX / INDEX
+#     通过 ⇔ contractType == "PERPETUAL" 且 underlyingType == "COIN"
 #
-# 为什么不用手工名单：首版名单只有 35 个，漏进 21 个代币化标的；
-# 补齐后仍未覆盖 GOOGLUSDT / SPYUSDT / NBISUSDT，且漏掉 25 个当时不在池里的。
-# 手工名单的结构性缺陷是【池子按排名滚动，新标的随时可能进池】——
-# 每轮都要重新人工核对，必然出错。
+# 为什么不用手工名单：首版列了 35 个，漏进 21 个代币化标的；补齐后仍漏
+# GOOGLUSDT / SPYUSDT / NBISUSDT，另漏 25 个当时不在池里的。结构性缺陷是
+# 【池子按排名滚动，新标的随时进池】—— 每轮都要人工重核，必然出错。
 #
-# 这个判据同时排掉了 PERPETUAL/INDEX 的指数永续（DEFIUSDT / BTCDOMUSDT /
-# ALLUSDT / BLUEBIRDUSDT）—— 它们是合成品，不是单一加密资产。
+# 该判据同时排掉 PERPETUAL/INDEX 的合成指数永续（DEFIUSDT / BTCDOMUSDT /
+# ALLUSDT）—— 合成品，不是单一资产。
 #
-# ⚠️ 局限：exchangeInfo 只含【当前挂牌】的合约。已下架的在里面查不到，
-#    只能靠下面的兜底名单。兜底名单很短，因为 2026-09 之前的代币化标的
-#    基本都已下架或改判，而实测池里那些查不到的合约全部是加密资产。
-DELISTED_NON_CRYPTO: set[str] = set()   # 目前为空，见上方说明
-
-# 允许的 exchangeInfo 分类（其余一律视为非加密资产）
-CRYPTO_CONTRACT_TYPE = "PERPETUAL"
-CRYPTO_UNDERLYING_TYPE = "COIN"
+# 故意的例外：PAXGUSDT / XAUTUSDT 被标成 PERPETUAL/COIN，按此判据放行。
+# 它们是链上发行的加密原生合约（24/7、无收盘时段），结构上与加密永续无区别。
+#
+# ⚠️ 局限：exchangeInfo 只含【当前挂牌】的合约，已下架的查不到。
+#    实测池里查不到的合约全部是加密资产，故不另设名单；若将来发现查不到的
+#    里面有非加密资产，在这里补一个 {symbol} 集合。
 
 
 
@@ -243,32 +239,25 @@ def hard_filter(usdt: set[str], info: dict, cfg: cfg_mod.Config,
         rec = info.get(s, {})
         base = rec.get("baseAsset") or ""
         quote = rec.get("quoteAsset") or ""
-        # 闸 0a：非 USDT 本位（USDC/BUSD）
+        # 过滤：非 USDT 本位（USDC / BUSD）
         if quote and quote != "USDT":
             drop(s, f"非 USDT 本位（{quote}）")
             continue
-        # 闸 0b：名称怪象（交割合约、SETTLED 后缀）
+        # 过滤：名称怪象（交割合约、SETTLED 后缀）
         if "_" in s or "SETTLED" in s:
             drop(s, "交割合约/SETTLED 后缀")
             continue
-        # 闸 1：稳定币（按 base_asset，不按符号字面）
+        # 过滤：稳定币（按 base_asset，不按符号字面）
+        #      —— 对应资格闸 1，只是提前在 Step 1 做掉
         if base and base in cfg.stablecoin_bases:
             drop(s, "稳定币")
             continue
-        # 闸 4：非加密资产 —— 判据【只有分类字段】，不设额外的名字黑名单。
-        # 代币化股票/ETF/商品/外汇是 TRADIFI_PERPETUAL，天然被挡住（实测 212 个）；
-        # 3 个合成指数永续是 PERPETUAL/INDEX，也被挡住。
-        # 故意的例外：PAXGUSDT / XAUTUSDT 被标成 PERPETUAL/COIN，按此判据放行 ——
-        # 它们是链上发行的加密原生合约（24/7 交易，无收盘时段），
-        # 结构上与加密永续无区别，属于 note 所说的 "crypto perpetual futures"。
-        # 反之代币化股票有交易时段，闭市时 OI/资金费率语义会变，必须挡掉。
-        if s in DELISTED_NON_CRYPTO:
-            drop(s, "非加密资产（兜底名单）")
-            continue
+        # 过滤：非加密资产 —— 对应资格闸 4，判据只有分类字段
+        #      （理由与例外见文件头）
         if rec:
             ct = rec.get("contractType")
             ut = rec.get("underlyingType")
-            if ct != CRYPTO_CONTRACT_TYPE or ut != CRYPTO_UNDERLYING_TYPE:
+            if ct != "PERPETUAL" or ut != "COIN":
                 drop(s, f"非加密资产（{ct}/{ut}）")
                 continue
         kept.append(s)
@@ -339,7 +328,7 @@ def download_one(sym: str, ym: str) -> tuple[str, str, str]:
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".zip.part")
     tmp.write_bytes(data)
-    os.replace(tmp, p)                       # 原子写（§5.3）
+    os.replace(tmp, p)                       # 原子写
     return sym, ym, "ok"
 
 
@@ -354,7 +343,7 @@ def read_quote_volumes(sym: str, ym: str) -> list[float] | None:
     lines = body.strip().split("\n")
     if not lines:
         return None
-    # 表头有无必须【逐文件检测】，不可按日期硬编码（§3.3）
+    # 表头有无必须【逐文件检测】，不可按日期硬编码（§4.3）
     first = lines[0].split(",", 1)[0].strip()
     rows = lines[1:] if not first.lstrip("-").replace(".", "").isdigit() else lines
     out = []
@@ -384,7 +373,7 @@ def build_monthly_stats(sym: str, months: list[str]) -> tuple[dict[str, float], 
 # ============================================================================
 # 草稿闸（本脚本能做的两条）—— 其余需要 OI 数据，归 Step 3 / Step 6
 #
-# §6.2 的排名是「对通过资格闸的合约排名」。本脚本只有 klines，所以只能做：
+# §3.5 的排名是「对通过资格闸的合约排名」。本脚本只有 klines，所以只能做：
 #   草稿闸 A（对应闸 2「历史不足」）：到该月初为止，窗口内已有 >= N 个月数据
 #   草稿闸 B（对应闸 2 的存在性    ）：上一个月有效小时数 >= 24*15
 #
@@ -399,7 +388,7 @@ DRAFT_MIN_BARS_IN_PREV_MONTH = 24 * 15  # = 360 小时，只要上个月还活�
 
 def draft_gate_ok(liq: dict[str, float], bars: dict[str, int],
                   months: list[str], i: int) -> bool:
-    """草稿闸 A + B。只用到第 i 个月【之前】的数据 —— 无前视（§6.2）。"""
+    """草稿闸 A + B。只用到第 i 个月【之前】的数据 —— 无前视（§3.5）。"""
     if i < DRAFT_MIN_PRIOR_MONTHS:
         return False
     prior = sum(1 for m in months[:i] if m in liq)      # 闸 A
@@ -471,7 +460,7 @@ def main() -> int:
     log(f"\nStep 2  下载 {len(todo)} 个月频 klines…")
     statuses: dict[str, int] = {}
     # 逐文件的最终状态。必须显式记录 —— 靠"缓存文件在不在"反推会把
-    # 【已确认的 404】和【网络抖动】混为一谈，两者在缺失报告里处置完全不同（§8.3）。
+    # 【已确认的 404】和【网络抖动】混为一谈，两者在缺失报告里处置完全不同（§4.4）。
     final_status: dict[tuple[str, str], str] = {
         (s_, ym_): ("cached" if cache_path(s_, ym_).exists() else "retry_exhausted")
         for s_, ym_ in todo}
@@ -493,7 +482,7 @@ def main() -> int:
                         f"已用 {time.time()-t0:.0f}s")
         log(f"        首轮完成，耗时 {time.time()-t0:.0f}s  状态 {statuses}")
 
-        # 对未取得项补跑一轮（§5.3：把问题在同一次运行内解决）
+        # 对未取得项补跑一轮（§6.4：把问题在同一次运行内解决）
         retry = [(s, ym) for (s, ym) in todo if not cache_path(s, ym).exists()]
         if retry:
             log(f"        对 {len(retry)} 个未取得项补跑一轮…")
@@ -535,7 +524,7 @@ def main() -> int:
     pd.DataFrame({"symbol": sorted(union)}).to_csv(tmp, index=False)
     os.replace(tmp, CANDIDATE_POOL)
 
-    # manifest：逐文件状态（§9.3 的核心字段），供断点续传与排查
+    # manifest：逐文件状态（§7.3 的核心字段），供断点续传与排查
     now = datetime.now(timezone.utc).isoformat()
     rows = []
     for s, ym in todo:
@@ -588,7 +577,7 @@ def main() -> int:
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, RUN_INFO)
 
-    # ---- 运行摘要（§8.3：★ 未取得 绝不能算进缺失）----
+    # ---- 运行摘要（§4.4：★ 未取得 绝不能算进缺失）----
     cnt: dict[str, int] = {}
     for st in final_status.values():
         cnt[st] = cnt.get(st, 0) + 1
@@ -614,7 +603,7 @@ def main() -> int:
     log(f"  -> {MANIFEST}")
     log("\n  下一步（Step 3）需要你核对：")
     log("    · 候选池规模是否合理")
-    log("    · 代币化股票是否已全部剔除（见 §6.1 的名单，可能不全）")
+    log("    · 代币化股票是否已全部剔除（闸 4 判据见文件头；实测池里分类表查不到的合约全是加密资产）")
     return 0
 
 

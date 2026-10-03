@@ -3,7 +3,7 @@
 """
 build_qa —— Step 6 的第二部分：缺失数据报告 + 数据字典 + 校验和 + 复现命令
 
-它在 Phase 1 中的位置：D1 的产出物部分（见 phase1/guidance.md §8.3 与 §12）。
+它在 Phase 1 中的位置：D1 的产出物部分（见 phase1/guidance.md §2.2 Step 6b 与 §5）。
 
 做什么
 ------

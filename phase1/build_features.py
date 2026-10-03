@@ -3,7 +3,7 @@
 """
 build_features —— 建 features_1h（19 列密集网格）
 
-它在 Phase 1 中的位置：Step 5（见 phase1/guidance.md §1.1 进度表与 §4 流水线）。
+它在 Phase 1 中的位置：Step 5（见 phase1/guidance.md §2 处理流程）。
 
 做什么
 ------
@@ -42,7 +42,7 @@ build_features —— 建 features_1h（19 列密集网格）
   python phase1/build_features.py --out-root /tmp/x --l2-root <正式 data> \\
       --subset BTCUSDT --sample-end 2026-08-31      # 冒烟
 
-依据：phase1/guidance.md §7.3（features_1h）§7.4（validate）§8.2.1（死尾）
+依据：phase1/guidance.md §2.2 Step 5（features_1h）§4.2（死尾）§5.2（validate）
 """
 
 from __future__ import annotations

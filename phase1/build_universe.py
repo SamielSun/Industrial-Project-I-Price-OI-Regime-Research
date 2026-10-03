@@ -3,7 +3,7 @@
 """
 build_universe —— Step 6：逐期资格判定 + PIT 成员集 + master 表
 
-它在 Phase 1 中的位置：Step 6（见 phase1/guidance.md §1.1 进度表与 §6）。
+它在 Phase 1 中的位置：Step 6（见 phase1/guidance.md §2.2 Step 6a 与 §3）。
 
 做什么
 ------
@@ -339,8 +339,9 @@ def main() -> int:
     stable = set(cfg.stablecoin_bases)
 
     # ---- 闸 4 的兜底名单（exchangeInfo 查不到的已下架合约）----
-    # exchangeInfo 只含当前挂牌的合约。实测池里查不到的那些【全部】是加密资产，
-    # 所以名单为空；若将来发现查不到的里面有非加密资产，加进来。
+    # exchangeInfo 只含【当前挂牌】的合约。实测 679 个评测对象里有 29 个查不到
+    # （全部是下架的加密资产），所以名单为空。若将来发现查不到的里面有非加密
+    # 资产，把 symbol 加到这里。见 guidance §3.1。
     DELISTED_NON_CRYPTO: set[str] = set()
 
     # ---- 逐月 ----

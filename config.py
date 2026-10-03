@@ -1,13 +1,13 @@
 """
 Phase 1 设计参数（研究设计的一部分，跨运行稳定）。
 
-原则（phase1/guidance.md §12.5）：
+原则（phase1/guidance.md §5.3 与 §0）：
   · 本文件只放【设计参数】—— 定义"研究是什么"。
   · 运行参数（--sample-end、--no-refresh、--symbols）走 CLI，不进本文件。
     理由：若把 sample_end 写进这里，两次运行会共用同一份 config.py 却内容不同，
     事后无法回答"这个结果是用哪套设计跑的"。
 
-所有数值的依据见 phase1/guidance.md §4。
+所有数值的依据见 phase1/guidance.md §3。
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class Config:
     BTC 另有 2020-09..2021-11 的完整历史，但【不做附录、不进任何产出】（已决策）。
     """
 
-    # ---- Universe 构造（§7）----
+    # ---- Universe 构造（§3）----
     K: int = 50
     """成员数"""
 
@@ -48,12 +48,12 @@ class Config:
     refresh_months: int = 1
     """成员集刷新频率（月）"""
 
-    # ---- 四条资格闸（§6.1）----
+    # ---- 四条资格闸（§3.1）----
     min_history_bars: int = 2160
     """闸 2①：截至月初已有的 1h bar 数下限（= 90 天）。
 
-    note 要求 regime 阈值用 rolling 60/70 分位（§6）、funding 状态用 trailing
-    25/75/90 分位（§7）。2160 个观测足以估计 p90，720（30 天）太薄。
+    note 要求 regime 阈值用 rolling 60/70 分位、funding 状态用 trailing
+    25/75/90 分位。2160 个观测足以估计 p90，720（30 天）太薄。
     代价：样本前 3 个月所有合约都"历史不足"，成员集为空。
 
     ⚠️ 这一条【单独不够】—— 合约死后 bar 数不再增长而阈值固定，于是永远通过。
@@ -90,10 +90,10 @@ class Config:
     # ---- 路径与IO（非设计参数，但需集中管理）----
     parquet_compression: str = "zstd"
     event_lookbacks: tuple[int, ...] = (1, 4, 8, 24)
-    """事件 horizon（小时）。仅登记，Phase 1 不使用（§2.3 派生量放 Phase 2）。"""
+    """事件 horizon（小时）。仅登记，Phase 1 不使用（派生量放 Phase 2，见 §2.2 Step 5）。"""
 
     def snapshot(self) -> dict[str, Any]:
-        """设计参数的完整快照，供写入 00_config/sample_end.json（§12.5）。"""
+        """设计参数的完整快照，供写入 00_config/sample_end.json（§5.3）。"""
         d = dataclasses.asdict(self)
         d["stablecoin_bases"] = list(self.stablecoin_bases)
         d["event_lookbacks"] = list(self.event_lookbacks)
@@ -104,7 +104,7 @@ CONFIG = Config()
 
 
 # ============================================================================
-# --sample-end 校验（§12.5：强制显式、必须是月末日）
+# --sample-end 校验（§5.3：强制显式、必须是月末日）
 # ============================================================================
 
 def is_month_end(s: str) -> bool:
@@ -121,7 +121,7 @@ def last_complete_month(today: date | None = None) -> date:
     """今天之前最后一个【完整】月的月末日。
 
     注意：这只是给人工参考的便利函数。--sample-end 必须显式传入，
-    不存在自动取值（§12.5：强制显式使每个结果必然携带样本边界）。
+    不存在自动取值（§5.3：强制显式使每个结果必然携带样本边界）。
     """
     today = today or datetime.now().date()
     first_of_this_month = today.replace(day=1)
@@ -145,15 +145,15 @@ def validate_sample_end(s: str, cfg: Config = CONFIG) -> None:
     """校验 --sample-end。通过则静默返回，否则抛 ConfigViolation。
 
     规则：
-      1. 必须提供（该参数必填且无默认值，§12.5）
+      1. 必须提供（该参数必填且无默认值，§5.3）
       2. 必须是合法 ISO 日期
-      3. 必须是月末日（因 §1.6.6 只用完整月）
+      3. 必须是月末日（因只用完整月）
       4. 不早于 sample_start
     """
     problems: list[str] = []
 
     if not isinstance(s, str) or not s:
-        raise ConfigViolation(["--sample-end 未提供。该参数【必填且无默认值】（§12.5）。"])
+        raise ConfigViolation(["--sample-end 未提供。该参数【必填且无默认值】（§5.3）。"])
 
     try:
         d = date.fromisoformat(s)
@@ -165,7 +165,7 @@ def validate_sample_end(s: str, cfg: Config = CONFIG) -> None:
     if not is_month_end(s):
         last = calendar.monthrange(d.year, d.month)[1]
         problems.append(
-            f'--sample-end="{s}" 不是月末日。因 §1.6.6 只用完整月，'
+            f'--sample-end="{s}" 不是月末日。因只用完整月，'
             f"本月的合法取值为 {d.year:04d}-{d.month:02d}-{last:02d}。"
         )
 
