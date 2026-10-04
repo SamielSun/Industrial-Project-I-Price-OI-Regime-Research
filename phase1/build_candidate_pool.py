@@ -227,10 +227,11 @@ def persist_archive(syms: set[str], info: dict) -> Path:
     """把归档枚举结果落盘 —— Step 0 的产出必须持久化。
 
     为什么必须有这个文件（而不是只打日志）：
-      S3 列表接口在 VPN 下【不稳定】—— 同一请求时返回 22 个键、时返回 0 个键
-      （见 guidance §6.4）。所以"归档里有几个合约"这个数本身就可能是一次
-      不完整枚举的结果。实测两次枚举得到 1,057 与 893，差 164 个。
+      枚举结果曾经在不同运行之间不一致 —— 实测一次 893、一次 1,057，差 164 个。
+      所以"归档里有几个合约"这个数本身就可能是一次不完整枚举的结果。
       不落盘就无法对账，也无从判断某次运行是不是漏了合约。
+      （2026-10-04 连跑 3 次均为 1,057，当前稳定；但那两次不一致发生过，
+        且合约数只增不减，所以落盘这件事不能省。）
 
     同时记录【非 USDT 结尾】的合约，它们是 Step 1 第一条判据的剔除对象 ——
     只存 USDT 结尾的话，这条判据的剔除数就永远算不出来。
@@ -465,7 +466,7 @@ def main() -> int:
     # ---- Step 0/1 ----
     syms, usdt, info = enumerate_archive()
     # Step 0 的产出落盘：归档清单是"契约总数"的唯一凭据，
-    # 只打日志就无从对账（S3 枚举不稳定，实测两次差 164 个）
+    # 只打日志就无从对账（枚举结果曾一次 893、一次 1,057）
     ap_path = persist_archive(syms, info)
     log(f"        归档清单已落盘 {ap_path.name}（{len(syms)} 行）")
     kept, dropped = hard_filter(usdt, info, cfg, subset=args.subset)
@@ -616,8 +617,8 @@ def main() -> int:
         "sample_start": cfg.sample_start,
         "config_snapshot": cfg.snapshot(),
         "run_at": datetime.now(timezone.utc).isoformat(),
-        # S3 枚举不稳定，所以两个数都要留：合约总数（Step 0 的产出）与
-        # 其中的 USDT 结尾数（Step 1 第一条判据的输入）。
+        # 两个数都要留：合约总数（Step 0 的产出）与其中的 USDT 结尾数
+        # （Step 1 第一条判据的输入）。枚举结果曾出现过不一致，故都要落盘。
         "archive_contracts": len(syms),
         "archive_usdt": len(usdt),
         "eligible_after_hard_filter": len(kept),
