@@ -140,10 +140,13 @@ def fetch_exchange_info() -> dict[str, dict]:
 # exchangeInfo 快照（闸 4 的判据必须可复现）
 # ============================================================================
 
-# 快照只存闸 4 用到的两个字段。全量 payload 有 9 个顶层键 × 920 条 × 40 个字段
-# （几 MB），而闸 4 只读 contractType / underlyingType —— 存全量会把一个
-# 判定表的快照变成噪声。
-EI_FIELDS = ("contractType", "underlyingType")
+# 快照存四个字段：闸 4 判据（contractType / underlyingType）+
+# Step 1 硬过滤需要的（baseAsset / quoteAsset）。
+# 为什么不存全量：全量 payload 是 9 个顶层键 × 920 条 × 40 个字段（几 MB），
+# 绝大部分与判据无关。但也不能只存闸 4 要的两个 —— 实测这样会导致
+# **Step 1 的过滤明细无法从产出重现**（"非 USDT 本位"要看 quoteAsset，
+# "稳定币"要看 baseAsset），于是 893 → 679 这条链对不上账。
+EI_FIELDS = ("contractType", "underlyingType", "baseAsset", "quoteAsset")
 
 
 def ei_digest(info: dict[str, dict]) -> str:
