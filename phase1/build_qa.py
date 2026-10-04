@@ -290,8 +290,10 @@ def main() -> int:
     # Step 6b 是最后一步，由它强制对齐。
     prev["config_snapshot"] = cfg.snapshot()
     RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
-    RUN_INFO.write_text(json.dumps(prev, ensure_ascii=False, indent=2),
-                        encoding="utf-8")
+    tmp_ri = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
+    tmp_ri.write_text(json.dumps(prev, ensure_ascii=False, indent=2),
+                      encoding="utf-8")
+    os.replace(tmp_ri, RUN_INFO)
     log("    -> 00_config/sample_end.json         config_snapshot 已对齐 config.py")
 
     # ---- 7. 校验和（最后一个写盘动作）----
@@ -514,8 +516,13 @@ def checksum_targets() -> list:
     """列出参与校验和的全部文件，顺序固定（供计数与哈希共用）。
 
     含 `raw/` —— 它也是产出（Step 3 下载的源数据），校验它能查出归档与本地不一致。
-    排除 `checksums.sha256` 自身与写盘中的 `.part` 临时文件。
-    1,440 个文件 / 2.2 GB，实测约 5 秒。
+    排除三类：
+      · `checksums.sha256` 自身
+      · 写盘中的 `.part` 临时文件
+      · `00_config/_p11_cache/` —— Step 0–2 的月频 klines 下载缓存。
+        它是【临时】的，不是产出；实测它会把校验和从 1,441 个文件顶到 20,315 个，
+        掩盖真正该被校验的产出。
+    实测排除后 1,441 个文件 / 2.2 GB，约 5 秒。
     """
     targets = []
     for sub in ("00_config", "raw", "01_layer2", "02_features",
@@ -523,8 +530,10 @@ def checksum_targets() -> list:
         p = DATA / sub
         if p.exists():
             targets += [f for f in sorted(p.rglob("*")) if f.is_file()]
+    cache = DATA / "00_config" / "_p11_cache"
     return [f for f in targets
-            if f.name != "checksums.sha256" and f.suffix != ".part"]
+            if f.name != "checksums.sha256" and f.suffix != ".part"
+            and cache not in f.parents]
 
 
 def verify_checksums() -> int:

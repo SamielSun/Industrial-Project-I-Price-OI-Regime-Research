@@ -492,7 +492,19 @@ def main() -> int:
     # ---- 运行元信息 ----
     RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
     import json
-    RUN_INFO.write_text(json.dumps({
+    # 【读-改-写】，不能整体重写：这个文件是全流程共用的运行元信息，
+    # Step 0–2 写的 archive_contracts / archive_usdt 等键也在里面。
+    # 早期这里是 json.dumps({...}) 整体覆盖，实测把 Step 0–2 的记录全冲掉了
+    # （重跑一次后 archive_contracts 就消失）。
+    info_prev: dict = {}
+    if RUN_INFO.exists():
+        try:
+            info_prev = json.loads(RUN_INFO.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            log(f"  ✗ {RUN_INFO.name} 解析失败：{e}")
+            log("    拒绝覆盖 —— 它里面还有 Step 0–2 的元信息。请先修复或移走该文件。")
+            return 5
+    info_prev.update({
         "sample_end": args.sample_end,
         "sample_start": cfg.sample_start,
         "config_snapshot": cfg.snapshot(),
@@ -502,7 +514,11 @@ def main() -> int:
         "chunks_per_table": written,
         "rows_by_table": dict(rows_total),
         "grid_consistent": ok,
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    })
+    tmp_ri = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
+    tmp_ri.write_text(json.dumps(info_prev, ensure_ascii=False, indent=2),
+                      encoding="utf-8")
+    os.replace(tmp_ri, RUN_INFO)
 
     log("")
     log("=" * 78)

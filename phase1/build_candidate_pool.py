@@ -20,6 +20,7 @@ Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，实
 
 产出
 ----
+  data/00_config/archive_contracts.csv     Step 0 的归档清单（逐合约一行 + 分类）
   data/03_reference/candidate_pool.csv     候选池名单（一列 symbol）
   data/00_config/manifest.parquet          逐文件下载状态，供断点续传
 
@@ -78,6 +79,7 @@ DATA = Path(os.environ.get("P11_DATA_ROOT", ROOT / "data"))
 CACHE_DIR = DATA / "00_config" / "_p11_cache"      # 原始 zip 暂存（断点续传靠它）
 MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
+ARCHIVE = DATA / "00_config" / "archive_contracts.csv"    # Step 0 的产出
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 # 闸 4 的判据：只有 exchangeInfo 的分类字段，不设手工名单。
@@ -219,6 +221,38 @@ def enumerate_archive() -> tuple[set[str], set[str], dict]:
     usdt = {s for s in syms if s.endswith("USDT")}
     log(f"        以 USDT 结尾 {len(usdt)}   非 USDT 结尾 {len(syms)-len(usdt)}")
     return syms, usdt, info
+
+
+def persist_archive(syms: set[str], info: dict) -> Path:
+    """把归档枚举结果落盘 —— Step 0 的产出必须持久化。
+
+    为什么必须有这个文件（而不是只打日志）：
+      S3 列表接口在 VPN 下【不稳定】—— 同一请求时返回 22 个键、时返回 0 个键
+      （见 guidance §6.4）。所以"归档里有几个合约"这个数本身就可能是一次
+      不完整枚举的结果。实测两次枚举得到 1,057 与 893，差 164 个。
+      不落盘就无法对账，也无从判断某次运行是不是漏了合约。
+
+    同时记录【非 USDT 结尾】的合约，它们是 Step 1 第一条判据的剔除对象 ——
+    只存 USDT 结尾的话，这条判据的剔除数就永远算不出来。
+    """
+    rows = []
+    for s in sorted(syms):
+        rec = info.get(s, {})
+        rows.append({
+            "symbol": s,
+            "is_usdt": s.endswith("USDT"),
+            "contract_type": rec.get("contractType") or "",
+            "underlying_type": rec.get("underlyingType") or "",
+            "base_asset": rec.get("baseAsset") or "",
+            "quote_asset": rec.get("quoteAsset") or "",
+            # 查不到 = 已下架（exchangeInfo 只含当前挂牌）
+            "in_exchange_info": bool(rec),
+        })
+    df = pd.DataFrame(rows)
+    tmp = ARCHIVE.with_name(f"{ARCHIVE.name}.{os.getpid()}.part")
+    df.to_csv(tmp, index=False)
+    os.replace(tmp, ARCHIVE)
+    return ARCHIVE
 
 
 def hard_filter(usdt: set[str], info: dict, cfg: cfg_mod.Config,
@@ -429,7 +463,11 @@ def main() -> int:
     t_start = time.time()
 
     # ---- Step 0/1 ----
-    _, usdt, info = enumerate_archive()
+    syms, usdt, info = enumerate_archive()
+    # Step 0 的产出落盘：归档清单是"契约总数"的唯一凭据，
+    # 只打日志就无从对账（S3 枚举不稳定，实测两次差 164 个）
+    ap_path = persist_archive(syms, info)
+    log(f"        归档清单已落盘 {ap_path.name}（{len(syms)} 行）")
     kept, dropped = hard_filter(usdt, info, cfg, subset=args.subset)
 
     # ---- 可用月份（S3 列表，一次拿全）----
@@ -562,18 +600,32 @@ def main() -> int:
     n_fail = int((mf["status"] != "ok").sum())
     log(f"\nmanifest -> {MANIFEST}  ({len(mf):,} 行，非 ok {n_fail:,})")
 
-    # 原子写：sample_end.json 里存着 config_snapshot，撕裂会让下游读不到设计参数。
+    # 原子写 + 【读-改-写】：sample_end.json 是全流程共用的运行元信息，
+    # Step 3–6b 各自往里写自己的 step_* 键。整体覆盖会把它们冲掉。
     tmp = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
-    tmp.write_text(json.dumps({
+    info_prev: dict = {}
+    if RUN_INFO.exists():
+        try:
+            info_prev = json.loads(RUN_INFO.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            log(f"  ✗ {RUN_INFO.name} 解析失败：{e}")
+            log("    拒绝覆盖 —— 它里面还有其他步骤的元信息。请先修复或移走该文件。")
+            return 5
+    info_prev.update({
         "sample_end": args.sample_end,
         "sample_start": cfg.sample_start,
         "config_snapshot": cfg.snapshot(),
         "run_at": datetime.now(timezone.utc).isoformat(),
-        "archive_contracts": len(usdt),
+        # S3 枚举不稳定，所以两个数都要留：合约总数（Step 0 的产出）与
+        # 其中的 USDT 结尾数（Step 1 第一条判据的输入）。
+        "archive_contracts": len(syms),
+        "archive_usdt": len(usdt),
         "eligible_after_hard_filter": len(kept),
         "candidate_pool_size": len(union),
         "download_status": statuses if not args.skip_download else {},
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    })
+    tmp.write_text(json.dumps(info_prev, ensure_ascii=False, indent=2),
+                   encoding="utf-8")
     os.replace(tmp, RUN_INFO)
 
     # ---- 运行摘要（§4.4：★ 未取得 绝不能算进缺失）----

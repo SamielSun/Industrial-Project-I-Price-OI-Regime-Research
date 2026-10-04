@@ -642,6 +642,82 @@ def main() -> int:
             if buf_rows[k]:
                 flush_one(k)
 
+    cols = ["source", "symbol", "period", "granularity", "remote_path",
+            "filename", "status", "bytes", "downloaded_at", "raw_written_at"]
+
+    # persist 必须定义在 run_pass 之前 —— run_pass 中途会调用它落盘进度，
+    # 而 def 语句要执行到才绑定名字（曾因此 NameError）。
+    def persist(final: bool = False) -> None:
+        """把当前进度写进 manifest（原子写）。
+
+        必须能【中途反复调用】：原来只在全部跑完后写一次，于是 SIGKILL / 断电 /
+        未捕获异常会丢掉所有 raw_written_at 戳，而缓存早就被 drop_cache 删了 ——
+        下次重跑要把已经下过的几十万个文件全部重下。
+        """
+        now_ = datetime.now(timezone.utc).isoformat()
+        rows_ = []
+        for src_, s_, period_, remote_ in jobs:
+            key_ = (src_, s_, period_)
+            rows_.append({
+                "source": src_,
+                "symbol": s_,
+                "period": period_,
+                "granularity": "daily" if src_ == DAILY_SOURCE else "monthly",
+                "remote_path": remote_,
+                "filename": remote_.rsplit("/", 1)[-1],
+                "status": status.get(key_, "retry_exhausted"),
+                "bytes": size.get(key_, 0),
+                "downloaded_at": now_ if status.get(key_) == "ok" else "",
+                "raw_written_at": written.get(key_, ""),
+            })
+        mf_ = pd.DataFrame(rows_, columns=cols)
+        if MANIFEST.exists():
+            old_ = pd.read_parquet(MANIFEST)
+            for c_ in cols:
+                if c_ not in old_.columns:
+                    old_[c_] = ""
+            keys_ = set(zip(mf_["source"], mf_["symbol"], mf_["period"],
+                            mf_["granularity"]))
+            keep_ = [tuple(r) not in keys_ for r in
+                     old_[["source", "symbol", "period", "granularity"]]
+                     .itertuples(index=False)]
+            mf_ = pd.concat([old_[keep_][cols], mf_], ignore_index=True)
+        MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+        tmp_ = MANIFEST.with_name(MANIFEST.name + f".{os.getpid()}.part")
+        mf_.to_parquet(tmp_, engine="pyarrow", compression="zstd")
+        os.replace(tmp_, MANIFEST)
+        if not final:
+            return
+        n_written_ = sum(1 for k in jobs if written.get((k[0], k[1], k[2])))
+        RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
+        # 【读-改-写】：这个文件全流程共用，Step 0–2 写的 archive_contracts /
+        # archive_usdt 等键必须留住。早期这里整体覆盖，实测把它们冲掉了。
+        info_prev_: dict = {}
+        if RUN_INFO.exists():
+            try:
+                info_prev_ = json.loads(RUN_INFO.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as e:
+                log(f"  ✗ {RUN_INFO.name} 解析失败：{e} —— 拒绝覆盖")
+                raise
+        info_prev_.update({
+            "sample_end": args.sample_end,
+            "sample_start": cfg.sample_start,
+            "config_snapshot": cfg.snapshot(),
+            "step": "fetch_market_data",
+            "run_at": now_,
+            "interrupted": interrupted,
+            "candidate_pool_size": len(pool),
+            "files_total": len(jobs),
+            "files_written": n_written_,
+            "files_per_source": dict(by_src),
+            "status_counts": {"ok": n_ok, "confirmed_404": n_404,
+                              "retry_exhausted": n_retry},
+        })
+        tmp2_ = RUN_INFO.with_name(RUN_INFO.name + f".{os.getpid()}.part")
+        tmp2_.write_text(json.dumps(info_prev_, ensure_ascii=False, indent=2),
+                         encoding="utf-8")
+        os.replace(tmp2_, RUN_INFO)
+
     def run_pass(todo, label: str) -> None:
         """下载 + 就地解压 + 按合约落盘。一遍过，无第二遍读盘。"""
         nonlocal n_ok, n_404, n_retry
@@ -727,67 +803,7 @@ def main() -> int:
 
     # ---- manifest ----
     now = datetime.now(timezone.utc).isoformat()
-    cols = ["source", "symbol", "period", "granularity", "remote_path",
-            "filename", "status", "bytes", "downloaded_at", "raw_written_at"]
 
-    def persist(final: bool = False) -> None:
-        """把当前进度写进 manifest（原子写）。
-
-        必须能【中途反复调用】：原来只在全部跑完后写一次，于是 SIGKILL / 断电 /
-        未捕获异常会丢掉所有 raw_written_at 戳，而缓存早就被 drop_cache 删了 ——
-        下次重跑要把已经下过的几十万个文件全部重下。
-        """
-        rows_ = []
-        for src_, s_, period_, remote_ in jobs:
-            key_ = (src_, s_, period_)
-            rows_.append({
-                "source": src_,
-                "symbol": s_,
-                "period": period_,
-                "granularity": "daily" if src_ == DAILY_SOURCE else "monthly",
-                "remote_path": remote_,
-                "filename": remote_.rsplit("/", 1)[-1],
-                "status": status.get(key_, "retry_exhausted"),
-                "bytes": size.get(key_, 0),
-                "downloaded_at": now if status.get(key_) == "ok" else "",
-                "raw_written_at": written.get(key_, ""),
-            })
-        mf_ = pd.DataFrame(rows_, columns=cols)
-        if MANIFEST.exists():
-            old_ = pd.read_parquet(MANIFEST)
-            for c_ in cols:
-                if c_ not in old_.columns:
-                    old_[c_] = ""
-            keys_ = set(zip(mf_["source"], mf_["symbol"], mf_["period"],
-                            mf_["granularity"]))
-            keep_ = [tuple(r) not in keys_ for r in
-                     old_[["source", "symbol", "period", "granularity"]]
-                     .itertuples(index=False)]
-            mf_ = pd.concat([old_[keep_][cols], mf_], ignore_index=True)
-        MANIFEST.parent.mkdir(parents=True, exist_ok=True)
-        tmp_ = MANIFEST.with_name(MANIFEST.name + f".{os.getpid()}.part")
-        mf_.to_parquet(tmp_, engine="pyarrow", compression="zstd")
-        os.replace(tmp_, MANIFEST)
-        if not final:
-            return
-        n_written_ = sum(1 for k in jobs if written.get((k[0], k[1], k[2])))
-        RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
-        tmp2_ = RUN_INFO.with_name(RUN_INFO.name + f".{os.getpid()}.part")
-        tmp2_.write_text(json.dumps({
-            "sample_end": args.sample_end,
-            "sample_start": cfg.sample_start,
-            "config_snapshot": cfg.snapshot(),
-            "step": "fetch_market_data",
-            "run_at": now,
-            "interrupted": interrupted,
-            "candidate_pool_size": len(pool),
-            "files_total": len(jobs),
-            "files_written": n_written_,
-            "files_per_source": dict(by_src),
-            "status_counts": {"ok": n_ok, "confirmed_404": n_404,
-                              "retry_exhausted": n_retry},
-        }, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp2_, RUN_INFO)
 
     persist(final=True)
     n_written = sum(1 for k in jobs if written.get((k[0], k[1], k[2])))

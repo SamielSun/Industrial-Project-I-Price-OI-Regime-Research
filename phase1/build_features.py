@@ -433,8 +433,9 @@ def main() -> int:
         try:
             old_info = json.loads(RUN_INFO.read_text(encoding="utf-8"))
         except json.JSONDecodeError as e:      # 只吞解析错误，其他照旧抛
-            log(f"  ⚠ {RUN_INFO.name} 解析失败（{e}）—— 保留原文件不动")
-            old_info = json.loads(RUN_INFO.read_text(encoding="utf-8"))
+            log(f"  ✗ {RUN_INFO.name} 解析失败：{e}")
+            log("    拒绝覆盖 —— 它里面还有其他步骤的元信息。请先修复或移走该文件。")
+            return 5
     old_info.update({
         "sample_end": args.sample_end,
         "step_5_build_features": {
@@ -449,8 +450,10 @@ def main() -> int:
             "symbols_without_klines": agg["无 klines"],
         },
     })
-    RUN_INFO.write_text(json.dumps(old_info, ensure_ascii=False, indent=2),
-                        encoding="utf-8")
+    tmp_ri = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
+    tmp_ri.write_text(json.dumps(old_info, ensure_ascii=False, indent=2),
+                      encoding="utf-8")
+    os.replace(tmp_ri, RUN_INFO)
 
     log("")
     log("=" * 78)
