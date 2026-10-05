@@ -81,6 +81,7 @@ MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 ARCHIVE = DATA / "00_config" / "archive_contracts.csv"    # Step 0 的产出
 DROPPED = DATA / "00_config" / "dropped_contracts.csv"    # Step 1 的产出（剔除明细）
+KEPT = DATA / "00_config" / "kept_contracts.csv"          # Step 1 的产出（通过名单）
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 # 闸 4 的判据：只有 exchangeInfo 的分类字段，不设手工名单。
@@ -310,14 +311,29 @@ def hard_filter(usdt: set[str], info: dict, cfg: cfg_mod.Config,
     return kept, dropped
 
 
-def persist_dropped(dropped: dict, cfg: cfg_mod.Config) -> Path | None:
-    """把被剔除的合约落盘 —— Step 1 的输出必须可审计。
+def persist_dropped(dropped: dict, kept: list, cfg: cfg_mod.Config) -> tuple:
+    """把 Step 1 的【两个输出】都落盘 —— 它们必须可独立审计。
 
     原来只落了计数（sample_end.json 的 eligible_after_hard_filter），
-    被剔除的【名单】只打日志。后果："USDCUSDT 是在哪一步被剔的"
-    事后无法回答，只能重跑重现 —— 而重跑依赖 exchangeInfo 与归档
-    两个外部状态，未必能复现同一结果。
+    两个名单都只打日志。后果："USDCUSDT 是在哪一步被剔的"、
+    "通过硬过滤的 683 个到底是谁" 都事后无法回答，只能重跑重现 ——
+    而重跑依赖 exchangeInfo 与归档两个外部状态，未必能复现同一结果。
+
+    ⚠️ 通过名单也不能省：master.parquet 是它的【真子集】
+    （677 ⊂ 683，差的 6 个是通过硬过滤但归档里没有 klines 的合约），
+    所以从下游反推不出完整的通过名单。
     """
+    out = []
+    # ---- 1. 通过的名单 ----
+    if kept:
+        kdf = pd.DataFrame({"symbol": sorted(kept)})
+        kdf["base_asset"] = [s[:-4] if s.endswith("USDT") else s
+                             for s in kdf["symbol"]]
+        tmp = KEPT.with_name(f"{KEPT.name}.{os.getpid()}.part")
+        kdf.to_csv(tmp, index=False)
+        os.replace(tmp, KEPT)
+        out.append(KEPT)
+    # ---- 2. 被剔除的明细 ----
     rows = []
     for why, ss in sorted(dropped.items()):
         for s in sorted(ss):
@@ -328,13 +344,13 @@ def persist_dropped(dropped: dict, cfg: cfg_mod.Config) -> Path | None:
                 "reason": why,
                 "is_stablecoin": base in cfg.stablecoin_bases,
             })
-    if not rows:
-        return None
-    df = pd.DataFrame(rows).sort_values(["reason", "symbol"], ignore_index=True)
-    tmp = DROPPED.with_name(f"{DROPPED.name}.{os.getpid()}.part")
-    df.to_csv(tmp, index=False)
-    os.replace(tmp, DROPPED)
-    return DROPPED
+    if rows:
+        df = pd.DataFrame(rows).sort_values(["reason", "symbol"], ignore_index=True)
+        tmp = DROPPED.with_name(f"{DROPPED.name}.{os.getpid()}.part")
+        df.to_csv(tmp, index=False)
+        os.replace(tmp, DROPPED)
+        out.append(DROPPED)
+    return tuple(out)
 
 
 # ============================================================================
@@ -505,10 +521,9 @@ def main() -> int:
     ap_path = persist_archive(syms, info)
     log(f"        归档清单已落盘 {ap_path.name}（{len(syms)} 行）")
     kept, dropped = hard_filter(usdt, info, cfg, subset=args.subset)
-    dp_path = persist_dropped(dropped, cfg)
-    if dp_path:
-        n_drop = sum(len(v) for v in dropped.values())
-        log(f"        剔除明细已落盘 {dp_path.name}（{n_drop} 行）")
+    for p_ in persist_dropped(dropped, kept, cfg):
+        n_ = sum(1 for _ in p_.open(encoding="utf-8")) - 1
+        log(f"        Step 1 产出已落盘 {p_.name}（{n_} 行）")
 
     # ---- 可用月份（S3 列表，一次拿全）----
     log(f"\n列各合约的可用月份（{len(kept)} 个合约）…")
