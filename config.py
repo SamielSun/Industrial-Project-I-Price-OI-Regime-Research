@@ -84,26 +84,44 @@ class Config:
 
     stablecoin_bases: tuple[str, ...] = (
         "USDC", "FDUSD", "TUSD", "BUSD", "DAI", "USDP", "SUSD", "USDD",
-        "PYUSD", "EUR", "FRAX", "USTC",
+        "PYUSD", "FRAX", "USTC",
     )
     """闸 1：按 base_asset 判定，不按符号字面。
 
-    ⚠️ **这是手工维护的名单，不是官方字段** —— exchangeInfo 没有"是否稳定币"
-    这一列，只能自己列。所以它的完备性需要定期核。
+    ⚠️ **手工维护的名单 —— 没有任何单一来源能覆盖全。**
+    2026-10-04 对比三种来源，各自覆盖到币安期货归档的稳定币：
 
-    2026-10-04 审计（655 个纯加密合约的 baseAsset）：
-      · 归档里名字像稳定币的有 3 个：USDC / FRAX / USTC
-      · 初版名单只有 USDC，**漏了 FRAX（Frax 算法稳定币）与 USTC（TerraUSD）**
-      · 已补上。两者当时都不在候选池，所以不影响任何产出数字。
-      · 另反向核过：候选池 285 个里"价格最大偏离 1"< 0.05 的为 0 个。
+      | 来源                      | 覆盖                |
+      |---------------------------|---------------------|
+      | 本名单                    | USDC FRAX USTC      |
+      | 币安官方 `stablecoin` 标签 | USDC                |
+      | CoinGecko 稳定币板块       | USDC FRAX USTC BOB  |
 
-    复核方法（不用价格猜，只用名字 + 价格交叉验证）：
-      1. 取所有 contractType==PERPETUAL 且 underlyingType==COIN 的 baseAsset
-      2. 筛名字像稳定币的（以 USD/EUR/DAI 等开头或结尾）
-      3. 逐个用 klines 验证：`(close - 1).abs().max() < 0.05` 才是真稳定币
-         ⚠️ 不能用 close 的【中位数】—— 实测 THETAUSDT 中位数 1.007 会误判，
-            它在区间内涨跌数倍，只是恰好穿越过 1。
+    · **币安官方标签在 get-products 端点（字段 `tags`）**，共 42 个现货交易对。
+      但它【只打在现货交易对上】，而我们的标的是 U 本位永续，集合不同；
+      且 `FRAXUSDT`/`USTCUSDT` 官方只标 `defi` 没标 `stablecoin`。
+      → **官方标签反而是三者里最少的**，不能单独用。
+    · CoinGecko 更全，但要与币安归档求交集才用得上（212 个 symbol 只 4 个命中）。
+
+    判定口径：本名单剔除的是【以稳定币或法币为标的的币对】，
+    而不是"名字叫稳定币的东西"。所以 `USDCUSDT` 与假想的 `EURUSDT` 同类，
+    要剔一起剔；`EUR` 作为法定货币本可另设 `fiat_bases`，此处并入即可。
+
+    已从名单移除的（2026-10-04）：
+      · `USDT` / `EUR` —— 归档里 baseAsset 为它们的合约各 0 个，纯冗余。
+        注意 `USDTTRY`/`USDTBRL` 这类【不以 USDT 结尾】，早在
+        enumerate_archive 的 endswith("USDT") 就被滤掉，进不了闸 1。
+      · `BOB` —— 曾依据 CoinGecko 纳入，后撤回。撤回理由见下方"已否决"。
     """
+
+    # 已否决的候选，留档以免重复讨论：
+    #   BOB —— CoinGecko 列在 stablecoins 板块，但：
+    #     (a) 币安现货没有 BOB 交易对，官方标签体系覆盖不到，只有单一来源；
+    #     (b) 我当初用的 $0.9987 是 CoinGecko 的【聚合价】，不是币安永续价格，
+    #         而本项目应看币安永续自身的行为 —— 那个我没验证过；
+    #     (c) 币安 exchangeInfo 里 BOBUSDT 的 status 已是 `SETTLING`
+    #         （2025-11-21 上市，正在结算/下架）。
+    #   证据不足，不加。将来若它在币安永续侧确证钉住 1，再加。
 
     # ---- 路径与IO（非设计参数，但需集中管理）----
     parquet_compression: str = "zstd"
