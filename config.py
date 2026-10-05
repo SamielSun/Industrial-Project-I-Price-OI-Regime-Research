@@ -2,10 +2,24 @@
 Phase 1 设计参数（研究设计的一部分，跨运行稳定）。
 
 原则（phase1/guidance.md §5.3 与 §0）：
-  · 本文件只放【设计参数】—— 定义"研究是什么"。
-  · 运行参数（--sample-end、--no-refresh、--symbols）走 CLI，不进本文件。
-    理由：若把 sample_end 写进这里，两次运行会共用同一份 config.py 却内容不同，
-    事后无法回答"这个结果是用哪套设计跑的"。
+  · 本文件只放【设计参数】—— 定义"研究是什么"。改这里 = 改研究设计。
+  · 【工程控制】走 CLI，不进本文件。全项目实际存在的参数共 20 个：
+
+      样本窗口   --sample-end                    六个脚本都要；必须月末日
+      路径       --out-root                      六个脚本全部必填
+                 --raw-root --l2-root --fe-root --pool --manifest
+      冒烟       --subset --batch
+      断点       --skip-download --keep-cache --keep-existing --list-only
+      网络/校验  --jobs --refresh-exchange-info --exchange-info
+                 --no-validate --no-schema-note --verify
+
+    判断标准：**改它会不会改变产出？**
+      · 会（如 --sample-end）→ 设计参数，但因为它逐次运行不同、且必须显式，
+        仍走 CLI 并落进 sample_end.json 以便追溯。
+      · 不会（如 --jobs、--out-root）→ 纯工程控制，放本文件只会污染设计快照。
+
+  · 早期设计里的 --no-refresh / --symbols 从未实现，已于本次清理时删除，
+    不要照旧文档去传。
 
 所有数值的依据见 phase1/guidance.md §3。
 """
@@ -26,16 +40,6 @@ class Config:
     # ---- 样本窗口 ----
     sample_start: str = "2021-12-01"
     """样本起点。由 OI 归档的断崖唯一定死，不是权衡结果。
-
-    实测（285 个候选池合约）：OI 首月分布是断崖 —— 2020-09 只有 BTCUSDT 一个，
-    2021-11 为零，2021-12 突然 101 个。各候选起点的 OI 覆盖率：
-        2020-01 → 0/285    2021-09 → 1/285
-        2021-12 → 102/285  2022-06 → 114/285
-    其余四源（klines/mark/index/funding）都有 101 个合约能回溯到 2020，
-    唯一卡住的是 OI。往前推可多得约 100 万根 bar，但那段 OI 覆盖率为 0.4%——
-    本项目研究 Price + Open Interest，没有 OI 的历史段对核心信号无用。
-
-    BTC 另有 2020-09..2021-11 的完整历史，但【不做附录、不进任何产出】（已决策）。
     """
 
     # ---- Universe 构造（§3）----
@@ -120,16 +124,20 @@ class Config:
         证据不足，不加。将来若它在币安永续侧确证钉住 1，再加。
     """
 
-    # ---- 路径与IO（非设计参数，但需集中管理）----
-    parquet_compression: str = "zstd"
-    event_lookbacks: tuple[int, ...] = (1, 4, 8, 24)
-    """事件 horizon（小时）。仅登记，Phase 1 不使用（派生量放 Phase 2，见 §2.2 Step 5）。"""
+    # ---- 路径与IO：本类不含非设计参数 ----
+    # 原 `parquet_compression`（"zstd"）与 `event_lookbacks`(1,4,8,24) 已删除：
+    #   · 前者从未被任何代码读取 —— 七个写盘点各自硬编码 compression="zstd"，
+    #     改这个字段不会有任何效果，留着会造成"改了却没生效"的误导。
+    #   · 后者是 Phase 2 的规划值，Phase 1 全程不使用，只被 snapshot() 序列化进
+    #     sample_end.json 冒充"设计参数"。规划信息已移入 phase1/guidance.md §2.2。
 
     def snapshot(self) -> dict[str, Any]:
-        """设计参数的完整快照，供写入 00_config/sample_end.json（§5.3）。"""
+        """设计参数的完整快照，供写入 00_config/sample_end.json（§5.3）。
+
+        只含【真正影响产出的】字段 —— 每一个都必须被至少一处代码读取。
+        """
         d = dataclasses.asdict(self)
         d["stablecoin_bases"] = list(self.stablecoin_bases)
-        d["event_lookbacks"] = list(self.event_lookbacks)
         return d
 
 

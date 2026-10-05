@@ -28,9 +28,11 @@ Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，实
 
 用法
 ----
-  python phase1/build_candidate_pool.py --sample-end 2026-08-31
-  python phase1/build_candidate_pool.py --sample-end 2026-08-31 --skip-download  # 只用缓存重算
-  python phase1/build_candidate_pool.py --sample-end 2026-08-31 --subset A B C   # 冒烟/核验
+  python phase1/build_candidate_pool.py --out-root data --sample-end 2026-08-31
+  # 只用缓存重算排名：
+  python phase1/build_candidate_pool.py --out-root data --sample-end 2026-08-31 --skip-download
+  # 冒烟/核验：
+  python phase1/build_candidate_pool.py --out-root /tmp/x --sample-end 2026-08-31 --subset A B C
 
 依据：phase1/guidance.md §2.2 Step 0（枚举）、§3（四条闸与排名）、§6.4（下载参数）
 """
@@ -74,8 +76,10 @@ BACKOFF_BASE = 2          # 2^attempt 秒
 
 # 本脚本在 phase1/ 下，项目根是上一级
 ROOT = Path(__file__).resolve().parent.parent
-# 环境变量 P11_DATA_ROOT 可把全部产出重定向到别处（冒烟测试用，绝不污染正式产出）
-DATA = Path(os.environ.get("P11_DATA_ROOT", ROOT / "data"))
+# 产出根目录：由 --out-root 显式指定（configure_paths() 里解析）。
+# 原为环境变量 P11_DATA_ROOT —— 已删除：环境变量不跨 shell 保留，
+# 曾因此把冒烟结果写进正式目录（§5.3）。P11_ 还是脚本改名前的旧前缀。
+DATA = ROOT / "data"
 CACHE_DIR = DATA / "00_config" / "_p11_cache"      # 原始 zip 暂存（断点续传靠它）
 MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
@@ -83,6 +87,24 @@ ARCHIVE = DATA / "00_config" / "archive_contracts.csv"    # Step 0 的产出
 DROPPED = DATA / "00_config" / "dropped_contracts.csv"    # Step 1 的产出（剔除明细）
 KEPT = DATA / "00_config" / "kept_contracts.csv"          # Step 1 的产出（通过名单）
 RUN_INFO = DATA / "00_config" / "sample_end.json"
+
+
+def configure_paths(out_root: Path) -> None:
+    """按 --out-root 定全部产出路径。必须在 main() 最开头调用。
+
+    改动最小的等价替换：原来交给环境变量的那层目录，现在交给命令行参数，
+    产出布局一字不变（CACHE_DIR / MANIFEST / CANDIDATE_POOL / 三个 Step 1
+    产出 / RUN_INFO 全都跟着根目录走）。
+    """
+    global DATA, CACHE_DIR, MANIFEST, CANDIDATE_POOL, ARCHIVE, DROPPED, KEPT, RUN_INFO
+    DATA = out_root.resolve()
+    CACHE_DIR = DATA / "00_config" / "_p11_cache"
+    MANIFEST = DATA / "00_config" / "manifest.parquet"
+    CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
+    ARCHIVE = DATA / "00_config" / "archive_contracts.csv"
+    DROPPED = DATA / "00_config" / "dropped_contracts.csv"
+    KEPT = DATA / "00_config" / "kept_contracts.csv"
+    RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 # 闸 4 的判据：只有 exchangeInfo 的分类字段，不设手工名单。
 #
@@ -489,6 +511,8 @@ def draft_gate_ok(liq: dict[str, float], bars: dict[str, int],
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="选出候选池合约名单")
+    ap.add_argument("--out-root", required=True,
+                    help="产出根目录（必填；与 Step 4–6b 同名同义）")
     ap.add_argument("--sample-end", required=True,
                     help="样本截止日，必须为月末日（如 2026-08-31）")
     ap.add_argument("--skip-download", action="store_true",
@@ -497,6 +521,7 @@ def main() -> int:
                     help="只处理这些合约（冒烟测试用；正式运行不要传）")
     args = ap.parse_args()
 
+    configure_paths(Path(args.out_root))                  # 路径定死在最前面
     cfg = cfg_mod.CONFIG
     cfg_mod.validate_sample_end(args.sample_end)          # 失败抛 ConfigViolation
     sample_end = date.fromisoformat(args.sample_end)

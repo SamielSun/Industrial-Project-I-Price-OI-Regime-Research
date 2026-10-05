@@ -46,11 +46,12 @@ OCEANUSDT / REEFUSDT / RENUSDT / UNFIUSDT）的 indexPrice 与 fundingRate
 
 用法
 ----
-  python phase1/fetch_market_data.py --sample-end 2026-08-31
-  P3_DATA_ROOT=/tmp/x python phase1/fetch_market_data.py \\
-      --sample-end 2026-08-31 --subset BTCUSDT ETHUSDT     # 冒烟
-  python phase1/fetch_market_data.py --sample-end 2026-08-31 --list-only
-  python phase1/fetch_market_data.py --sample-end 2026-08-31 --keep-cache
+  python phase1/fetch_market_data.py --out-root data --sample-end 2026-08-31
+  # 冒烟（产出写到别处，绝不污染正式目录）：
+  python phase1/fetch_market_data.py --out-root /tmp/x \\
+      --sample-end 2026-08-31 --subset BTCUSDT ETHUSDT
+  python phase1/fetch_market_data.py --out-root data --sample-end 2026-08-31 --list-only
+  python phase1/fetch_market_data.py --out-root data --sample-end 2026-08-31 --keep-cache
 
 依据：phase1/guidance.md §4.1（工程规则）§2.2 Step 3（数据源与路径）§6.4（下载参数）§4.4（缺失分类）
 """
@@ -102,12 +103,29 @@ FLUSH_ROWS = 500_000
 INFLIGHT = CONCURRENCY * 8
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = Path(os.environ.get("P3_DATA_ROOT", ROOT / "data"))
+# 产出根目录：由 --out-root 显式指定（configure_paths() 里解析）。
+# 原为环境变量 P3_DATA_ROOT —— 已删除，理由同 build_candidate_pool.py（§5.3）。
+DATA = ROOT / "data"
 RAW = DATA / "raw"
 CACHE = RAW / "_cache"
 MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 RUN_INFO = DATA / "00_config" / "sample_end.json"
+
+
+def configure_paths(out_root: Path) -> None:
+    """按 --out-root 定全部产出路径。必须在 main() 最开头调用。
+
+    与 build_candidate_pool.py 的 DATA 根目录必须一致 —— Step 3 读的是
+    Step 0–2 写下的 candidate_pool.csv 与 klines 缓存。
+    """
+    global DATA, RAW, CACHE, MANIFEST, CANDIDATE_POOL, RUN_INFO
+    DATA = out_root.resolve()
+    RAW = DATA / "raw"
+    CACHE = RAW / "_cache"
+    MANIFEST = DATA / "00_config" / "manifest.parquet"
+    CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
+    RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 # 月频源：(名字, 是否有 {interval}/ 层)。漏掉该层就 404。
 MONTHLY_SOURCES = [
@@ -487,6 +505,8 @@ def enumerate_all(pool: list[str], jobs: int) -> tuple[dict, dict]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Step 3 —— 下载候选池的市场数据")
+    ap.add_argument("--out-root", required=True,
+                    help="产出根目录（必填；与 Step 0–2 必须是同一个）")
     ap.add_argument("--sample-end", required=True,
                     help="样本截止日，必须是月末（如 2026-08-31）")
     ap.add_argument("--subset", nargs="+", default=None,
@@ -497,6 +517,7 @@ def main() -> int:
     ap.add_argument("--jobs", type=int, default=CONCURRENCY)
     args = ap.parse_args()
 
+    configure_paths(Path(args.out_root))                  # 路径定死在最前面
     cfg = cfg_mod.Config()
     cfg_mod.validate_sample_end(args.sample_end)
     global _MONTH_RE_WINDOW

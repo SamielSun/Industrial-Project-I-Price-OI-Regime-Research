@@ -203,15 +203,15 @@ def load_or_fetch_exchange_info(refresh: bool,
                                 path: Path | None) -> tuple[dict[str, dict], dict]:
     """闸 4 的 oracle：优先用快照，可选强制刷新。
 
-    顺序：--refresh → 联网取并写快照；否则先读快照；快照不存在才联网取。
-    联网失败时回落到快照，让**离线也能复现已发布的 D1** ——
+    顺序：CLI 给了 --refresh-exchange-info → 联网取并写快照；否则先读快照；
+    快照不存在才联网取。联网失败时回落到快照，让**离线也能复现已发布的 D1** ——
     原来离线只能 exit 3，D1 的复现性被一次网络请求绑架。
     """
     p = path or ei_snapshot_path()
     src = {"snapshot_path": str(p), "from": "", "fetched_at": "", "digest": ""}
 
     if refresh or not p.exists():
-        log(f"  {'--refresh：' if refresh else '快照不存在，'}联网取 exchangeInfo…")
+        log(f"  {'--refresh-exchange-info：' if refresh else '快照不存在，'}联网取 exchangeInfo…")
         info = fetch_exchange_info()
         if len(info) < 300:
             log(f"    ⚠️ 只拿到 {len(info)} 条 —— 疑似残包或网络不可达。")

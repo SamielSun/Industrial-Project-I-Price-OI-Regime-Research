@@ -305,6 +305,11 @@ features_1h = klines_1h
 否则改一次参数就要重跑整条数据层。**范围**：只含候选池 285 个合约，
 但候选池合约的**所有小时**都保留。
 
+**Phase 2 的 horizon 规划值**：`(1, 4, 8, 24)` 小时。原先登记在
+`config.py` 的 `event_lookbacks` 字段里，因 Phase 1 全程不使用（只被
+`snapshot()` 序列化进 `sample_end.json` 冒充设计参数）已删除，规划信息记在此处。
+Phase 2 定义这些列时，应把它们放进**当时的** `config.py`（那时它才是真设计参数）。
+
 ---
 
 #### Step 6a · Universe（资格判定 + PIT 成员）
@@ -716,16 +721,61 @@ python phase1/build_qa.py --out-root data --sample-end 2026-08-31 --verify
 
 ```bash
 # 见 data/REPRODUCE.md，六条命令
-python phase1/build_candidate_pool.py --sample-end 2026-08-31   # Step 0–2
-python phase1/fetch_market_data.py    --sample-end 2026-08-31   # Step 3
+python phase1/build_candidate_pool.py --out-root data --sample-end 2026-08-31  # Step 0–2
+python phase1/fetch_market_data.py    --out-root data --sample-end 2026-08-31  # Step 3
 python phase1/build_layer2.py   --out-root data --sample-end 2026-08-31
 python phase1/build_features.py --out-root data --sample-end 2026-08-31
 python phase1/build_universe.py --out-root data --sample-end 2026-08-31
 python phase1/build_qa.py       --out-root data --sample-end 2026-08-31
 ```
 
-**`--out-root` 是必填的，不是可选项** —— 环境变量不跨 shell 保留，
-早期用环境变量重定向，导致冒烟结果三次污染正式目录。显式参数无法"忘记设置"。
+**`--out-root` 六个脚本全部必填，不是可选项** —— 环境变量不跨 shell 保留，
+早期用环境变量重定向（`P11_DATA_ROOT` / `P3_DATA_ROOT`，脚本改名前的旧前缀），
+导致冒烟结果三次污染正式目录。显式参数无法"忘记设置"。
+Step 0–2 与 Step 3 必须传**同一个** `--out-root`，否则 Step 3 找不到候选池和 klines 缓存。
+
+**全项目实际存在的 CLI 参数共 20 个**（`python phase1/<脚本>.py --help` 可核对）：
+
+| 类别 | 参数 | 出现处 | 默认 |
+|---|---|---|---|
+| 样本窗口 | `--sample-end` | **六个脚本全部，全部必填** | 无 |
+| 路径 | `--out-root` | **六个脚本全部，全部必填** | 无 |
+| 路径 | `--raw-root` `--l2-root` `--fe-root` `--pool` `--manifest` | 见下表 | 项目内默认 |
+| 冒烟 | `--subset` | Step 0–2/3/4/5/6a | 无 |
+| 冒烟 | `--batch` | Step 4/5 | 30 |
+| 断点 | `--skip-download` | 仅 Step 0–2 | 关 |
+| 断点 | `--keep-cache` `--list-only` `--jobs` | 仅 Step 3 | 关 / 关 / 32 |
+| 断点 | `--keep-existing` | 仅 Step 4 | 关 |
+| 网络 | `--refresh-exchange-info` `--exchange-info` | 仅 Step 6a | 快照 |
+| 校验 | `--no-validate` | Step 4/5 | 关（开着才校验） |
+| 校验 | `--no-schema-note` | 仅 Step 6a | 关 |
+| 校验 | `--verify` | 仅 Step 6b | 关 |
+
+逐脚本对照（`--help` 的权威输出）：
+
+| 脚本 | 参数 |
+|---|---|
+| `build_candidate_pool.py` | `--out-root` `--sample-end` `--skip-download` `--subset` |
+| `fetch_market_data.py` | `--out-root` `--sample-end` `--subset` `--list-only` `--keep-cache` `--jobs` |
+| `build_layer2.py` | `--out-root` `--raw-root` `--pool` `--sample-end` `--subset` `--keep-existing` `--batch` `--no-validate` |
+| `build_features.py` | `--out-root` `--l2-root` `--pool` `--sample-end` `--subset` `--batch` `--no-validate` |
+| `build_universe.py` | `--out-root` `--fe-root` `--pool` `--manifest` `--sample-end` `--subset` `--no-schema-note` `--refresh-exchange-info` `--exchange-info` |
+| `build_qa.py` | `--out-root` `--fe-root` `--manifest` `--sample-end` `--verify` |
+
+**已删除的过时机制**（早期设计提过、现已不存在，照旧文档用会直接报错）：
+
+| 已删 | 原形态 | 现在用什么 |
+|---|---|---|
+| `--no-refresh` | `config.py` 提到的 CLI 参数 | 从未实现；刷新走 `--refresh-exchange-info` |
+| `--symbols` | 同上 | 从未实现；局部运行走 `--subset` |
+| `P11_DATA_ROOT` | Step 0–2 的环境变量 | `--out-root`（必填） |
+| `P3_DATA_ROOT` | Step 3 的环境变量 | `--out-root`（必填） |
+| `--refresh` | `build_universe.py` 注释里的写法 | 那是 **Python 函数参数名**，CLI 是 `--refresh-exchange-info` |
+| `parquet_compression` | `config.py` 字段 | 从未被读取；七个写盘点各自硬编码 `zstd` |
+| `event_lookbacks` | `config.py` 字段 | Phase 1 不用；规划值 `(1,4,8,24)` 记在 §2.2 Step 5 |
+
+**`config.py` 里不含非设计参数**：能进 `config_snapshot` 的每个字段都必须被至少
+一处代码读取。方向是**删掉死字段**，而不是为了凑快照去用它们。
 
 **Step 4 与 Step 5 是全量重建**（先清旧产出）。`--subset` 加 `--keep-existing`
 才是"只处理部分合约"的冒烟模式，此时收尾的交叉校验只对该批次有意义。
