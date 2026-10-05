@@ -83,9 +83,27 @@ class Config:
     """
 
     stablecoin_bases: tuple[str, ...] = (
-        "USDC", "FDUSD", "TUSD", "BUSD", "DAI", "USDP", "SUSD", "USDD", "PYUSD", "EUR",
+        "USDC", "FDUSD", "TUSD", "BUSD", "DAI", "USDP", "SUSD", "USDD",
+        "PYUSD", "EUR", "FRAX", "USTC",
     )
-    """闸 1：按 base_asset 判定，不按符号字面"""
+    """闸 1：按 base_asset 判定，不按符号字面。
+
+    ⚠️ **这是手工维护的名单，不是官方字段** —— exchangeInfo 没有"是否稳定币"
+    这一列，只能自己列。所以它的完备性需要定期核。
+
+    2026-10-04 审计（655 个纯加密合约的 baseAsset）：
+      · 归档里名字像稳定币的有 3 个：USDC / FRAX / USTC
+      · 初版名单只有 USDC，**漏了 FRAX（Frax 算法稳定币）与 USTC（TerraUSD）**
+      · 已补上。两者当时都不在候选池，所以不影响任何产出数字。
+      · 另反向核过：候选池 285 个里"价格最大偏离 1"< 0.05 的为 0 个。
+
+    复核方法（不用价格猜，只用名字 + 价格交叉验证）：
+      1. 取所有 contractType==PERPETUAL 且 underlyingType==COIN 的 baseAsset
+      2. 筛名字像稳定币的（以 USD/EUR/DAI 等开头或结尾）
+      3. 逐个用 klines 验证：`(close - 1).abs().max() < 0.05` 才是真稳定币
+         ⚠️ 不能用 close 的【中位数】—— 实测 THETAUSDT 中位数 1.007 会误判，
+            它在区间内涨跌数倍，只是恰好穿越过 1。
+    """
 
     # ---- 路径与IO（非设计参数，但需集中管理）----
     parquet_compression: str = "zstd"

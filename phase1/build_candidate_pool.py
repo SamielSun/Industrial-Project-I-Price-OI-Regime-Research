@@ -274,10 +274,17 @@ def hard_filter(usdt: set[str], info: dict, cfg: cfg_mod.Config,
         base = rec.get("baseAsset") or ""
         quote = rec.get("quoteAsset") or ""
         # 过滤：非 USDT 本位（USDC / BUSD）
+        # ⚠️ 实测 0 命中：本函数的输入已经是 endswith("USDT") 的集合，
+        #    其 quoteAsset 必为 USDT。保留作为防御（枚举路径若改动则生效）。
         if quote and quote != "USDT":
             drop(s, f"非 USDT 本位（{quote}）")
             continue
         # 过滤：名称怪象（交割合约、SETTLED 后缀）
+        # ⚠️ 实测 0 命中 —— 别被它误导。归档里确实有 70 个这种名字
+        #    （BTCUSDT_210326 等交割合约 53 个、AERGOUSDTSETTLED 等 17 个），
+        #    但它们【都不以 USDT 结尾】，在 enumerate_archive 那一步
+        #    就被 endswith("USDT") 滤掉了，压根没进这个函数。
+        #    保留作为防御：若将来改去枚举 delivery/ 段，这条会生效。
         if "_" in s or "SETTLED" in s:
             drop(s, "交割合约/SETTLED 后缀")
             continue
