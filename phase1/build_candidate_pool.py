@@ -478,30 +478,39 @@ def build_monthly_stats(sym: str, months: list[str]) -> tuple[dict[str, float], 
 
 
 # ============================================================================
-# 草稿闸（本脚本能做的两条）—— 其余需要 OI 数据，归 Step 3 / Step 6
+# 草稿闸（本脚本能做的一条）—— 其余需要 OI 数据，归 Step 3 / Step 6
 #
 # §3.5 的排名是「对通过资格闸的合约排名」。本脚本只有 klines，所以只能做：
-#   草稿闸 A（对应闸 2「历史不足」）：到该月初为止，窗口内已有 >= N 个月数据
-#   草稿闸 B（对应闸 2 的存在性    ）：上一个月有效小时数 >= 24*15
+#   草稿闸（对应闸 2 的存在性）：上一个月有效小时数 >= 24*15
 #
-# 两者都【故意宽松】（宁可多留）：本脚本是粗筛，过严会误杀合法样本；
+# 【故意宽松】（宁可多留）：本脚本是粗筛，过严会误杀合法样本；
 # 过宽的代价只是 Step 3 多下一批，而 Step 6 会用完整四条闸再筛一次。
 # 闸 3（OI 可靠性）与闸 4（代币化资产，已在 Step 1 处理）不在此。
+#
+# 原设计有第二条「草稿闸 A：到该月初为止窗口内已有 >= 1 个月数据」，
+# 实测【拦不到任何东西】，已删除 —— 合约的数据月份天然连续，
+# 上月有 bar 就意味着之前也有，闸 A 恒被闸 B 蕴含：
+#   只有闸 A 挡下: 0 个 (合约,月)
+#   只有闸 B 挡下: 290 个
+#   两个都挡:      677 个（全在 2021-12，样本首月无历史）
+# 删除后逐 (合约,月) 判定与逐月成员集【完全一致】（0 处差异，候选池仍 285）。
+# 连 3 个「上月在册但 bar<360 且更早有数据」的边界合约（ICPUSDT 2022-10 仅 94 bar、
+# BNXUSDT 2023-03 仅 154、TLMUSDT 2023-04 仅 36）也全部由闸 B 挡下。
 # ============================================================================
 
-DRAFT_MIN_PRIOR_MONTHS = 1              # >= 1 个月，是闸 2「2160 根 bar」的宽松下界
 DRAFT_MIN_BARS_IN_PREV_MONTH = 24 * 15  # = 360 小时，只要上个月还活着就放行
 
 
-def draft_gate_ok(liq: dict[str, float], bars: dict[str, int],
-                  months: list[str], i: int) -> bool:
-    """草稿闸 A + B。只用到第 i 个月【之前】的数据 —— 无前视（§3.5）。"""
-    if i < DRAFT_MIN_PRIOR_MONTHS:
+def draft_gate_ok(bars: dict[str, int], months: list[str], i: int) -> bool:
+    """草稿闸。只用到第 i 个月【之前】的数据 —— 无前视（§3.5）。
+
+    `i < 1` 是必须的：样本首月没有"上一个月"可比。
+    `bars.get(prev, 0)` 的默认值处理两种"上月不存在"：
+    合约尚未上市、合约已停止交易（归档里仍有文件但 bar 为 0）。
+    """
+    if i < 1:
         return False
-    prior = sum(1 for m in months[:i] if m in liq)      # 闸 A
-    if prior < DRAFT_MIN_PRIOR_MONTHS:
-        return False
-    prev = months[i - 1]                                # 闸 B，只用上月
+    prev = months[i - 1]                       # 只看上月
     return bars.get(prev, 0) >= DRAFT_MIN_BARS_IN_PREV_MONTH
 
 
@@ -622,7 +631,7 @@ def main() -> int:
             log(f"        补跑完成，耗时 {time.time()-t1:.0f}s")
 
     # ---- 排名 ----
-    log("\n算逐月流动性排名（含草稿闸 A/B）…")
+    log("\n算逐月流动性排名（含草稿闸）…")
     stats: dict[str, tuple[dict[str, float], dict[str, int]]] = {}
     for s, ms in avail.items():
         liq_s, bars_s = build_monthly_stats(s, ms)
@@ -637,7 +646,7 @@ def main() -> int:
         for s, (liq_s, bars_s) in stats.items():
             if ym not in liq_s:
                 continue
-            if not draft_gate_ok(liq_s, bars_s, all_months, i):
+            if not draft_gate_ok(bars_s, all_months, i):
                 n_gated_month += 1
                 continue
             ranked.append((s, liq_s[ym]))
