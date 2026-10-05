@@ -138,6 +138,23 @@ def main() -> int:
     # ---- 1. 文件层 ----
     man = pd.read_parquet(MANIFEST)
     bad = man[man["status"] != "ok"].copy()
+    # 自我校验：状态说"没取得"、文件却躺在缓存里，说明 manifest 的 status 写坏了。
+    # 这种行不是缺失，混进缺失报告会把"没尝试过"报成"归档里没有"。
+    # 实测踩过一次：18,832 项全在缓存里，manifest 却有 1,074 行 retry_exhausted。
+    if len(bad):
+        CACHE_ROOT = MANIFEST.parent / "_p11_cache"
+        bad["_on_disk"] = [
+            (CACHE_ROOT / r.source / r.symbol / f"{r.period}.zip").exists()
+            for r in bad.itertuples(index=False)]
+        n_bogus = int(bad["_on_disk"].sum())
+        if n_bogus:
+            log("")
+            log(f"⚠ {n_bogus:,} 行状态为 {sorted(set(bad.loc[bad['_on_disk'], 'status']))} "
+                f"但文件就在缓存里 —— manifest 的 status 不可信。")
+            log("  这类行【不算缺失】，已从下面的清单中剔除；")
+            log("  重跑 Step 0–2（build_candidate_pool.py）可修正其状态。")
+            bad = bad[~bad["_on_disk"]]
+        bad = bad.drop(columns=["_on_disk"])
     MF = bad[["source", "symbol", "period", "granularity",
               "status", "remote_path"]].rename(columns={"status": "category"})
     MF = MF.sort_values(["symbol", "period"], ignore_index=True)

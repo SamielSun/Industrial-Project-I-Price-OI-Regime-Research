@@ -551,7 +551,7 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 
 ## 4. 数据质量：不处理就会静默算错的事
 
-### 4.1 七个静默错误
+### 4.1 八个静默错误
 
 **共同点：它们都不报错，只会让数值悄悄变错。**
 
@@ -564,6 +564,19 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 | 5 | **URL 路径段编码，文件路径不编码** | 中文合约名让 `urllib` 抛 `UnicodeEncodeError`；编码进文件名毫无收益 |
 | 6 | **缓存键必须含源名** | 四个源共用同一键，后到的源命中前一个源的缓存 |
 | 7 | **OI 的 `create_time` 秒位必须截断** | 1,147 行 OI 被静默丢成 `oi_missing` |
+| 8 | **"没尝试过"不得写成"未取得"** | 1,074 个假缺失污染缺失报告 |
+
+**规则 8**：Step 2 用 `--skip-download` 重算排名、或补跑轮没覆盖到某些项时，
+manifest 的 `status` 初值会被当终态写进去。实测 18,832 项**全在缓存里**
+（摘要自报"新下载 0、已取得 18,832"），manifest 却有 **1,074 行 `retry_exhausted`**，
+而 `build_qa.py` 把一切非 `ok` 记录当缺失 —— 于是 `missing_files.parquet` 报了
+**1,141 个缺失文件（真值 67）**。这 1,074 行对应的 30 个合约（`AAVEUSDT` `ADAUSDT`
+`APEUSDT` …，恰好是归档枚举的字母序前 30 个）数据**完整无缺**，各自都有
+24,000–41,640 根 bar。
+
+两道修复：① 初值只按"文件在不在"判定，`retry_exhausted` 只留给**确实尝试过且失败**
+的项，摘要里"未尝试"单列一类；② `build_qa.py` 自查 —— 状态说"没取得"、文件却在
+缓存里的行**不算缺失**，并打出告警。
 
 **规则 3 的两层含义**：① `retry_exhausted` 是**待办**不是缺失，
 **不得进入最终缺失报告**；② `parse_zip` 的失败**必须抛异常**，不能返回 `None` ——
@@ -630,6 +643,7 @@ has_header = not first.lstrip("-").replace(".", "").isdigit()   # 不可按日�
 |---|---|
 | `confirmed_404` | ✅ 是（实测 67 条，全部是 `metrics`） |
 | `retry_exhausted` | ❌ **不是** —— 是待办 |
+| `retry_exhausted` 但文件在缓存里 | ❌ **不算** —— `status` 写坏了，见 §4.1 规则 8 |
 | `partial_rows`（行数 < 288）· `field_empty` · `zero_volume` | ⚠️ 记录 |
 
 

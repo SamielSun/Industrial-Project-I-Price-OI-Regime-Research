@@ -553,9 +553,18 @@ def main() -> int:
     statuses: dict[str, int] = {}
     # 逐文件的最终状态。必须显式记录 —— 靠"缓存文件在不在"反推会把
     # 【已确认的 404】和【网络抖动】混为一谈，两者在缺失报告里处置完全不同（§4.4）。
+    #
+    # 初值【只按文件在不在】判定，不算作"尝试过"：文件在就是 cached，
+    # 不在就是裸的 retry_exhausted。若这次走 --skip-download、或某几项没被补跑轮
+    # 覆盖到，初值就会变成终态被写进 manifest —— 而 build_qa 把 manifest 里
+    # 一切非 ok 记录当作缺失，于是"没尝试过"被误报成"缺失"。
+    # 实测：18,832 项全在缓存里（摘要自报 cached=18,832、新下载 0），
+    # manifest 却有 1,074 行 retry_exhausted，全部混进 missing_files.parquet。
+    # 故初值用 cached（真值），retry_exhausted 只留给【确实尝试过且失败】的项。
     final_status: dict[tuple[str, str], str] = {
         (s_, ym_): ("cached" if cache_path(s_, ym_).exists() else "retry_exhausted")
         for s_, ym_ in todo}
+    attempted: set[tuple[str, str]] = set()
     if args.skip_download:
         log("        --skip-download：跳过下载，只用已有缓存")
     else:
@@ -566,6 +575,7 @@ def main() -> int:
             for f in as_completed(futs):
                 sy, ymy, st = f.result()
                 final_status[(sy, ymy)] = st
+                attempted.add((sy, ymy))
                 statuses[st] = statuses.get(st, 0) + 1
                 done += 1
                 if done % 5000 == 0:
@@ -582,6 +592,7 @@ def main() -> int:
             with ThreadPoolExecutor(CONCURRENCY) as ex:
                 for sy, ymy, st in ex.map(lambda t: download_one(*t), retry):
                     final_status[(sy, ymy)] = st
+                    attempted.add((sy, ymy))
                     statuses["retry2_" + st] = statuses.get("retry2_" + st, 0) + 1
             log(f"        补跑完成，耗时 {time.time()-t1:.0f}s")
 
@@ -684,13 +695,18 @@ def main() -> int:
     os.replace(tmp, RUN_INFO)
 
     # ---- 运行摘要（§4.4：★ 未取得 绝不能算进缺失）----
+    # 没尝试过的项（--skip-download，或补跑轮没覆盖到）单列一类，与"尝试过但失败"
+    # 分开报 —— 二者都写成 retry_exhausted 会把"没试"误报成"缺失"（见 final_status 处）。
     cnt: dict[str, int] = {}
-    for st in final_status.values():
-        cnt[st] = cnt.get(st, 0) + 1
+    for k_, st_ in final_status.items():
+        if k_ not in attempted and st_ == "retry_exhausted":
+            st_ = "skipped_uncached"
+        cnt[st_] = cnt.get(st_, 0) + 1
     n_cached = cnt.get("cached", 0)
     n_ok = cnt.get("ok", 0) + n_cached
     n_404 = cnt.get("confirmed_404", 0)
     n_retry = cnt.get("retry_exhausted", 0)
+    n_skip = cnt.get("skipped_uncached", 0)
     log("\n" + "=" * 74)
     log("运行摘要")
     log("=" * 74)
@@ -701,7 +717,8 @@ def main() -> int:
     log(f"  本次新下载             {n_ok - n_cached:>8,}")
     log(f"  已取得（含缓存命中）      {n_ok:>8,}")
     log(f"  确认不存在 404         {n_404:>8,}   ← 归档空洞，非网络问题")
-    log(f"  ★ 未取得（待重试）      {n_retry:>8,}   ← 不等于缺失")
+    log(f"  ★ 未取得（试过，待重试）  {n_retry:>8,}   ← 不等于缺失")
+    log(f"  · 未尝试（本次没下）      {n_skip:>8,}   ← --skip-download 且缓存里没有")
     log(f"  ** 候选池（K={K} 并集）  {len(union):>8,} **")
     log(f"  总耗时                 {time.time()-t_start:.0f}s")
     log("=" * 74)
