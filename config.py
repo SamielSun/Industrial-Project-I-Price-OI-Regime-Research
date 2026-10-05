@@ -111,17 +111,14 @@ class Config:
       · `USDT` / `EUR` —— 归档里 baseAsset 为它们的合约各 0 个，纯冗余。
         注意 `USDTTRY`/`USDTBRL` 这类【不以 USDT 结尾】，早在
         enumerate_archive 的 endswith("USDT") 就被滤掉，进不了闸 1。
-      · `BOB` —— 曾依据 CoinGecko 纳入，后撤回。撤回理由见下方"已否决"。
+      · `BOB` —— 曾依据 CoinGecko 纳入，后撤回。理由：
+        (a) 币安现货没有 BOB 交易对，官方标签覆盖不到，只有单一来源；
+        (b) 当初用的 $0.9987 是 CoinGecko 的【聚合价】，不是币安永续价格，
+            而本项目应看币安永续自身的行为 —— 那个没验证过；
+        (c) 币安 exchangeInfo 里 BOBUSDT 的 status 已是 `SETTLING`
+            （2025-11-21 上市，正在结算/下架）。
+        证据不足，不加。将来若它在币安永续侧确证钉住 1，再加。
     """
-
-    # 已否决的候选，留档以免重复讨论：
-    #   BOB —— CoinGecko 列在 stablecoins 板块，但：
-    #     (a) 币安现货没有 BOB 交易对，官方标签体系覆盖不到，只有单一来源；
-    #     (b) 我当初用的 $0.9987 是 CoinGecko 的【聚合价】，不是币安永续价格，
-    #         而本项目应看币安永续自身的行为 —— 那个我没验证过；
-    #     (c) 币安 exchangeInfo 里 BOBUSDT 的 status 已是 `SETTLING`
-    #         （2025-11-21 上市，正在结算/下架）。
-    #   证据不足，不加。将来若它在币安永续侧确证钉住 1，再加。
 
     # ---- 路径与IO（非设计参数，但需集中管理）----
     parquet_compression: str = "zstd"

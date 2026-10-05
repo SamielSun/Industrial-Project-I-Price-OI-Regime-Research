@@ -18,7 +18,7 @@
 | 合约数 | 候选池 **285**；曾当成员 **248** |
 | 样本窗口 | `2021-12-01` ~ `2026-08-31` |
 | 月度成员集 | 有成员的月份各 50 个，共 **2,700** 行 / 54 个月 |
-| 磁盘 | **2.2 GB / 1,441 个文件** |
+| 磁盘 | **2.2 GB / 1,442 个文件** |
 | 全流程实测 | 本地计算约 **26 分钟**（首次下载另需约 2 小时） |
 
 **四件产出**
@@ -96,6 +96,12 @@ Industrial Programme I/
 
 **输出**：归档里**存在过**的全部合约 —— 实测 **1,057** 个（USDT 结尾 901），
 落盘到 `data/00_config/archive_contracts.csv`（逐合约一行，含分类与 base/quote）。
+
+**Step 1 的输出同样落盘**：`data/00_config/dropped_contracts.csv`
+（218 行，逐合约记 `symbol` / `base_asset` / `reason` / `is_stablecoin`）。
+为什么必须有：原来只落了计数（`sample_end.json` 的 `eligible_after_hard_filter`），
+被剔除的**名单只打日志** —— 于是"`USDCUSDT` 是在哪一步被剔的"事后无法回答，
+只能重跑重现，而重跑依赖 exchangeInfo 与归档两个外部状态，未必复现同一结果。
 
 ⚠️ **这个数必须落盘，不能只打日志。** 枚举结果曾经不一致：一次记 **893**、
 一次记 **1,057**，差 164 个。而合约数只增不减，所以 893 必然是一次不完整枚举。
@@ -375,7 +381,7 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 | `gaps.parquet` | 4,881 | **记录层**：哪里断了、断多久 |
 | `coverage.parquet` | 1,425 | **汇总层**：整体质量（285 × 5 指标） |
 | `data_dictionary.md` | — | 逐字段字典 + 全部已知口径 |
-| `checksums.sha256` | 1,441 | 产出完整性 |
+| `checksums.sha256` | 1,442 | 产出完整性 |
 | `REPRODUCE.md` | — | 六条重跑命令 |
 
 `gaps.parquet`（前三行）
@@ -683,10 +689,10 @@ close_time = H + 1h − 1ms      # 毫秒部分恒为 .999
 python config.py            # 8 项：validate_sample_end 行为 + Config frozen
 python -m lib.schema        # 65 项：round-trip / validate 放行 / validate 捕获 / 结构自检
 
-# 重算 1,441 个产出文件的 SHA256；0 个不一致则退出码 0
+# 重算 1,442 个产出文件的 SHA256；0 个不一致则退出码 0
 python phase1/build_qa.py --out-root data --sample-end 2026-08-31 --verify
 ```
-**实测：`核验 1,441 个文件：全部一致`，退出码 0。**
+**实测：`核验 1,442 个文件：全部一致`，退出码 0。**
 
 **校验和是本流程最后一个写盘动作** —— 它此前写入的每一个文件
 （含 `00_config/sample_end.json` 的运行元信息）都被纳入哈希。

@@ -80,6 +80,7 @@ CACHE_DIR = DATA / "00_config" / "_p11_cache"      # 原始 zip 暂存（断点�
 MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 ARCHIVE = DATA / "00_config" / "archive_contracts.csv"    # Step 0 的产出
+DROPPED = DATA / "00_config" / "dropped_contracts.csv"    # Step 1 的产出（剔除明细）
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 # 闸 4 的判据：只有 exchangeInfo 的分类字段，不设手工名单。
@@ -309,6 +310,33 @@ def hard_filter(usdt: set[str], info: dict, cfg: cfg_mod.Config,
     return kept, dropped
 
 
+def persist_dropped(dropped: dict, cfg: cfg_mod.Config) -> Path | None:
+    """把被剔除的合约落盘 —— Step 1 的输出必须可审计。
+
+    原来只落了计数（sample_end.json 的 eligible_after_hard_filter），
+    被剔除的【名单】只打日志。后果："USDCUSDT 是在哪一步被剔的"
+    事后无法回答，只能重跑重现 —— 而重跑依赖 exchangeInfo 与归档
+    两个外部状态，未必能复现同一结果。
+    """
+    rows = []
+    for why, ss in sorted(dropped.items()):
+        for s in sorted(ss):
+            base = s[:-4] if s.endswith("USDT") else s
+            rows.append({
+                "symbol": s,
+                "base_asset": base,
+                "reason": why,
+                "is_stablecoin": base in cfg.stablecoin_bases,
+            })
+    if not rows:
+        return None
+    df = pd.DataFrame(rows).sort_values(["reason", "symbol"], ignore_index=True)
+    tmp = DROPPED.with_name(f"{DROPPED.name}.{os.getpid()}.part")
+    df.to_csv(tmp, index=False)
+    os.replace(tmp, DROPPED)
+    return DROPPED
+
+
 # ============================================================================
 # 可用月份（S3 列表一次拿全，不需要逐月探测）
 # ============================================================================
@@ -477,6 +505,10 @@ def main() -> int:
     ap_path = persist_archive(syms, info)
     log(f"        归档清单已落盘 {ap_path.name}（{len(syms)} 行）")
     kept, dropped = hard_filter(usdt, info, cfg, subset=args.subset)
+    dp_path = persist_dropped(dropped, cfg)
+    if dp_path:
+        n_drop = sum(len(v) for v in dropped.values())
+        log(f"        剔除明细已落盘 {dp_path.name}（{n_drop} 行）")
 
     # ---- 可用月份（S3 列表，一次拿全）----
     log(f"\n列各合约的可用月份（{len(kept)} 个合约）…")
