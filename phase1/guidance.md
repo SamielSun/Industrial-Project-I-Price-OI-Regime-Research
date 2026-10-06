@@ -320,7 +320,8 @@ features_1h = klines_1h
 | 列 | 语义 |
 |---|---|
 | `ts` / `ts_end` | bar 起点 / 区间终点。**决策发生在 `ts_end`** |
-| `oi` | `OI(ts_end)`，**张数** |
+| `oi` | `OI(ts_end)`，单位**币**（基础资产个数，**不是张**） |
+| `volume` / `taker_buy_volume` | 单位**币**（基础资产个数）。判据：`quote_volume / volume == close` |
 | `funding_rate` | **只在结算小时非空** → 全表 **83.4%** 为 null。结构性的，不是缺失 |
 | `bar_missing` / `oi_missing` | 该小时在源表里没有对应行。**值列为 null 时的原因标记** |
 
