@@ -142,7 +142,7 @@ def main() -> int:
     # 这种行不是缺失，混进缺失报告会把"没尝试过"报成"归档里没有"。
     # 实测踩过一次：18,832 项全在缓存里，manifest 却有 1,074 行 retry_exhausted。
     if len(bad):
-        CACHE_ROOT = MANIFEST.parent / "_p11_cache"
+        CACHE_ROOT = MANIFEST.parent / "_cache"
         bad["_on_disk"] = [
             (CACHE_ROOT / r.source / r.symbol / f"{r.period}.zip").exists()
             for r in bad.itertuples(index=False)]
@@ -536,7 +536,7 @@ def checksum_targets() -> list:
     排除三类：
       · `checksums.sha256` 自身
       · 写盘中的 `.part` 临时文件
-      · `00_config/_p11_cache/` —— Step 0–2 的月频 klines 下载缓存。
+      · `00_config/_cache/` —— Step 0–2 的月频 klines 下载缓存。
         它是【临时】的，不是产出；实测它会把校验和从 1,441 个文件顶到 20,315 个，
         掩盖真正该被校验的产出。
     实测排除后 1,441 个文件 / 2.2 GB，约 5 秒。
@@ -547,7 +547,7 @@ def checksum_targets() -> list:
         p = DATA / sub
         if p.exists():
             targets += [f for f in sorted(p.rglob("*")) if f.is_file()]
-    cache = DATA / "00_config" / "_p11_cache"
+    cache = DATA / "00_config" / "_cache"
     return [f for f in targets
             if f.name != "checksums.sha256" and f.suffix != ".part"
             and cache not in f.parents]

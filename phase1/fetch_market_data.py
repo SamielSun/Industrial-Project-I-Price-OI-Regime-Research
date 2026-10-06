@@ -178,7 +178,7 @@ def http(url: str, *, method: str = "GET") -> bytes:
     for attempt in range(RETRIES):
         try:
             req = urllib.request.Request(url, method=method,
-                                         headers={"User-Agent": "p3/2.0"})
+                                         headers={"User-Agent": "theo-phase1/1.0"})
             with urllib.request.urlopen(req, timeout=READ_TIMEOUT) as r:
                 return r.read() if method == "GET" else b""
         except urllib.error.HTTPError as e:

@@ -78,9 +78,13 @@ BACKOFF_BASE = 2          # 2^attempt 秒
 ROOT = Path(__file__).resolve().parent.parent
 # 产出根目录：由 --out-root 显式指定（configure_paths() 里解析）。
 # 原为环境变量 P11_DATA_ROOT —— 已删除：环境变量不跨 shell 保留，
-# 曾因此把冒烟结果写进正式目录（§5.3）。P11_ 还是脚本改名前的旧前缀。
+# 曾因此把冒烟结果写进正式目录（§5.3）。
 DATA = ROOT / "data"
-CACHE_DIR = DATA / "00_config" / "_p11_cache"      # 原始 zip 暂存（断点续传靠它）
+# 月频 klines 的原始 zip 暂存 —— 断点续传靠它。
+# 名字原为 `_p11_cache`：p11 是脚本改名前的旧前缀，与本流程无关，故改为 `_cache`
+# （与 Step 3 的 `data/raw/_cache` 同名同义：都是"读一次就丢"的下载暂存）。
+# 放在 00_config/ 下是因为它不能落在校验和扫描的六个子目录里（见 build_qa.py）。
+CACHE_DIR = DATA / "00_config" / "_cache"
 MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 ARCHIVE = DATA / "00_config" / "archive_contracts.csv"    # Step 0 的产出
@@ -98,7 +102,7 @@ def configure_paths(out_root: Path) -> None:
     """
     global DATA, CACHE_DIR, MANIFEST, CANDIDATE_POOL, ARCHIVE, DROPPED, KEPT, RUN_INFO
     DATA = out_root.resolve()
-    CACHE_DIR = DATA / "00_config" / "_p11_cache"
+    CACHE_DIR = DATA / "00_config" / "_cache"
     MANIFEST = DATA / "00_config" / "manifest.parquet"
     CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
     ARCHIVE = DATA / "00_config" / "archive_contracts.csv"
@@ -164,7 +168,7 @@ def http(url: str, *, method: str = "GET") -> bytes:
     for attempt in range(RETRIES):
         try:
             req = urllib.request.Request(url, method=method,
-                                         headers={"User-Agent": "p11/1.0"})
+                                         headers={"User-Agent": "theo-phase1/1.0"})
             with urllib.request.urlopen(req, timeout=READ_TIMEOUT) as r:
                 return r.read() if method == "GET" else b""
         except urllib.error.HTTPError as e:
