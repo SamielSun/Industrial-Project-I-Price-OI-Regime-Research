@@ -422,7 +422,7 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 | `gaps.parquet` | 4,881 | **记录层**：哪里断了、断多久 |
 | `coverage.parquet` | 1,425 | **汇总层**：整体质量（285 × 5 指标） |
 | `data_dictionary.md` | — | 逐字段字典 + 全部已知口径 |
-| `checksums.sha256` | 1,442 | 产出完整性 |
+| `checksums.sha256` | 1,443 | 产出完整性 |
 | `REPRODUCE.md` | — | 六条重跑命令 |
 
 `gaps.parquet`（前三行）
@@ -454,13 +454,17 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 
 **逐月评测。用全生命周期统计量作闸会引入前视。**
 
+**评测范围 = 候选池 285 个合约**（不是全部归档合约 683 个）。
+精筛只回答"候选池里谁能当成员"；更早的排除在 Step 1（`dropped_contracts.csv` 218 个）
+与 Step 2（没进过月度 top-50）里已经记账。
+
 | # | 判据 | 阈值 | 单条拦下 |
 |---|---|---|---|
 | **1** | 非稳定币（按 `base_asset`，不按符号字面） | — | **0** |
-| **2①** | 截至 M 月初已有 ≥ N 根 1h bar | `min_history_bars = 2160`（90 天） | **28,942** |
-| **2②** | **最后活跃日 ≥ M 月初**（仍在交易） | `require_live_at_month_start` | **23,262** |
-| **3①** | trailing 30 天 OI 覆盖率 ≥ N | `min_oi_coverage = 0.90` | **28,964** |
-| **3②** | trailing 30 天最长连续缺失 ≤ N 小时 | `max_oi_gap_hours = 48` | **87** |
+| **2①** | 截至 M 月初已有 ≥ N 根 1h bar | `min_history_bars = 2160`（90 天） | **6,484** |
+| **2②** | **最后活跃日 ≥ M 月初**（仍在交易） | `require_live_at_month_start` | **804** |
+| **3①** | trailing 30 天 OI 覆盖率 ≥ N | `min_oi_coverage = 0.90` | **6,496** |
+| **3②** | trailing 30 天最长连续缺失 ≤ N 小时 | `max_oi_gap_hours = 48` | **77** |
 | **4** | 非加密资产（分类字段判据） | `contractType` + `underlyingType` | **0**（见下） |
 
 「单条拦下」是**各闸独立计数**（同一合约月可被多条拦下），不能相加。
@@ -477,7 +481,7 @@ LUNAUSDT 2022-06  bars_before=3912  last_active=2022-05-12  g2a=T live=F g2=F  e
 **闸 1 与闸 4 的「单条拦下 = 0」都是意料之中**：候选池在 Step 1 就已用同一套
 判据剔掉了稳定币与非加密资产，所以这两条闸的作用在 **683 的全归档层面**
 （闸 4 在 Step 1 拦下 **215** 个 USDT 代币化标的）。
-**闸 3② 是最锋利的边界** —— 只剔 87 行，但剔掉的全是真正不可用的合约。
+**闸 3② 是最锋利的边界** —— 只剔 77 行，但剔掉的全是真正不可用的合约。
 
 **闸 4 的判据只有分类字段，不设名字黑名单**
 

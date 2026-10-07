@@ -25,8 +25,8 @@ build_universe —— Step 6：逐期资格判定 + PIT 成员集 + master 表
 
 产出（`data/03_reference/`）
 ---------------------------
-  master.parquet                一币一行（893 个归档合约）
-  universe_eligibility.parquet  一币一月（全部合约 × 全部月份，含失败原因）
+  master.parquet                一币一行（285 个候选池合约）
+  universe_eligibility.parquet  一币一月（候选池 × 全部月份，含失败原因）
   universe_membership.parquet   一币一月（成员）
   member_changes.parquet        一月一行（进出记录）
 
@@ -67,21 +67,18 @@ DATA = ROOT / "data"
 FE = DATA / "02_features" / "features_1h"
 RAW = DATA / "raw"
 REF = DATA / "03_reference"
-MANIFEST = DATA / "00_config" / "manifest.parquet"
 RUN_INFO = DATA / "00_config" / "sample_end.json"
 CANDIDATE_POOL = ROOT / "data" / "03_reference" / "candidate_pool.csv"
 
 T_START = time.time()
 
 
-def configure_paths(out_root: Path, fe_root: Path | None, pool: Path | None,
-                    manifest: Path | None) -> None:
-    global DATA, FE, RAW, REF, MANIFEST, RUN_INFO, CANDIDATE_POOL
+def configure_paths(out_root: Path, fe_root: Path | None, pool: Path | None) -> None:
+    global DATA, FE, RAW, REF, RUN_INFO, CANDIDATE_POOL
     DATA = out_root.resolve()
     FE = ((fe_root or (DATA / "02_features")) / "features_1h").resolve()
     RAW = (DATA / "raw").resolve()
     REF = DATA / "03_reference"
-    MANIFEST = (manifest or (DATA / "00_config" / "manifest.parquet")).resolve()
     RUN_INFO = DATA / "00_config" / "sample_end.json"
     CANDIDATE_POOL = (pool or (ROOT / "data" / "03_reference"
                                / "candidate_pool.csv")).resolve()
@@ -251,8 +248,6 @@ def main() -> int:
     ap.add_argument("--fe-root", default=None,
                     help="features 的读取位置（默认 <out-root>/02_features）。冒烟时指向正式目录")
     ap.add_argument("--pool", default=None, help="候选池 CSV 路径")
-    ap.add_argument("--manifest", default=None,
-                    help="manifest 路径（默认 <out-root>/00_config/manifest.parquet）")
     ap.add_argument("--sample-end", required=True, help="样本截止日，必须是月末")
     ap.add_argument("--subset", nargs="+", default=None, help="只处理这些合约（冒烟）")
     ap.add_argument("--no-schema-note", action="store_true",
@@ -266,8 +261,7 @@ def main() -> int:
 
     configure_paths(Path(args.out_root),
                     Path(args.fe_root) if args.fe_root else None,
-                    Path(args.pool) if args.pool else None,
-                    Path(args.manifest) if args.manifest else None)
+                    Path(args.pool) if args.pool else None)
     cfg = cfg_mod.Config()
     cfg_mod.validate_sample_end(args.sample_end)
 
@@ -298,16 +292,16 @@ def main() -> int:
             log(f"--subset 里的合约都不在候选池中：{args.subset}")
             return 2
 
-    # 资格评测的对象是【全部归档合约】，不只是候选池 —— 否则
-    # 「某合约为什么不在 universe 里」无法回答（落选的 394 个没有记录）。
-    man_all = pd.read_parquet(MANIFEST)
-    all_syms = sorted(set(man_all[man_all["source"] == "klines"]["symbol"])
-                      | set(pool))
+    # 资格评测的对象 = 【候选池】，不是全部归档合约。
+    # 精筛这一步只关心"候选池里谁能当成员"，落选的合约在 Step 2 就被排除了，
+    # 它们的账在 archive_contracts.csv（1,057）与 dropped_contracts.csv（218）里。
+    # （曾按 manifest 的 klines 记录扩到 677 个合约，为的是给落选者留一条
+    #   not_in_candidate_pool 的记录；那样 eligibility 有 58% 的行是"无数据所以
+    #   不通过"，信息量低，已收窄。）
+    all_syms = sorted(pool)
     pool_set = set(pool)
-    if args.subset:
-        all_syms = [s for s in all_syms if s in set(args.subset)]
     months = month_list(cfg.sample_start, args.sample_end)
-    log(f"  评测对象 {len(all_syms)} 个合约（候选池 {len(pool)} + 落选 {len(all_syms)-len(pool)}）")
+    log(f"  评测对象 {len(all_syms)} 个合约（= 候选池）")
     log(f"  评测月份 {months[0]} .. {months[-1]}（{len(months)} 个）")
 
     # ---- 逐合约的派生量（与月份无关）----
@@ -463,10 +457,10 @@ def main() -> int:
         prev = cur
     C = pd.DataFrame(chg)
 
-    # ---- master：一币一行，覆盖【全部归档合约】----
-    # 来源 = manifest 的 klines 记录（Step 0 枚举 + Step 1 硬过滤后的全集，
-    # 含落选的 394 个）∪ 候选池（防漏）。落选的合约只有元信息、没有数据。
-    # 预分组：直接在 7.25M 行上按合约过滤会做 679 次全表扫描（实测 5 分钟）
+    # ---- master：一币一行，覆盖【候选池】----
+    # 候选池的 285 个合约全部有数据（Step 3 只为它们下载），所以 has_data 恒 True。
+    # 落选的合约不在这里 —— 它们的账在 archive_contracts.csv / dropped_contracts.csv。
+    # 预分组：直接在 7.25M 行上按合约过滤会做 285 次全表扫描（实测 5 分钟）
     d_by_sym = {s: g for s, g in d.groupby("symbol", sort=False)}
     daily_by_sym = {s: g for s, g in daily.groupby("symbol", sort=False)}
     elig_by_sym = {s: g for s, g in E.groupby("symbol", sort=False)}
@@ -486,8 +480,6 @@ def main() -> int:
             # 于是 bad 永远非空 —— 248 个【真的当过成员】的合约全被标成 dropped。
             if sub_e["eligible"].any() and sub_e["rank"].notna().any():
                 reason = ""
-            elif not sub_e["in_pool"].any():
-                reason = "not_in_candidate_pool"
             elif not sub_e["eligible"].any():
                 reason = "never_eligible"
             elif sub_e["rank"].isna().all():
