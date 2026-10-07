@@ -38,6 +38,7 @@ import hashlib
 import os
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -85,6 +86,12 @@ def configure_paths(out_root: Path) -> None:
 def log(msg: str) -> None:
     el = time.time() - T_START
     print(f"[{int(el)//60:02d}:{int(el)%60:02d}] {msg}", flush=True)
+
+
+def plural(n: int, singular: str, plural_form: str | None = None) -> str:
+    """`1 contract` / `3 contracts` —— 避免 "1 contract(s)" 这种写法。"""
+    word = singular if n == 1 else (plural_form or singular + "s")
+    return f"{n:,} {word}"
 
 
 def write_text_atomic(path: Path, text: str) -> None:
@@ -174,13 +181,14 @@ def compute_coverage(d: pd.DataFrame) -> pd.DataFrame:
 
 
 def monthly_coverage(d: pd.DataFrame) -> pd.DataFrame:
-    """逐月的整体覆盖率（三条线：klines / oi / mark）。"""
+    """逐月的整体覆盖率（四个源各一条线，与 §2 的表同口径）。"""
     d = d.assign(ym=d["ts"].dt.strftime("%Y-%m"))
     g = d.groupby("ym").agg(
         rows=("ts", "size"),
         klines=("bar_missing", lambda s: 1 - s.mean()),
         oi=("oi_missing", lambda s: 1 - s.mean()),
         mark=("mark_close", lambda s: 1 - s.isna().mean()),
+        index=("index_close", lambda s: 1 - s.isna().mean()),
     )
     return g
 
@@ -260,10 +268,145 @@ def compute_gap_causes(d: pd.DataFrame, man: pd.DataFrame) -> dict:
     }
 
 
+def compute_panel_facts() -> dict:
+    """两份文档里几个【口径验证】数字。独立走一遍 parquet，不进 read_features()。
+
+    为什么要单独扫：这几列只在算这几个比例时用得到，留在常驻的 d 里会让
+    7,253,002 行多占几百 MB，而报告其余部分并不需要它们。
+
+    这里算的是字典第 3 节那几条「语义必须被理解」的证据 —— 它们随数据变化，
+    以前写死在字符串里（"99.13%" 那一条与实际口径对不上，已改成本函数算的）。
+    """
+    n_vwap = n_in_range = 0
+    n_fund = n_fund_null = 0
+    intervals: dict[str, set] = defaultdict(set)
+
+    for f in sorted(FE.rglob("*.parquet")):
+        t = pq.read_table(str(f), columns=[
+            "symbol", "high", "low", "close", "volume", "quote_volume",
+            "funding_rate", "funding_interval_hours"]).to_pandas()
+
+        # ① volume / quote_volume 与价格同单位：VWAP = quote_volume/volume
+        #    必须落在该 bar 的 [low, high] 内。这比"约等于 close"强 ——
+        #    VWAP 是成交量加权均价，本来就不等于收盘价（中位差 0.34%）。
+        m = (t["volume"] > 0) & t["close"].notna() & t["high"].notna()
+        if m.any():
+            vwap = t.loc[m, "quote_volume"] / t.loc[m, "volume"]
+            n_vwap += int(m.sum())
+            n_in_range += int(((vwap >= t.loc[m, "low"])
+                               & (vwap <= t.loc[m, "high"])).sum())
+
+        # ② funding_rate 的天然稀疏度
+        n_fund += len(t)
+        n_fund_null += int(t["funding_rate"].isna().sum())
+
+        # ③ 有多少合约中途换过结算区间
+        iv = t[["symbol", "funding_interval_hours"]].dropna()
+        for s, g in iv.groupby("symbol")["funding_interval_hours"]:
+            intervals.setdefault(str(s), set()).update(g.unique().tolist())
+
+    return {
+        "vwap_n": n_vwap,
+        "vwap_in_range_pct": (n_in_range / n_vwap) if n_vwap else float("nan"),
+        "funding_rows": n_fund,
+        "funding_null_rows": n_fund_null,
+        "funding_null_pct": (n_fund_null / n_fund) if n_fund else float("nan"),
+        "funding_nonnull_pct": (1 - n_fund_null / n_fund) if n_fund else float("nan"),
+        "interval_change_syms": sum(1 for v in intervals.values() if len(v) > 1),
+        "interval_syms": len(intervals),
+        "interval_values": sorted({x for v in intervals.values() for x in v}),
+    }
+
+
+def compute_report_facts(d: pd.DataFrame, cov: pd.DataFrame, mc: pd.DataFrame,
+                         man: pd.DataFrame, cause: dict,
+                         n_months_member: int) -> dict:
+    """data_quality.md 里所有【会随数据变化】的数字，一处算清。
+
+    以前 §1 / §4.2 / §4.3 / §4.4 里有 7 个数字是写死在字符串里的，刷新数据后
+    不会自动更新 —— §4.3 那句 "From 2023 onward all three sources stay above
+    0.99" 到后来已经和数据矛盾了。凡是随数据变的，一律在这里算。
+    """
+    srcs = list(METRICS)
+    n_months = int(d["ts"].dt.strftime("%Y-%m").nunique())
+
+    # ---- §1 面板存在、但没有成员集的月份 ----
+    n_months_no_members = n_months - n_months_member
+
+    # ---- §2 覆盖率为 0.0000 的 (合约, 源) ----
+    z = cov[cov["coverage"] == 0]
+    zero_pairs = sorted((str(s), str(m)) for s, m in zip(z["symbol"], z["metric"]))
+    zero_syms = sorted({s for s, _ in zero_pairs})
+
+    # ---- §3.3 manifest 里失败的是不是全为 metrics ----
+    nonok = man[man["status"] != "ok"] if len(man) else man
+    nonok_sources = sorted(set(str(x) for x in nonok["source"])) if len(nonok) else []
+
+    # ---- §4.2 归档无文件最多的那三个合约 + 它们的 oi 覆盖率 ----
+    dormant = []
+    for sym, hrs in cause["a_top"]:
+        c = cov[(cov["symbol"] == sym) & (cov["metric"] == "oi")]["coverage"]
+        dormant.append((sym, int(hrs), float(c.iloc[0]) if len(c) else float("nan")))
+
+    # ---- §4.3 逐月最弱 + 全市场断供窗口 ----
+    mc_worst = {m: (str(mc[m].idxmin()), float(mc[m].min())) for m in srcs}
+    mc_min = mc[srcs].min(axis=1)
+    below = mc_min[mc_min < 0.99].sort_values()
+    ym_col = d["ts"].dt.strftime("%Y-%m")          # 只算一次，下面按月在它上面过滤
+
+    # 全市场断供：某小时【过半在场合约】同缺同一个源。这能把「一个合约坏了」
+    # 和「交易所那天没发布」分开 —— 月度平均值本身看不出这个区别。
+    outages: list[dict] = []
+    for metric, col in (("mark", "mark_close"), ("index", "index_close")):
+        per = (pd.DataFrame({"ts": d["ts"], "miss": d[col].isna()})
+                 .groupby("ts")["miss"].agg(["sum", "size"]))
+        frac = (per["sum"] / per["size"]).to_numpy()
+        miss_n = per["sum"].to_numpy()
+        for i0, i1 in runs_of(frac >= 0.5):
+            outages.append({
+                "metric": metric,
+                "start": str(per.index[i0]), "end": str(per.index[i1]),
+                "hours": int(i1 - i0 + 1),
+                "contracts": int(miss_n[i0:i1 + 1].max()),
+            })
+
+    worst_months = []
+    for ym in below.index[:5]:
+        metric = str(mc.loc[ym, srcs].idxmin())
+        col = METRICS[metric]
+        sub = d.loc[(ym_col == ym).to_numpy(), ["symbol", col]]
+        miss = sub[col].isna() if col.endswith("_close") else sub[col].astype(bool)
+        worst_months.append({
+            "month": str(ym), "metric": metric, "coverage": float(mc_min.loc[ym]),
+            "affected": int(sub.loc[miss, "symbol"].nunique()),
+            "present": int(sub["symbol"].nunique()),
+        })
+
+    # ---- §4.4 刻意不标记的 ----
+    oi0 = d[d["oi"].notna() & (d["oi"] == 0)]
+    oi0_hour = oi0.groupby("ts").size() if len(oi0) else pd.Series(dtype=int)
+
+    return {
+        "n_months": n_months,
+        "n_months_no_members": n_months_no_members,
+        "zero_pairs": zero_pairs,
+        "zero_syms": zero_syms,
+        "nonok_sources": nonok_sources,
+        "dormant": dormant,
+        "mc_worst": mc_worst,
+        "mc_below_n": int(len(below)),
+        "worst_months": worst_months,
+        "outages": outages,
+        "oi_zero_rows": int(len(oi0)),
+        "oi_zero_syms": int(oi0["symbol"].nunique()) if len(oi0) else 0,
+        "oi_zero_days": int(oi0["ts"].dt.floor("D").nunique()) if len(oi0) else 0,
+        "oi_zero_max_hour": int(oi0_hour.max()) if len(oi0_hour) else 0,
+    }
+
+
 # ============================================================================
 # 图（英文标签）
 # ============================================================================
-
 def fig_coverage_distribution(cov: pd.DataFrame) -> Path:
     """覆盖率分布直方图：每源一个面板，横轴覆盖区间、纵轴合约数。
 
@@ -304,26 +447,27 @@ def fig_coverage_distribution(cov: pd.DataFrame) -> Path:
 
 
 def fig_monthly_coverage(mc: pd.DataFrame) -> Path:
-    """月度覆盖率的折线（57 个月，三条线）。"""
+    """月度覆盖率的折线（每个月一条，四个源）。"""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(12, 3.6))
     x = range(len(mc))
-    # oi 画在下层且带透明度：klines 与 oi 常有整段恰好相等（都是 1.0000），
-    # 不透明会把其中一条完全盖住，看上去像"那条线没了"。
-    for col, color in [("oi", "#c62828"), ("mark", "#1565c0"), ("klines", "#2f7d32")]:
+    # 画序即层序：后画的在上。四条线在高覆盖率区间常整段重叠，
+    # 所以都带透明度，否则会把下面那条完全盖住，看上去像"那条线没了"。
+    for col, color in [("index", "#6a1b9a"), ("oi", "#c62828"),
+                       ("mark", "#1565c0"), ("klines", "#2f7d32")]:
         ax.plot(x, mc[col].to_numpy(), label=col, color=color,
-                linewidth=1.6, alpha=0.85)
+                linewidth=1.4, alpha=0.8)
     ax.set_ylim(0.94, 1.005)
     ax.set_ylabel("coverage", fontsize=9)
     step = 6
     ax.set_xticks(list(x)[::step])
     ax.set_xticklabels(list(mc.index)[::step], rotation=40, ha="right", fontsize=8)
     ax.axhline(1.0, color="#999999", linewidth=0.8, linestyle="--")
-    ax.legend(fontsize=9, ncol=3, loc="lower right")
-    ax.set_title("Monthly coverage across 57 months", fontsize=12)
+    ax.legend(fontsize=9, ncol=4, loc="lower right")
+    ax.set_title(f"Monthly coverage across {len(mc)} months", fontsize=12)
     ax.grid(alpha=0.25, linewidth=0.6)
     fig.tight_layout()
     out = FIG / "monthly_coverage.png"
@@ -341,9 +485,10 @@ def fig_monthly_coverage(mc: pd.DataFrame) -> Path:
 # ============================================================================
 
 def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFrame,
-                         gaps: pd.DataFrame, mc: pd.DataFrame,
-                         cause: dict, n_members: int, n_member_syms: int,
-                         n_months_member: int, fig_paths: list[Path]) -> str:
+                         gaps: pd.DataFrame, mc: pd.DataFrame, cause: dict,
+                         facts: dict, panel: dict, n_members: int,
+                         n_member_syms: int, n_months_member: int,
+                         fig_paths: list[Path]) -> str:
     L: list[str] = []
     A = L.append
     n_rows = len(d)
@@ -380,8 +525,9 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     A("and its last active day has exactly one row, with explicit flags "
       "(`bar_missing` / `oi_missing`) marking padded hours.")
     A("")
-    A("First 3 months of the window have no members — `min_history_bars = 2160` "
-      "(90 days) means no contract is eligible yet.")
+    A(f"The first {facts['n_months_no_members']} months of the window have no members — "
+      f"`min_history_bars = {cfg.min_history_bars}` "
+      f"({cfg.min_history_bars // 24} days) means no contract has enough history yet.")
     A("")
     A("---")
     A("")
@@ -401,7 +547,9 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     A("")
     A("**The median hides the distribution — that is why both are shown.** "
       "`mark` and `index` have far fewer contracts at exactly 100% coverage than "
-      "`klines` does, because two sources are missing for one contract (see §4.1).")
+      "`klines` does, because both are absent for the same "
+      f"{plural(len(facts['zero_syms']), 'contract')} "
+      f"(`{'`, `'.join(facts['zero_syms'])}` — see §4.1).")
     A("")
     for p in fig_paths:
         # 链接相对于【报告自己的目录】（04_qa/），不是 data/ —— 否则 Markdown 里是死链
@@ -478,10 +626,15 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     A("")
     A("`klines`, `mark` and `index` are attributed differently because they arrive as")
     A("monthly archives rather than per-day files. There is nothing left to attribute:")
-    A("**no monthly file failed** — every 404 in the manifest is a `metrics` file (§3.2)")
-    A("— so each of their runs lies *inside* a file that was successfully downloaded and")
-    A("is therefore the archive's own gap. The `oi` row above is the same population as")
-    A("§3.1, counted in runs rather than in hours.")
+    if facts["nonok_sources"] == ["metrics"]:
+        A(f"**no monthly file failed** — every one of the {cause['out_n']} 404s in the")
+        A("manifest is a `metrics` file (§3.2) — so each of their runs lies *inside* a")
+        A("file that was successfully downloaded and is therefore the archive's own gap.")
+    else:
+        A(f"the manifest's failures come from {', '.join('`' + s + '`' for s in facts['nonok_sources'])},")
+        A("so those runs cannot be attributed without opening the files.")
+    A("The `oi` row above is the same population as §3.1, counted in runs rather than")
+    A("in hours.")
     A("")
     A("---")
     A("")
@@ -501,43 +654,80 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
           f"{r.n_present:,.0f} / {r.n_total:,.0f} | "
           f"{int(gaps[(gaps.symbol == r.symbol) & (gaps.metric == r.metric)]['hours'].max()) if len(gaps[(gaps.symbol == r.symbol) & (gaps.metric == r.metric)]) else 0:,} h |")
     A("")
-    A("**The zero-coverage rows are one contract, not a general failure:** the")
-    A("Chinese-named contract has **no `mark` / `index` files in the archive at all**")
-    A("(verified by enumerating the S3 archive: zero `.zip` under either source).")
-    A("Its `klines` and `oi` are complete — only these two price sources are absent.")
+    if facts["zero_syms"]:
+        syms_txt = " / ".join(f"`{s}`" for s in facts["zero_syms"])
+        zsrcs = sorted({m for _, m in facts["zero_pairs"]})
+        srcs_txt = " / ".join(f"`{m}`" for m in zsrcs)
+        A(f"**The zero-coverage rows are {plural(len(facts['zero_syms']), 'contract')}, "
+          f"not a general failure.** {syms_txt} has **no {srcs_txt} rows at all** — 0 "
+          f"hours present out of its whole grid.")
+    else:
+        A("**No contract has zero coverage in any source.**")
+    A("")
+    A("This is a gap in the archive, not a download failure: enumerating the S3 archive")
+    A("returns zero `.zip` for that contract under either source. Its remaining sources")
+    A("are complete — see the table above, where only these rows show a zero.")
     A("")
     A("### 4.2 Contracts that stopped trading and resumed")
     A("")
-    A("`oi` coverage of 0.81–0.84 on `LITUSDT` / `ICPUSDT` / `TLMUSDT` comes from")
-    A("months of **zero trading** in the middle of their life (they disappear from the")
-    A("exchange and later return), not from a collection failure.")
+    if facts["dormant"]:
+        covs = " / ".join(f"`{s}` {c:.4f}" for s, _, c in facts["dormant"])
+        A(f"`oi` coverage of {covs} comes from months of **zero trading** in the middle")
+        A("of their life (they disappear from the exchange and later return), not from a")
+        A("collection failure.")
+    else:
+        A("No contract shows the dormant-then-return pattern.")
     A("")
     A("This is exactly the §3.1 first row, and it accounts for almost all of it: the")
     A("archive holds **no `metrics` file at all** for those days. The hours are still")
     A("present in the panel with `quote_volume = 0` — the price data exists, the open")
     A("interest does not, because while a contract is dormant the exchange publishes none.")
     A("")
-    A("### 4.3 Weakest month")
+    A("### 4.3 Coverage over time")
     A("")
-    worst_oi = mc["oi"].idxmin()
-    worst_k = mc["klines"].idxmin()
-    A("Coverage is not flat over time. The weakest months are at the very start:")
+    A(f"Coverage is not flat. **{facts['mc_below_n']} of the {facts['n_months']} months "
+      f"have at least one source below 0.99.** The weakest five:")
     A("")
-    A(f"- weakest for `oi`: **{worst_oi}** — {mc.loc[worst_oi, 'oi']:.4f}")
-    A(f"- weakest for `klines`: **{worst_k}** — {mc.loc[worst_k, 'klines']:.4f}")
+    A("| Month | Weakest source | Coverage | Contracts affected |")
+    A("|---|---|---|---|")
+    for w in facts["worst_months"]:
+        A(f"| {w['month']} | `{w['metric']}` | {w['coverage']:.4f} | "
+          f"{w['affected']} of {w['present']} |")
     A("")
-    A("This is expected: early months contain fewer contracts with enough history, so")
-    A("a single missing contract moves the monthly average more. From 2023 onward all")
-    A("three sources stay above 0.99.")
+    A("`Contracts affected` separates one broken contract from an exchange-wide event.")
+    A("Two causes account for every month in the table:")
+    A("")
+    A(f"**① The earliest months are structurally thin.** Too few contracts have "
+      f"{cfg.min_history_bars // 24} days")
+    A("of history yet, so one missing contract moves the monthly average more.")
+    A("")
+    if facts["outages"]:
+        A(f"**② Exchange-wide outages.** In {plural(len(facts['outages']), 'window')}, more")
+        A("than half of all contracts present lose the same source at the same hour:")
+        A("")
+        A("| Source | From | To | Hours | Contracts |")
+        A("|---|---|---|---|---|")
+        for o in facts["outages"]:
+            A(f"| `{o['metric']}` | {o['start'][:16]} | {o['end'][:16]} | "
+              f"{o['hours']} | {o['contracts']} |")
+    else:
+        A("**② No exchange-wide outage** — no hour has more than half of the contracts")
+        A("missing the same source.")
     A("")
     A("### 4.4 What is deliberately NOT flagged")
     A("")
     A("| Not flagged | Why |")
     A("|---|---|")
-    A("| `funding_rate` being null in 83.35% of rows | It only exists at settlement. Sparse by design — flagging it would produce ~6 million false gaps. |")
+    A(f"| `funding_rate` being null in {panel['funding_null_pct']:.2%} of rows "
+      f"({panel['funding_null_rows']:,}) | It only exists at settlement. Sparse by "
+      f"design — flagging it would produce that many false gaps. |")
     A("| `funding_interval_hours` | Forward-filled; not sparse. |")
-    A("| `oi == 0` (2,523 rows) | A market-wide publishing event (up to 223 contracts at the same hour), not a per-contract defect. The panel keeps the true value; downstream may filter with `oi > 0`. |")
-    A("| Late-listed contracts having short history | That is the fact being recorded, not a defect. |")
+    A(f"| `oi == 0` ({facts['oi_zero_rows']:,} rows over {facts['oi_zero_days']} days, "
+      f"{facts['oi_zero_syms']} contracts) | A market-wide publishing event (up to "
+      f"{facts['oi_zero_max_hour']} contracts in the same hour), not a per-contract "
+      f"defect. The panel keeps the true value; downstream may filter with `oi > 0`. |")
+    A("| Late-listed contracts having short history | That is the fact being recorded, "
+      "not a defect. |")
     A("")
     A("---")
     A("")
@@ -568,7 +758,8 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
 # data_dictionary.md（英文，只管列定义）
 # ============================================================================
 
-def build_data_dictionary(cfg, sample_end: str, n_rows: int, n_syms: int) -> str:
+def build_data_dictionary(cfg, sample_end: str, n_rows: int, n_syms: int,
+                          n_elig: int, n_members: int, panel: dict) -> str:
     L: list[str] = []
     A = L.append
     A("# Data Dictionary — Phase 1 (D1)")
@@ -614,9 +805,9 @@ def build_data_dictionary(cfg, sample_end: str, n_rows: int, n_syms: int) -> str
     A("| `mark_index_1h` | 1 hour | `(symbol, ts)` | same | same |")
     A("| `oi_1h` | 1 hour | `(symbol, ts)` | same | same |")
     A("| `funding` | settlement event | `(symbol, ts_funding)` | see `01_layer2` | same |")
-    A("| `master` | 1 contract | `symbol` | 285 | single file |")
-    A("| `universe_eligibility` | 1 contract × 1 month | `(symbol, month)` | 16,245 | single file |")
-    A("| `universe_membership` | 1 contract × 1 month | `(symbol, month)` | 2,700 | single file |")
+    A(f"| `master` | 1 contract | `symbol` | {n_syms:,} | single file |")
+    A(f"| `universe_eligibility` | 1 contract × 1 month | `(symbol, month)` | {n_elig:,} | single file |")
+    A(f"| `universe_membership` | 1 contract × 1 month | `(symbol, month)` | {n_members:,} | single file |")
     A("")
     A(f"`features_1h` holds **{n_rows:,} rows / {n_syms} contracts**.")
     A("")
@@ -657,22 +848,38 @@ def build_data_dictionary(cfg, sample_end: str, n_rows: int, n_syms: int) -> str
     A("")
     A("**② `funding_rate`'s sparsity is semantics, not a data-quality problem.**")
     A("")
-    A("Only ~16.6% of rows carry a value (settlement hours). The rest are `NaN` by")
+    A(f"Only {panel['funding_nonnull_pct']:.2%} of rows carry a value (settlement hours),")
+    A(f"{panel['funding_null_rows']:,} of {panel['funding_rows']:,} are null. The rest are "
+      f"`NaN` by")
     A("design, which is why it is excluded from gap detection.")
     A("")
     A("**③ `funding_interval_hours` is forward-filled, and settlement intervals change.**")
     A("")
     A("Between settlements the value is the interval announced at the previous")
     A("settlement — a known quantity at decision time, not an invention. Contracts")
-    A("differ: most use 4h or 8h, and 91 contracts changed interval mid-sample, so")
-    A("**read this column rather than hard-coding 8h** when annualising.")
+    A(f"differ: the values seen in this sample are "
+      f"{', '.join(f'{v:g}h' for v in panel['interval_values'])}, and "
+      f"{panel['interval_change_syms']} of {panel['interval_syms']} contracts changed")
+    A("interval mid-sample, so **read this column rather than hard-coding 8h** when")
+    A("annualising.")
     A("")
     A("**④ `oi`, `volume` and `taker_buy_volume` are in base-asset units, not contracts.**")
     A("")
-    A("Verified two ways: `sum_open_interest × close` reproduces the archive's own")
-    A("`sum_open_interest_value`, and `quote_volume / volume` equals `close` on 99.13%")
-    A("of rows. Do not assume a fixed contract multiplier — contracts whose base asset")
-    A("is `1000XXX` count thousand-token units.")
+    A("Verified two ways.")
+    A("")
+    A("① Against the archive itself: `sum_open_interest × close` reproduces the")
+    A("archive's own `sum_open_interest_value` column. (Recorded as a one-off check —")
+    A("that column is not kept, so it cannot be recomputed from `data/` alone.)")
+    A("")
+    A(f"② Against the panel: `quote_volume / volume` is the bar's volume-weighted")
+    A(f"average price, and it falls inside `[low, high]` on **{panel['vwap_in_range_pct']:.4%}**")
+    A(f"of the {panel['vwap_n']:,} bars with non-zero volume. That is only possible if")
+    A("`volume` and `quote_volume` are in the same unit system as the prices — contracts")
+    A("would break it. `quote_volume / volume` is *not* equal to `close`: it is the")
+    A("weighted average, not the last trade.")
+    A("")
+    A("Do not assume a fixed contract multiplier — contracts whose base asset is")
+    A("`1000XXX` count thousand-token units.")
     A("")
     A("---")
     A("")
@@ -701,10 +908,15 @@ def build_data_dictionary(cfg, sample_end: str, n_rows: int, n_syms: int) -> str
     A("| `universe_membership` | 1 contract × 1 month | `symbol` `month` `rank` `liq` `bars_before` `oi_cov` `oi_max_gap_h` `active_days` |")
     A("| `member_changes` | 1 month | `month` `n_members` `n_entered` `n_exited` `n_retained` `turnover` |")
     A("")
+    # 例子取样本最后一个月；三个日期全部由 sample_end + liq_window_days 算出。
+    # 写死的话，样本往前推之后这段说明会和实际口径对不上。
+    cut = pd.Timestamp(sample_end).normalize().replace(day=1)
+    lo = cut - pd.Timedelta(days=cfg.liq_window_days)
+    nxt = cut + pd.offsets.MonthBegin(1)
     A("**`month` is the decision instant, not the performance interval.** A row with")
-    A("`month = 2026-08` means the membership was decided at `2026-08-01 00:00 UTC`,")
-    A("using the window `[2026-07-02, 2026-08-01)`; the membership then applies to")
-    A("`[2026-08-01, 2026-09-01)`.")
+    A(f"`month = {cut:%Y-%m}` means the membership was decided at `{cut:%Y-%m-%d} 00:00 UTC`,")
+    A(f"using the window `[{lo:%Y-%m-%d}, {cut:%Y-%m-%d})`; the membership then applies")
+    A(f"to `[{cut:%Y-%m-%d}, {nxt:%Y-%m-%d})`.")
     A("")
     return "\n".join(L)
 
@@ -970,8 +1182,8 @@ def main() -> int:
         f" / 文件在但无快照 {cause['b_hours']:,}")
     log(f"  面板外 404 {cause['out_n']:,} 个，落在面板内的 {cause['out_inside']} 个")
 
-    # ---- 4. 成员集规模（报告第 1 块要用）--------------------------------
-    n_members = n_member_syms = n_months_member = 0
+    # ---- 4. 成员集与资格表规模（两份文档的表都要用）---------------------
+    n_members = n_member_syms = n_months_member = n_elig = 0
     mem_p = REF / "universe_membership.parquet"
     if mem_p.exists():
         mem = pd.read_parquet(mem_p, columns=["symbol", "month"])
@@ -980,8 +1192,23 @@ def main() -> int:
         n_months_member = mem["month"].nunique()
     else:
         log("  ⚠ 找不到 universe_membership.parquet —— 报告里的成员集规模会记 0")
+    elig_p = REF / "universe_eligibility.parquet"
+    if elig_p.exists():
+        n_elig = int(pq.ParquetFile(elig_p).metadata.num_rows)
+    else:
+        log("  ⚠ 找不到 universe_eligibility.parquet —— 字典里的行数会记 0")
 
-    # ---- 5. 图 ----------------------------------------------------------
+    # ---- 5. 文档里所有会随数据变的数字 ----------------------------------
+    # 以前这些是写死在字符串里的，刷新数据后不会自动更新（§4.3 那句已经和数据
+    # 矛盾了）。集中算一次，两份文档共用。
+    t0 = time.time()
+    facts = compute_report_facts(d, cov, mc, man, cause, n_months_member)
+    panel = compute_panel_facts()
+    log(f"文档事实：{facts['mc_below_n']} 个月至少一源 <0.99 / "
+        f"oi==0 {facts['oi_zero_rows']:,} 行 / funding null {panel['funding_null_pct']:.2%}"
+        f"   耗时 {time.time()-t0:.0f}s")
+
+    # ---- 6. 图 ----------------------------------------------------------
     fig_paths: list[Path] = []
     if args.skip_figures:
         log("--skip-figures：跳过 PNG")
@@ -995,23 +1222,25 @@ def main() -> int:
             log(f"  ⚠ 生成图失败（{type(e).__name__}: {e}）—— 报告仍会生成，只是没有图。")
             fig_paths = []
 
-    # ---- 6. 质量报告 ----------------------------------------------------
+    # ---- 7. 质量报告 ----------------------------------------------------
     q = build_quality_report(cfg, args.sample_end, d, cov, gaps, mc, cause,
-                             n_members, n_member_syms, n_months_member, fig_paths)
+                             facts, panel, n_members, n_member_syms,
+                             n_months_member, fig_paths)
     (QA / "data_quality.md").write_text(q, encoding="utf-8", newline="\n")
     log(f"    -> 04_qa/data_quality.md            {len(q):,} 字符")
 
-    # ---- 7. 数据字典 ----------------------------------------------------
-    dd = build_data_dictionary(cfg, args.sample_end, len(d), d["symbol"].nunique())
+    # ---- 8. 数据字典 ----------------------------------------------------
+    dd = build_data_dictionary(cfg, args.sample_end, len(d), d["symbol"].nunique(),
+                               n_elig, n_members, panel)
     (QA / "data_dictionary.md").write_text(dd, encoding="utf-8", newline="\n")
     log(f"    -> 04_qa/data_dictionary.md         {len(dd):,} 字符")
 
-    # ---- 8. REPRODUCE.md ------------------------------------------------
+    # ---- 9. REPRODUCE.md ------------------------------------------------
     repro = build_reproduce(cfg, args.sample_end)
     write_text_atomic(REPRO, repro)
     log(f"    -> phase1/REPRODUCE.md              {len(repro):,} 字符")
 
-    # ---- 9. 校验和（最后一个写盘动作）----------------------------------
+    # ---- 10. 校验和（最后一个写盘动作）---------------------------------
     n_ck = len(checksum_targets())
     written = write_checksums()
     assert written == n_ck, f"checksum count drift: {written} != {n_ck}"
