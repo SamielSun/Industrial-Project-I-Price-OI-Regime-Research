@@ -8,24 +8,28 @@ build_qa —— Step 6 的第二部分：缺失数据报告 + 数据字典 + 校
 做什么
 ------
   1. missing_files.parquet   文件层：manifest 里下载失败的源文件
-  2. gaps.parquet            记录层：连续缺口区间（5 类指标）
+  2. gaps.parquet            记录层：连续缺口区间（4 类指标）
   3. coverage.parquet        记录层：逐合约逐指标的覆盖率
   4. data_dictionary.md      数据字典
   5. checksums.sha256        全部产出文件的校验和
   6. REPRODUCE.md            从零复现的命令
 
-五类指标
+四类指标
 --------
   klines     bar_missing == True          klines 9 列价格量缺失
   oi         oi_missing  == True          OI 快照缺失
   mark       mark_close  isna()           mark 价格缺失
   index      index_close isna()           index 价格缺失
-  oi_zero    oi == 0 且非 missing         OI 快照为 0（市场级发布事件）
 
 ⚠️ **不检测 `funding_rate`** —— 它只在结算时刻有值（83.35% 的行天生为 NaN，
     即 6,045,512 行），算成缺口会产出 600 万个假缺口。它的稀疏性是语义，
     不是数据质量问题。
 ⚠️ **不检测 `funding_interval_hours`** —— 前向填充，不存在缺口。
+⚠️ **不检测 `oi == 0`** —— 它曾作为第五类指标 `oi_zero`（实测 2,523 行 /
+    249 合约 / 55 天，至多 223 个合约在同一小时同时为 0，是全市场发布事件）。
+    已删除：它是 `(oi 非空) & (oi == 0)` 的纯派生量、零独立信息，且塞进
+    `coverage` 表格里会让"覆盖率"一词产生两种含义（那不是缺失，是值域）。
+    要挡它，下游写 `oi > 0` 即可。
 
 排序：`gaps.parquet` 按 `(symbol, metric, gap_start)` —— 同一合约的缺口相邻，
 人工按合约查最方便。（不按长度降序：那会让同一合约的多段缺口散开。）
@@ -62,13 +66,12 @@ MANIFEST = DATA / "00_config" / "manifest.parquet"
 
 T_START = time.time()
 
-# 五类指标：(列名, 判据函数名, 说明)
+# 四类指标：metric 名 -> FEATURES_1H 里的标记/值列
 METRICS = {
     "klines": "bar_missing",
     "oi": "oi_missing",
     "mark": "mark_close",
     "index": "index_close",
-    "oi_zero": "oi_zero",
 }
 
 
@@ -172,15 +175,11 @@ def main() -> int:
                                                         ignore_index=True)
     log(f"  {len(d):,} 行 / {d['symbol'].nunique()} 个合约   耗时 {time.time()-t0:.0f}s")
 
-    # oi_zero：有值且为 0（不是 missing）
-    d["oi_zero"] = (d["oi"].notna()) & (d["oi"] == 0)
-
     flag_col = {
         "klines": d["bar_missing"].to_numpy(),
         "oi": d["oi_missing"].to_numpy(),
         "mark": d["mark_close"].isna().to_numpy(),
         "index": d["index_close"].isna().to_numpy(),
-        "oi_zero": d["oi_zero"].to_numpy(),
     }
 
     log("")
@@ -195,14 +194,7 @@ def main() -> int:
         for metric in METRICS:
             sub = flag_col[metric][idx]
             n_bad = int(sub.sum())
-            # `oi_zero` 逐小时记，其余记连续区间。
-            # 理由：`oi_zero` 本质是【离散的坏点】—— 实测全部 2,523 段的段长
-            # 都是 1 小时，逐小时记录与区间记录等价（且更直观）。
-            # 而 `oi` / `index` 等确有长段（最长 7,573 小时），用区间才合理。
-            if metric == "oi_zero":
-                segs = [(i, i) for i in np.flatnonzero(sub)]
-            else:
-                segs = runs_of(sub)
+            segs = runs_of(sub)               # 连续 True 的区间
             max_h = 0.0
             for i0, i1 in segs:
                 a, b_ = idx[i0], idx[i1]
@@ -217,9 +209,7 @@ def main() -> int:
                     "hours": float(hours),
                     "days": round(hours / 24, 3),
                     # 缺口从该合约的第一行就开始 —— 区分"样本前就缺"与"中途损坏"
-                    # （oi_zero 恒为 False：它是坏点，与样本边界无关）
-                    "started_before_sample": bool(metric != "oi_zero"
-                                                  and a == idx[0]),
+                    "started_before_sample": bool(a == idx[0]),
                 })
             present = n_total - n_bad
             cov_rows.append({
