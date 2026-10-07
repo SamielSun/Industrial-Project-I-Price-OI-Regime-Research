@@ -26,14 +26,11 @@ run_phase1 —— 一条命令跑完 Phase 1 的六个处理步骤
   # 全流程（约 45 分钟；Step 0-3 需要 VPN）
   python phase1/run_phase1.py --out-root data --sample-end 2026-08-31
 
-  # Step 3 半夜断了，从中途续跑（Step 3 自己有断点续传，不会重下）
-  python phase1/run_phase1.py --out-root data --sample-end 2026-08-31 --from 3
-
-  # 只重生成交付物
-  python phase1/run_phase1.py --out-root data --sample-end 2026-08-31 --only 6b
-
   # 看要跑哪些步骤，不执行
   python phase1/run_phase1.py --out-root data --sample-end 2026-08-31 --dry-run
+
+任一一步失败即停在该步，不会继续往下跑。要单跑某一步，直接调那个脚本 ——
+六个脚本的命令见 data/04_qa/REPRODUCE.md 的「The same thing, step by step」。
 
 三条设计约束（改这个文件时不要破坏）
 ------------------------------------
@@ -61,7 +58,7 @@ ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))                                # 项目根
 import config as cfg_mod                                     # noqa: E402
 
-# (Step 标签, 脚本名, 一句话说明)。标签同时是 --from / --only 的取值。
+# (Step 标签, 脚本名, 一句话说明)
 STEPS: list[tuple[str, str, str]] = [
     ("0-2", "build_candidate_pool.py", "枚举归档 → 硬过滤 → 逐月排名 → 候选池"),
     ("3",   "fetch_market_data.py",    "下载候选池五个源的原始数据"),
@@ -70,26 +67,12 @@ STEPS: list[tuple[str, str, str]] = [
     ("6a",  "build_universe.py",       "四条资格闸 → PIT 成员集"),
     ("6b",  "build_deliverables.py",   "质量证明 + 字典 + 复现 + 校验和"),
 ]
-LABELS = [s[0] for s in STEPS]
 T_START = time.time()
 
 
 def log(msg: str = "") -> None:
     el = time.time() - T_START
     print(f"[{int(el)//60:02d}:{int(el)%60:02d}] {msg}", flush=True)
-
-
-def select_steps(from_: str | None, only: str | None) -> list[tuple[str, str, str]]:
-    """按 --from / --only 选出要跑的步骤。标签非法时抛 ValueError。"""
-    if only:
-        if only not in LABELS:
-            raise ValueError(f"--only={only!r} 不是合法 Step 标签；可选 {LABELS}")
-        return [s for s in STEPS if s[0] == only]
-    if from_:
-        if from_ not in LABELS:
-            raise ValueError(f"--from={from_!r} 不是合法 Step 标签；可选 {LABELS}")
-        return STEPS[LABELS.index(from_):]
-    return list(STEPS)
 
 
 def run_step(label: str, script: str, out_root: str,
@@ -123,17 +106,10 @@ def run_step(label: str, script: str, out_root: str,
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Phase 1 驱动器 —— 一条命令跑完六个处理步骤",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Step 标签：" + "  ".join(f"{l}={s}" for l, s, _ in STEPS))
+        description="Phase 1 驱动器 —— 一条命令跑完六个处理步骤")
     ap.add_argument("--out-root", required=True,
                     help="产出根目录（必填，与六个脚本的 --out-root 同义）")
     ap.add_argument("--sample-end", required=True, help="样本截止日，必须是月末")
-    g = ap.add_mutually_exclusive_group()
-    g.add_argument("--from", dest="from_", metavar="STEP",
-                   help=f"从该步开始跑到最后；可选 {'/'.join(LABELS)}")
-    g.add_argument("--only", metavar="STEP",
-                   help=f"只跑该步；可选 {'/'.join(LABELS)}")
     ap.add_argument("--dry-run", action="store_true", help="只打印要跑哪些步骤，不执行")
     args = ap.parse_args()
 
@@ -145,11 +121,7 @@ def main() -> int:
         print(f"\n参数校验失败：\n{e}", file=sys.stderr)
         return 2
 
-    try:
-        todo = select_steps(args.from_, args.only)
-    except ValueError as e:
-        print(f"\n{e}", file=sys.stderr)
-        return 2
+    todo = list(STEPS)
 
     log("=" * 78)
     log(f"run_phase1   sample_end={args.sample_end}")
@@ -175,9 +147,10 @@ def main() -> int:
             log("")
             log("=" * 78)
             log(f"✗ Step {label}（{script}）失败，退出码 {code} —— 后续步骤不再执行。")
-            log(f"  从这一步重试：")
-            log(f"    python phase1/run_phase1.py --out-root {args.out_root} "
-                f"--sample-end {args.sample_end} --from {label}")
+            log(f"  修好之后单跑这一步：")
+            log(f"    python phase1/{script} --out-root {args.out_root} "
+                f"--sample-end {args.sample_end}")
+            log(f"  或者整条重跑（已完成的步骤会自己跳过/自愈）。")
             log("=" * 78)
             break
 
