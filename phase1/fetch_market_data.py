@@ -60,7 +60,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 import os
 import random
 import re
@@ -110,22 +109,21 @@ RAW = DATA / "raw"
 CACHE = RAW / "_cache"
 MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
-RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 
 def configure_paths(out_root: Path) -> None:
     """按 --out-root 定全部产出路径。必须在 main() 最开头调用。
 
     与 build_candidate_pool.py 的 DATA 根目录必须一致 —— Step 3 读的是
-    Step 0–2 写下的 candidate_pool.csv 与 klines 缓存。
+    Step 0–2 写下的 candidate_pool.csv。（不读它的 klines 缓存：两者路径规则
+    不同，见 guidance.md 的「一个已知的重复下载」。）
     """
-    global DATA, RAW, CACHE, MANIFEST, CANDIDATE_POOL, RUN_INFO
+    global DATA, RAW, CACHE, MANIFEST, CANDIDATE_POOL
     DATA = out_root.resolve()
     RAW = DATA / "raw"
     CACHE = RAW / "_cache"
     MANIFEST = DATA / "00_config" / "manifest.parquet"
     CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
-    RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 # 月频源：(名字, 是否有 {interval}/ 层)。漏掉该层就 404。
 MONTHLY_SOURCES = [
@@ -709,35 +707,6 @@ def main() -> int:
         os.replace(tmp_, MANIFEST)
         if not final:
             return
-        n_written_ = sum(1 for k in jobs if written.get((k[0], k[1], k[2])))
-        RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
-        # 【读-改-写】：这个文件全流程共用，Step 0–2 写的 archive_contracts /
-        # archive_usdt 等键必须留住。早期这里整体覆盖，实测把它们冲掉了。
-        info_prev_: dict = {}
-        if RUN_INFO.exists():
-            try:
-                info_prev_ = json.loads(RUN_INFO.read_text(encoding="utf-8"))
-            except json.JSONDecodeError as e:
-                log(f"  ✗ {RUN_INFO.name} 解析失败：{e} —— 拒绝覆盖")
-                raise
-        info_prev_.update({
-            "sample_end": args.sample_end,
-            "sample_start": cfg.sample_start,
-            "config_snapshot": cfg.snapshot(),
-            "step": "fetch_market_data",
-            "run_at": now_,
-            "interrupted": interrupted,
-            "candidate_pool_size": len(pool),
-            "files_total": len(jobs),
-            "files_written": n_written_,
-            "files_per_source": dict(by_src),
-            "status_counts": {"ok": n_ok, "confirmed_404": n_404,
-                              "retry_exhausted": n_retry},
-        })
-        tmp2_ = RUN_INFO.with_name(RUN_INFO.name + f".{os.getpid()}.part")
-        tmp2_.write_text(json.dumps(info_prev_, ensure_ascii=False, indent=2),
-                         encoding="utf-8")
-        os.replace(tmp2_, RUN_INFO)
 
     def run_pass(todo, label: str) -> None:
         """下载 + 就地解压 + 按合约落盘。一遍过，无第二遍读盘。"""

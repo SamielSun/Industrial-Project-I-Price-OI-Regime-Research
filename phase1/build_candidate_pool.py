@@ -90,7 +90,6 @@ CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
 ARCHIVE = DATA / "00_config" / "archive_contracts.csv"    # Step 0 的产出
 DROPPED = DATA / "00_config" / "dropped_contracts.csv"    # Step 1 的产出（剔除明细）
 KEPT = DATA / "00_config" / "kept_contracts.csv"          # Step 1 的产出（通过名单）
-RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 
 def configure_paths(out_root: Path) -> None:
@@ -98,9 +97,9 @@ def configure_paths(out_root: Path) -> None:
 
     改动最小的等价替换：原来交给环境变量的那层目录，现在交给命令行参数，
     产出布局一字不变（CACHE_DIR / MANIFEST / CANDIDATE_POOL / 三个 Step 1
-    产出 / RUN_INFO 全都跟着根目录走）。
+    产出 全都跟着根目录走）。
     """
-    global DATA, CACHE_DIR, MANIFEST, CANDIDATE_POOL, ARCHIVE, DROPPED, KEPT, RUN_INFO
+    global DATA, CACHE_DIR, MANIFEST, CANDIDATE_POOL, ARCHIVE, DROPPED, KEPT
     DATA = out_root.resolve()
     CACHE_DIR = DATA / "00_config" / "_cache"
     MANIFEST = DATA / "00_config" / "manifest.parquet"
@@ -108,7 +107,6 @@ def configure_paths(out_root: Path) -> None:
     ARCHIVE = DATA / "00_config" / "archive_contracts.csv"
     DROPPED = DATA / "00_config" / "dropped_contracts.csv"
     KEPT = DATA / "00_config" / "kept_contracts.csv"
-    RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 # 闸 4 的判据：只有 exchangeInfo 的分类字段，不设手工名单。
 #
@@ -703,34 +701,6 @@ def main() -> int:
     os.replace(tmp, MANIFEST)
     n_fail = int((mf["status"] != "ok").sum())
     log(f"\nmanifest -> {MANIFEST}  ({len(mf):,} 行，非 ok {n_fail:,})")
-
-    # 原子写 + 【读-改-写】：sample_end.json 是全流程共用的运行元信息，
-    # Step 3–6b 各自往里写自己的 step_* 键。整体覆盖会把它们冲掉。
-    tmp = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
-    info_prev: dict = {}
-    if RUN_INFO.exists():
-        try:
-            info_prev = json.loads(RUN_INFO.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
-            log(f"  ✗ {RUN_INFO.name} 解析失败：{e}")
-            log("    拒绝覆盖 —— 它里面还有其他步骤的元信息。请先修复或移走该文件。")
-            return 5
-    info_prev.update({
-        "sample_end": args.sample_end,
-        "sample_start": cfg.sample_start,
-        "config_snapshot": cfg.snapshot(),
-        "run_at": datetime.now(timezone.utc).isoformat(),
-        # 两个数都要留：合约总数（Step 0 的产出）与其中的 USDT 结尾数
-        # （Step 1 第一条判据的输入）。枚举结果曾出现过不一致，故都要落盘。
-        "archive_contracts": len(syms),
-        "archive_usdt": len(usdt),
-        "eligible_after_hard_filter": len(kept),
-        "candidate_pool_size": len(union),
-        "download_status": statuses if not args.skip_download else {},
-    })
-    tmp.write_text(json.dumps(info_prev, ensure_ascii=False, indent=2),
-                   encoding="utf-8")
-    os.replace(tmp, RUN_INFO)
 
     # ---- 运行摘要（§4.4：★ 未取得 绝不能算进缺失）----
     # 没尝试过的项（--skip-download，或补跑轮没覆盖到）单列一类，与"尝试过但失败"

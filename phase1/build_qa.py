@@ -22,8 +22,9 @@ build_qa —— Step 6 的第二部分：缺失数据报告 + 数据字典 + 校
   index      index_close isna()           index 价格缺失
   oi_zero    oi == 0 且非 missing         OI 快照为 0（市场级发布事件）
 
-⚠️ **不检测 `funding_rate`** —— 它只在结算时刻有值（83.4% 的行天生为 NaN），
-   算成缺口会产出 117 万段假缺口。它的稀疏性是语义，不是数据质量问题。
+⚠️ **不检测 `funding_rate`** —— 它只在结算时刻有值（83.35% 的行天生为 NaN，
+    即 6,045,512 行），算成缺口会产出 600 万个假缺口。它的稀疏性是语义，
+    不是数据质量问题。
 ⚠️ **不检测 `funding_interval_hours`** —— 前向填充，不存在缺口。
 
 排序：`gaps.parquet` 按 `(symbol, metric, gap_start)` —— 同一合约的缺口相邻，
@@ -38,7 +39,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import sys
 import time
@@ -59,9 +59,6 @@ FE = DATA / "02_features" / "features_1h"
 REF = DATA / "03_reference"
 QA = DATA / "04_qa"
 MANIFEST = DATA / "00_config" / "manifest.parquet"
-RUN_INFO = DATA / "00_config" / "sample_end.json"
-L2 = DATA / "01_layer2"
-RAW = DATA / "raw"
 
 T_START = time.time()
 
@@ -77,15 +74,12 @@ METRICS = {
 
 def configure_paths(out_root: Path, fe_root: Path | None,
                     manifest: Path | None) -> None:
-    global DATA, FE, REF, QA, MANIFEST, RUN_INFO, L2, RAW
+    global DATA, FE, REF, QA, MANIFEST
     DATA = out_root.resolve()
     FE = ((fe_root or (DATA / "02_features")) / "features_1h").resolve()
     REF = DATA / "03_reference"
     QA = DATA / "04_qa"
     MANIFEST = (manifest or (DATA / "00_config" / "manifest.parquet")).resolve()
-    RUN_INFO = DATA / "00_config" / "sample_end.json"
-    L2 = DATA / "01_layer2"
-    RAW = DATA / "raw"
 
 
 def log(msg: str) -> None:
@@ -282,35 +276,10 @@ def main() -> int:
     rp.write_text(repro, encoding="utf-8", newline="\n")
     log(f"    -> REPRODUCE.md                      {len(repro):,} 字符")
 
-    # ---- 6. 运行元信息 ----
-    # 必须在校验和【之前】写：否则 sample_end.json 每次都被算成不一致。
+    # ---- 6. 校验和（最后一个写盘动作）----
+    # 先数、再哈希：n_ck 与写盘行数做断言，防漏文件。
+    # 它必须是最后一个写盘动作 —— 此前写入的每个文件都被纳入哈希。
     n_ck = len(checksum_targets())            # 只数，不哈希，省一遍读盘
-    prev = {}
-    if RUN_INFO.exists():
-        try:
-            prev = json.loads(RUN_INFO.read_text(encoding="utf-8"))
-        except Exception:                         # noqa: BLE001
-            prev = {}
-    prev["step_6_build_qa"] = {
-        "run_at": datetime.now(timezone.utc).isoformat(),
-        "missing_files": len(MF),
-        "gaps": len(G),
-        "coverage_rows": len(V),
-        "checksums": n_ck,
-    }
-    # config_snapshot 每次重写：Step 0-2/3/4 只在各自运行时写一次，
-    # 之后 config.py 若改过（例如闸 2 的 min_history_bars 从 720 提到 2160），
-    # 旧快照会一直留着 —— 实测出现过 sample_end.json 与 config.py 互相矛盾。
-    # Step 6b 是最后一步，由它强制对齐。
-    prev["config_snapshot"] = cfg.snapshot()
-    RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
-    tmp_ri = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
-    tmp_ri.write_text(json.dumps(prev, ensure_ascii=False, indent=2),
-                      encoding="utf-8")
-    os.replace(tmp_ri, RUN_INFO)
-    log("    -> 00_config/sample_end.json         config_snapshot 已对齐 config.py")
-
-    # ---- 7. 校验和（最后一个写盘动作）----
     written = write_checksums()
     assert written == n_ck, f"checksum count drift: {written} != {n_ck}"
     log(f"    -> 04_qa/checksums.sha256            {written} 个文件")
@@ -346,7 +315,9 @@ def build_data_dictionary(cfg, sample_end: str, n_fe_rows: int, n_syms: int,
     A("data/")
     A("├── 00_config/")
     A("│   ├── manifest.parquet              逐文件下载状态（断点续传的唯一依据）")
-    A("│   └── sample_end.json               运行元信息")
+    A("│   ├── archive_contracts.csv         归档枚举清单（Step 0）")
+    A("│   ├── kept_contracts.csv            硬过滤通过名单（Step 1）")
+    A("│   └── dropped_contracts.csv         硬过滤剔除明细与原因（Step 1）")
     A("├── 01_layer2/                        第 2 层：4 张规范化源表")
     A("├── 02_features/features_1h/          分析面板（密集网格，19 列）")
     A("├── 03_reference/                     参考表")
@@ -509,15 +480,15 @@ def build_data_dictionary(cfg, sample_end: str, n_fe_rows: int, n_syms: int,
     A("全部产出可由 `REPRODUCE.md` 的六条命令从零重建。")
     A("")
     A("`04_qa/checksums.sha256` 记录 `data/` 下**全部产出文件的 SHA256**，")
-    A("包含 `raw/`（Step 3 下载的源数据）—— 共 1,440 个文件 / 2.2 GB。")
+    A("包含 `raw/`（Step 3 下载的源数据）—— 共 1,443 个文件 / 2.17 GB。")
     A("")
     A("**它是内部一致性记录，不是来源证明。** 它只能验证「本地文件与产出时一致」，")
     A("不能验证「下载到的东西等于 Binance 归档里的东西」—— 那需要官方 `.CHECKSUM`。")
     A("")
     A("**校验应当 0 个不一致。** 校验和是本流程最后一个写盘动作，")
-    A("它此前写入的每一个文件（含 `00_config/sample_end.json` 的运行元信息）都被纳入哈希。")
-    A("不在名单里的只有 `checksums.sha256` 自身、`data/REPRODUCE.md`（在 `data/` 根，")
-    A("不属于任何编号层）与写盘用的 `.part` 临时文件。")
+    A("它此前写入的每一个文件都被纳入哈希。")
+    A("不在名单里的只有三类：`checksums.sha256` 自身、`data/REPRODUCE.md`（在两处")
+    A("编号目录之外）、以及 `00_config/_cache/`（18,874 个下载缓存，是临时的不是产出）。")
     A("")
     return "\n".join(L)
 
@@ -613,6 +584,20 @@ def build_reproduce(cfg, sample_end: str) -> str:
     A(f"sample_end = `{sample_end}`　sample_start = `{cfg.sample_start}`")
     A("")
     A("按顺序执行六条命令即可从零重建全部 D1 产出。")
+    A("")
+    A("## 本次产出用的设计参数")
+    A("")
+    A("**这些值来自 `config.py`。若 `config.py` 已被改过，以下记录的是产出时的值** ——")
+    A("参数改了产出就会不同，所以这份快照是判断「产出对应哪套设计」的唯一依据。")
+    A("（曾由 `00_config/sample_end.json` 记录，该文件已删除。）")
+    A("")
+    A("```")
+    for k, v in cfg.snapshot().items():
+        A(f"{k} = {v}")
+    A("```")
+    A("")
+    A("⚠️ 它只记**参数值**，不记**代码版本**。若只是计算逻辑改了而参数未变，")
+    A("此快照看不出差别 —— 那要靠 git 历史。")
     A("")
     A("## 前置")
     A("")

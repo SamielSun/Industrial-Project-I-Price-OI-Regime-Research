@@ -67,19 +67,17 @@ DATA = ROOT / "data"
 FE = DATA / "02_features" / "features_1h"
 RAW = DATA / "raw"
 REF = DATA / "03_reference"
-RUN_INFO = DATA / "00_config" / "sample_end.json"
 CANDIDATE_POOL = ROOT / "data" / "03_reference" / "candidate_pool.csv"
 
 T_START = time.time()
 
 
 def configure_paths(out_root: Path, fe_root: Path | None, pool: Path | None) -> None:
-    global DATA, FE, RAW, REF, RUN_INFO, CANDIDATE_POOL
+    global DATA, FE, RAW, REF, CANDIDATE_POOL
     DATA = out_root.resolve()
     FE = ((fe_root or (DATA / "02_features")) / "features_1h").resolve()
     RAW = (DATA / "raw").resolve()
     REF = DATA / "03_reference"
-    RUN_INFO = DATA / "00_config" / "sample_end.json"
     CANDIDATE_POOL = (pool or (ROOT / "data" / "03_reference"
                                / "candidate_pool.csv")).resolve()
 
@@ -528,47 +526,6 @@ def main() -> int:
     log(f"  取前 K={cfg.K} 后成为成员   {len(M):>9,}")
     log("=" * 80)
 
-    # ---- 运行元信息 ----
-    RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
-    info_prev = {}
-    if RUN_INFO.exists():
-        try:
-            info_prev = json.loads(RUN_INFO.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
-            # 不能吞：这个文件里同时存着 Step 0–5 与 QA 的元信息。
-            # 读失败还往下走，就会用"只有 step_6"的内容覆盖掉全部历史。
-            log(f"  ✗ {RUN_INFO.name} 解析失败：{e}")
-            log("    拒绝覆盖 —— 它里面还有 Step 0–5 的元信息。请先修复或移走该文件。")
-            return 5
-    info_prev["step_6_build_universe"] = {
-        "run_at": datetime.now(timezone.utc).isoformat(),
-        "months": len(months),
-        "eligibility_rows": len(E),
-        "members": len(M),
-        "members_per_month_min": int(M.groupby("month").size().min()) if len(M) else 0,
-        "members_per_month_max": int(M.groupby("month").size().max()) if len(M) else 0,
-        "months_without_members": [m for m in months
-                                   if m not in set(M["month"])],
-        "gate_blocks": {
-            "g1_stablecoin": int((~E["g1"]).sum()),
-            "g2a_insufficient_history": int((~E["g2a"]).sum()),
-            "g2b_not_trading": int((~E["live"]).sum()),
-            "g3a_oi_coverage": int((~E["g3a"]).sum()),
-            "g3b_oi_gap": int((~E["g3b"]).sum()),
-            "g4_non_crypto": int((~E["g4"]).sum()),
-        },
-        # 闸 4 的判据来源与指纹：事后可核"这次用的是哪个 oracle"，以及重跑是否一致
-        "exchange_info": {
-            "from": ei_src["from"],
-            "n_records": len(info),
-            "fetched_at": ei_src["fetched_at"],
-            "digest": ei_src["digest"],
-        },
-    }
-    tmp_ri = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
-    tmp_ri.write_text(json.dumps(info_prev, ensure_ascii=False, indent=2),
-                      encoding="utf-8")
-    os.replace(tmp_ri, RUN_INFO)
     log(f"\n  总耗时 {time.time()-T_START:.0f}s")
     return 0
 

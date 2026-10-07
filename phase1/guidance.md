@@ -39,7 +39,7 @@ features_1h   7,253,002 行 / 57 文件 / 541.6 MB / 19 列
 四闸全过          8,938      16,245 个 (合约,月) 单元中
 成员集            2,700      54 月 × 50，涉及 249 个合约
 缺失文件             67      归档里确实不存在
-校验和            1,443      文件数
+校验和            1,442      文件数
 ```
 
 ### 关键常量（`config.py`）
@@ -66,7 +66,6 @@ stablecoin_bases              11 个 baseAsset
 data/
 ├─ 00_config/                       配置与账本（非交付数据）
 │   ├─ manifest.parquet             355,810 行：逐文件下载台账
-│   ├─ sample_end.json              21 键：全流程运行元信息
 │   ├─ archive_contracts.csv        1,057 行：归档枚举（Step 0）
 │   ├─ kept_contracts.csv             683 行：硬过滤通过（Step 1）
 │   ├─ dropped_contracts.csv          218 行：硬过滤剔除 + 原因（Step 1）
@@ -92,12 +91,12 @@ data/
     ├─ gaps.parquet          4,880 行
     ├─ coverage.parquet      1,425 行
     ├─ data_dictionary.md
-    ├─ checksums.sha256      1,443 行
+    ├─ checksums.sha256      1,442 行
     └─ ../REPRODUCE.md
 ```
 
 **交付物**：`01_layer2/` · `02_features/` · `03_reference/` · `04_qa/`（含 `REPRODUCE.md`）。
-`00_config/` 是账本不是数据，但 `manifest` 与 `sample_end.json` 是审计凭据。
+`00_config/` 是账本不是数据，但 `manifest` 是审计凭据。
 
 ---
 
@@ -402,8 +401,8 @@ g0 到首次网格内结算之间的小时，LEFT JOIN 找不到任何结算行 
 
 **两阶段提交**：先写 `features_1h.new/`，全部成功后才 `os.replace` 换成正式目录。
 理由是原版在建任何东西**之前**就 `rmtree` 整个面板，中途异常会留下一份
-**"看起来合法"的残缺面板**（每个 chunk 都过了 `validate()`），而 `sample_end.json`
-还写着上一轮的完整数字，下游无从察觉。
+**"看起来合法"的残缺面板**（每个 chunk 都过了 `validate()`），而各 chunk 的行数与
+`04_qa/` 的报告还停留在上一轮，下游无从察觉。
 
 ### 2.8 Step 6a · Universe（四条闸 + PIT 成员集）
 
@@ -516,7 +515,7 @@ eligibility 的 22 列：
 | `gaps.parquet` | **4,880** | 记录层：哪里断了、断多久 |
 | `coverage.parquet` | **1,425** | 汇总层：285 × 5 指标 |
 | `data_dictionary.md` | — | 逐字段字典 |
-| `checksums.sha256` | **1,443** | 产出完整性 |
+| `checksums.sha256` | **1,442** | 产出完整性 |
 
 **缺失分类口径**：
 
@@ -688,7 +687,6 @@ python -m lib.schema        # 65 项：结构自检 + validate 放行/捕获 + s
 |---|---|---|
 | `build_layer2.py` | 产出 0 行 / 有合约缺 klines | 4 |
 | `build_features.py` | 产出 0 行 / 有候选池合约没进面板 | 4 |
-| 六脚本全部 | `sample_end.json` 解析失败（拒绝覆盖其他步骤的元信息） | 5 |
 | 六脚本全部 | `--sample-end` 非法 | 2 |
 
 ⚠️ 实测踩过：`--raw-root` 指向空目录时，0 个文件、0 行，旧的交叉校验仍打印
@@ -784,9 +782,7 @@ python phase1/build_universe.py --out-root data --sample-end 2026-08-31 --refres
 
 ---
 
-## 6. `manifest` 与 `sample_end.json`
-
-### 6.1 `manifest.parquet`：归档层的逐文件账本
+## 6. `manifest.parquet`：归档层的逐文件账本
 
 **写入（2 处）**：
 
@@ -796,17 +792,20 @@ python phase1/build_universe.py --out-root data --sample-end 2026-08-31 --refres
 | Step 3 | 另外 4 个源 + `metrics` | **336,978** |
 | | 合计 | **355,810** |
 
-**读取（4 处）**：
+**读取（3 处）**：
 
 | 谁 | 用来做什么 |
 |---|---|
 | Step 2 | 读-改-写时保留其他源的记录 |
 | **Step 3** | **断点续传** —— `raw_written_at` 有戳就跳过 |
 | **Step 6b** | **缺失报告** —— `status != "ok"` |
-| Step 6a | ~~确定评测范围~~（收窄后已不需要） |
+
+（Step 6a 曾用它确定评测范围，收窄为候选池后已不需要。）
 
 **10 列**：`source` `symbol` `period` `granularity` `remote_path` `filename`
 `status` `bytes` `downloaded_at` `raw_written_at`
+
+两边都是**读-改-写**：各自只替换自己那些键，另一个源的行原样保留。
 
 ⚠️ **`raw_written_at` 的语义是"解压后的数据真的落进 `raw/` 了吗"** ——
 所以 Step 2 写的 18,832 行这一列**全是空**（它只下 zip 到缓存，解压是 Step 3 做的）。
@@ -815,16 +814,30 @@ python phase1/build_universe.py --out-root data --sample-end 2026-08-31 --refres
 ⚠️ **Step 3 的跳过条件有两个，理由不同**：`raw_written_at` 有戳 = "做完了"；
 `confirmed_404` = "确认归档里没有"。混为一谈会永久漏文件。
 
-### 6.2 `sample_end.json`：全流程共用的运行元信息
+⚠️ **manifest 中途就会落盘**（每 2,000 个文件一次）—— 否则 SIGKILL / 断电会丢掉
+全部进度戳，而缓存早已删除，下次要把几十万个文件重下。
 
-**六个脚本全写**，21 个顶层键。所有写入都是**读-改-写 + 原子写** ——
-整体覆盖会把其他步骤的元信息冲掉（实测冲掉过 Step 0–2 的键）。
+### 6.1 为什么要落"设计参数快照"
 
-⚠️ **命名不一致**：Step 3/4 用**扁平键 + `step` 字符串**标记，
-Step 5/6a/6b 用**嵌套字典键**（`step_5_build_features` 等）。
+**问题**：`checksums.sha256` 只覆盖 `data/` 下的文件，**不覆盖 `config.py`**（它在项目根）。
+所以如果 `config.py` 被改过，就没有任何产出能说明"这份 D1 是用哪套参数跑的"。
 
-⚠️ **`config_snapshot` 只有 Step 6b 是权威** —— 它无条件整体重写；
-Step 0–2/3/4 各写一次，改了 `config.py` 之后旧快照会一直留着。
+**做法**：`build_qa.py` 把 `cfg.snapshot()`（9 个设计参数）写进 **`data/REPRODUCE.md`** 的
+「本次产出用的设计参数」一节。
+
+⚠️ **它只记参数值，不记代码版本** —— 若只是计算逻辑改了而参数未变，
+这份快照看不出差别，那要靠 git 历史。
+
+**历史说明**：这些元信息原先由 `data/00_config/sample_end.json` 记录（21 个键，
+六个脚本各写一部分）。该文件已删除，理由是：
+
+- **纯"只写不读"** —— 代码里没有任何一处读取它的值做决策，6 处读取全是为了
+  读-改-写自保（不覆盖别的步骤的键）。读者始终是人，不是代码。
+- **部分键不可信** —— `status_counts` / `files_per_source` / `files_total` 是
+  一次失败的 Step 3 运行留下的，与 manifest 的真实状态矛盾。
+- **命名不一致** —— Step 3/4 用扁平键 + `step` 字符串，Step 5/6a/6b 用嵌套字典键。
+- 它承载的信息，绝大部分可从产出本身重建（各表行数、`04_qa/` 各文件行数、manifest 的状态分布）。
+  唯一不可替代的 `config_snapshot` 已移入 `REPRODUCE.md`。
 
 ---
 

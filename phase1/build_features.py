@@ -48,12 +48,10 @@ build_features —— 建 features_1h（19 列密集网格）
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -74,21 +72,19 @@ L2 = DATA / "01_layer2"
 OUT = DATA / "02_features"
 FE_DIR = OUT / "features_1h"      # 运行时被指向暂存目录 features_1h.new
 CANDIDATE_POOL = ROOT / "data" / "03_reference" / "candidate_pool.csv"
-RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 T_START = time.time()
 
 
 def configure_paths(out_root: Path, l2_root: Path | None,
                     pool: Path | None) -> None:
-    global DATA, L2, OUT, FE_DIR, CANDIDATE_POOL, RUN_INFO
+    global DATA, L2, OUT, FE_DIR, CANDIDATE_POOL
     DATA = out_root.resolve()
     L2 = (l2_root or (DATA / "01_layer2")).resolve()
     OUT = DATA / "02_features"
     FE_DIR = OUT / "features_1h"
     CANDIDATE_POOL = (pool or (ROOT / "data" / "03_reference"
                                / "candidate_pool.csv")).resolve()
-    RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 
 def log(msg: str) -> None:
@@ -425,35 +421,6 @@ def main() -> int:
     if d_old.exists():
         shutil.rmtree(d_old, ignore_errors=True)
     log(f"  已整体替换 {d_out.name}/（{len(chunks)} 个 chunk）")
-
-    # ---- 运行元信息（替换成功后写）----
-    RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
-    old_info = {}
-    if RUN_INFO.exists():
-        try:
-            old_info = json.loads(RUN_INFO.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:      # 只吞解析错误，其他照旧抛
-            log(f"  ✗ {RUN_INFO.name} 解析失败：{e}")
-            log("    拒绝覆盖 —— 它里面还有其他步骤的元信息。请先修复或移走该文件。")
-            return 5
-    old_info.update({
-        "sample_end": args.sample_end,
-        "step_5_build_features": {
-            "run_at": datetime.now(timezone.utc).isoformat(),
-            "candidate_pool_size": len(pool),
-            "grid_rows": agg["网格行"],
-            "chunks": len(chunks),
-            "rows_written": rows_written,
-            "bar_missing": agg["bar_missing"],
-            "oi_missing": agg["oi_missing"],
-            "dead_tail_trimmed": n_trim,
-            "symbols_without_klines": agg["无 klines"],
-        },
-    })
-    tmp_ri = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
-    tmp_ri.write_text(json.dumps(old_info, ensure_ascii=False, indent=2),
-                      encoding="utf-8")
-    os.replace(tmp_ri, RUN_INFO)
 
     log("")
     log("=" * 78)

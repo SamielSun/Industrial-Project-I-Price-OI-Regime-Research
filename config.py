@@ -15,7 +15,8 @@ Phase 1 设计参数（研究设计的一部分，跨运行稳定）。
 
     判断标准：**改它会不会改变产出？**
       · 会（如 --sample-end）→ 设计参数，但因为它逐次运行不同、且必须显式，
-        仍走 CLI 并落进 sample_end.json 以便追溯。
+        仍走 CLI；产出时由 Step 6b 把它连同本文件的全部字段写进 data/REPRODUCE.md
+        （「本次产出用的设计参数」一节），以便追溯。
       · 不会（如 --jobs、--out-root）→ 纯工程控制，放本文件只会污染设计快照。
 
   · 早期设计里的 --no-refresh / --symbols 从未实现，已于本次清理时删除，
@@ -129,10 +130,10 @@ class Config:
     #   · 前者从未被任何代码读取 —— 七个写盘点各自硬编码 compression="zstd"，
     #     改这个字段不会有任何效果，留着会造成"改了却没生效"的误导。
     #   · 后者是 Phase 2 的规划值，Phase 1 全程不使用，只被 snapshot() 序列化进
-    #     sample_end.json 冒充"设计参数"。规划信息已移入 phase1/guidance.md §2.2。
+    #     产出元信息冒充"设计参数"。规划信息已移入 phase1/guidance.md §2.2。
 
     def snapshot(self) -> dict[str, Any]:
-        """设计参数的完整快照，供写入 00_config/sample_end.json（§5.3）。
+        """设计参数的完整快照，供 Step 6b 写入 data/REPRODUCE.md（§6.1）。
 
         只含【真正影响产出的】字段 —— 每一个都必须被至少一处代码读取。
         """

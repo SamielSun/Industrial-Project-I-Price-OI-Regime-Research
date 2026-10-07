@@ -63,7 +63,6 @@ import shutil
 import sys
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -86,21 +85,17 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"            # 运行时被 --out-root 覆盖
 RAW = ROOT / "data" / "raw"     # 运行时被 --raw-root / --out-root 覆盖
 L2 = DATA / "01_layer2"
-MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = ROOT / "data" / "03_reference" / "candidate_pool.csv"
-RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 
 def configure_paths(out_root: Path, raw_root: Path | None, pool: Path | None) -> None:
     """按命令行参数定路径。必须在 main() 最开头调用。"""
-    global DATA, RAW, L2, MANIFEST, CANDIDATE_POOL, RUN_INFO
+    global DATA, RAW, L2, CANDIDATE_POOL
     DATA = out_root.resolve()
     RAW = (raw_root or (DATA / "raw")).resolve()
     L2 = DATA / "01_layer2"
-    MANIFEST = DATA / "00_config" / "manifest.parquet"
     CANDIDATE_POOL = (pool or (ROOT / "data" / "03_reference"
                                / "candidate_pool.csv")).resolve()
-    RUN_INFO = DATA / "00_config" / "sample_end.json"
 
 T_START = time.time()
 
@@ -488,37 +483,6 @@ def main() -> int:
             log(f"    !! {tname} 与 klines_1h 不一致："
                 f"缺 {len(base - ks):,}  多 {len(ks - base):,}")
     log(f"    三张网格表一致: {'是' if ok else '否'}")
-
-    # ---- 运行元信息 ----
-    RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
-    import json
-    # 【读-改-写】，不能整体重写：这个文件是全流程共用的运行元信息，
-    # Step 0–2 写的 archive_contracts / archive_usdt 等键也在里面。
-    # 早期这里是 json.dumps({...}) 整体覆盖，实测把 Step 0–2 的记录全冲掉了
-    # （重跑一次后 archive_contracts 就消失）。
-    info_prev: dict = {}
-    if RUN_INFO.exists():
-        try:
-            info_prev = json.loads(RUN_INFO.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
-            log(f"  ✗ {RUN_INFO.name} 解析失败：{e}")
-            log("    拒绝覆盖 —— 它里面还有 Step 0–2 的元信息。请先修复或移走该文件。")
-            return 5
-    info_prev.update({
-        "sample_end": args.sample_end,
-        "sample_start": cfg.sample_start,
-        "config_snapshot": cfg.snapshot(),
-        "step": "build_layer2",
-        "run_at": datetime.now(timezone.utc).isoformat(),
-        "candidate_pool_size": len(pool),
-        "chunks_per_table": written,
-        "rows_by_table": dict(rows_total),
-        "grid_consistent": ok,
-    })
-    tmp_ri = RUN_INFO.with_name(f"{RUN_INFO.name}.{os.getpid()}.part")
-    tmp_ri.write_text(json.dumps(info_prev, ensure_ascii=False, indent=2),
-                      encoding="utf-8")
-    os.replace(tmp_ri, RUN_INFO)
 
     log("")
     log("=" * 78)
