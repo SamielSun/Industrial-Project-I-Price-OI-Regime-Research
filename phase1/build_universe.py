@@ -462,14 +462,12 @@ def main() -> int:
     # 落选的合约不在这里 —— 它们的账在 archive_contracts.csv / dropped_contracts.csv。
     # 预分组：直接在 7.25M 行上按合约过滤会做 285 次全表扫描（实测 5 分钟）
     d_by_sym = {s: g for s, g in d.groupby("symbol", sort=False)}
-    daily_by_sym = {s: g for s, g in daily.groupby("symbol", sort=False)}
 
     mrows = []
     for s in all_syms:
         base = s[:-4] if s.endswith("USDT") else s
         rec = info.get(s)
         sub = d_by_sym.get(s)
-        daily_sub = daily_by_sym.get(s)
         has = sub is not None and len(sub) > 0
         mrows.append({
             "symbol": s,
@@ -481,12 +479,15 @@ def main() -> int:
             "n_bars": len(sub) if has else 0,
             "n_months": (sub["ts"].dt.strftime("%Y-%m").nunique() if has else 0),
             "last_active": last_act.get(s, pd.NaT),
-            "median_daily_qv": (daily_sub["qv"].median()
-                                if daily_sub is not None and len(daily_sub)
-                                else np.nan),
             "contract_type": rec.get("contractType") if rec else None,
             "underlying_type": rec.get("underlyingType") if rec else None,
             "in_exchange_info": rec is not None,
+            # 原 median_daily_qv 已删除：全研究无人读取。它与成员集排名用的 liq
+            # （月内每小时 quote_volume 的中位）秩相关 0.9916，只多一个量纲差，
+            # 而它是【全样本期】的回看统计量、不能用于筛选 —— 留着只会造成
+            # "这是流动性依据"的误解。口径记录在此备查：
+            #   daily = groupby(symbol, day).quote_volume.sum()
+            #   median_daily_qv = daily.groupby(symbol).qv.median()
             # 原 dropped_reason 已删除：它是"为什么这个合约从没当过成员"的一行摘要，
             # 但评测范围收窄到候选池后只剩 4 个非空值（never_eligible），
             # 且信息与 universe_eligibility 的【逐月 fail_reason】完全重复、粒度更粗。

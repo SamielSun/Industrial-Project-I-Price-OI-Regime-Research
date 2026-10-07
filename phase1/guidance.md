@@ -479,12 +479,16 @@ oi_max_gap_h = max_run_true(w.groupby("symbol")["oi_missing"])
 | `member_changes.parquet` | **57 × 6** | 一月一行的进出记录 |
 
 ```
-master 的 11 列：
+master 的 10 列：
   symbol base_asset
   first_bar last_bar n_bars n_months last_active     ← 时间跨度
-  median_daily_qv                                    ← 流动性
   contract_type underlying_type in_exchange_info      ← 分类元信息
 ```
+
+⚠️ **`master` 不含任何流动性指标** —— 成员集排名用的是 `membership.liq`
+（当月每小时 `quote_volume` 的中位）。曾有一列 `median_daily_qv`（全样本期每天成交额的中位），
+因全研究无人读取、且与 `liq` 秩相关 0.9916（只多一个量纲差）、又属**回看统计量**
+（不能用于筛选），已删除以免被误当作筛选依据。
 
 **成员集 2,700 = 54 月 × 50，涉及 249 个合约。**
 54 个月而非 57：`2021-12` / `2022-01` / `2022-02` 成员数为 0 ——

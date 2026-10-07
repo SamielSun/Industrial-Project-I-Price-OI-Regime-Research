@@ -198,15 +198,13 @@ def main() -> int:
     for s, g in d.groupby("symbol", sort=False):
         idx = g.index.to_numpy()                  # d 已按 (symbol, ts) 排序
         n_total = len(idx)
-        qv = g["quote_volume"].median()
         for metric in METRICS:
             sub = flag_col[metric][idx]
             n_bad = int(sub.sum())
             # `oi_zero` 逐小时记，其余记连续区间。
-            # 理由：`oi_zero` 本质是【离散的坏点】—— 实测 92.8% 的段长就是 1 小时，
-            # 只有一次全市场中断（2022-03-07 15:00 起，105 个合约各 10 小时）是连续的，
-            # 而逐小时记录同样能看出它是连续的（10 行时刻相邻）。
-            # `oi` / `klines` 等确有长段（最长 7,832 小时），用区间才合理。
+            # 理由：`oi_zero` 本质是【离散的坏点】—— 实测全部 2,523 段的段长
+            # 都是 1 小时，逐小时记录与区间记录等价（且更直观）。
+            # 而 `oi` / `index` 等确有长段（最长 7,573 小时），用区间才合理。
             if metric == "oi_zero":
                 segs = [(i, i) for i in np.flatnonzero(sub)]
             else:
@@ -238,7 +236,6 @@ def main() -> int:
                 "coverage": present / n_total if n_total else np.nan,
                 "n_gaps": float(len(segs)),
                 "max_gap_hours": max_h,
-                "median_daily_qv": float(qv) if pd.notna(qv) else np.nan,
             })
     log(f"  完成，耗时 {time.time()-t0:.0f}s")
 
