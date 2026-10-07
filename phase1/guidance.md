@@ -84,7 +84,7 @@ data/
 ├─ 03_reference/                                          Step 2 & 6a
 │   ├─ candidate_pool.csv            285 行（Step 2）
 │   ├─ master.parquet                285 × 11（Step 6a）
-│   ├─ universe_eligibility.parquet  16,245 × 23（Step 6a）
+│   ├─ universe_eligibility.parquet  16,245 × 22（Step 6a）
 │   ├─ universe_membership.parquet    2,700 × 8（Step 6a）
 │   └─ member_changes.parquet            57 × 6（Step 6a）
 └─ 04_qa/                                                 Step 6b
@@ -473,8 +473,8 @@ oi_max_gap_h = max_run_true(w.groupby("symbol")["oi_missing"])
 
 | 表 | 形状 | 内容 |
 |---|---|---|
-| `master.parquet` | **285 × 11** | 一币一行的元信息 |
-| `universe_eligibility.parquet` | **16,245 × 23** | 每个单元的全部判定，**审计核心** |
+| `master.parquet` | **285 × 10** | 一币一行的元信息 |
+| `universe_eligibility.parquet` | **16,245 × 22** | 每个单元的全部判定，**审计核心** |
 | `universe_membership.parquet` | **2,700 × 8** | 成员集 |
 | `member_changes.parquet` | **57 × 6** | 一月一行的进出记录 |
 
@@ -483,6 +483,14 @@ master 的 10 列：
   symbol base_asset
   first_bar last_bar n_bars n_months last_active     ← 时间跨度
   contract_type underlying_type in_exchange_info      ← 分类元信息
+```
+
+```
+eligibility 的 22 列：
+  symbol month base_asset
+  liq bars_before last_active oi_cov oi_max_gap_h oi_null_days obs_days active_days
+  g1 g2a live g2 g3a g3b g3 g4 eligible               ← 四闸的逐项判定
+  fail_reason rank
 ```
 
 ⚠️ **`master` 不含任何流动性指标** —— 成员集排名用的是 `membership.liq`

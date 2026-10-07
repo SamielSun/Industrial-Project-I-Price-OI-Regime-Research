@@ -299,7 +299,6 @@ def main() -> int:
     #   not_in_candidate_pool 的记录；那样 eligibility 有 58% 的行是"无数据所以
     #   不通过"，信息量低，已收窄。）
     all_syms = sorted(pool)
-    pool_set = set(pool)
     months = month_list(cfg.sample_start, args.sample_end)
     log(f"  评测对象 {len(all_syms)} 个合约（= 候选池）")
     log(f"  评测月份 {months[0]} .. {months[-1]}（{len(months)} 个）")
@@ -369,7 +368,6 @@ def main() -> int:
             arr = bars_cum.get(s, np.array([], dtype="datetime64[ns]"))
             r: dict = {
                 "symbol": s, "month": m, "base_asset": base,
-                "in_pool": s in pool_set,
                 "liq": float(liq[s]) if s in liq.index and pd.notna(liq.get(s)) else np.nan,
                 "bars_before": int(np.searchsorted(arr, cut_np)),
                 "last_active": last_act.get(s, pd.NaT),
@@ -394,9 +392,9 @@ def main() -> int:
             # 它们是链上发行的加密原生合约（24/7、无收盘时段），
             # 属于 note 所说的 "crypto perpetual futures"；
             # 反之代币化股票有交易时段，闭市时 OI/资金费率语义会变。
-            # 分类表里查不到的（实测 29 个）按加密资产处理：它们是已下架的合约
+            # 分类表里查不到的按加密资产处理：它们是已下架的合约
             # （exchangeInfo 只含当前挂牌），而池里的非加密标的都是近年才上的，
-            # 不会出现在下架名单里。
+            # 不会出现在下架名单里。实测候选池 285 个里 14 个查不到（全部是加密资产）。
             g4 = rec is None or (rec.get("contractType") == "PERPETUAL"
                                  and rec.get("underlyingType") == "COIN")
 
@@ -426,7 +424,7 @@ def main() -> int:
     log(f"  评测完成，{len(E):,} 行  耗时 {time.time()-t0:.0f}s")
 
     # ---- 排名 ----
-    # 排名只在【通过四闸】的合约月里做（`in_pool` 已恒真 —— 评测对象就是候选池）。
+    # 排名只在【通过四闸】的合约月里做（原 in_pool 条件已删 —— 评测对象就是候选池）
     E["rank"] = np.nan
     elig = E[E["eligible"] & E["liq"].notna()].copy()
     elig["rank"] = elig.groupby("month")["liq"].rank(ascending=False, method="first")
