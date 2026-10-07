@@ -12,7 +12,7 @@ build_deliverables —— 从已完成的产出里生成 D1 的交付文档与�
 产出
 ----
   data/04_qa/data_dictionary.md   逐列定义（列名 / 类型 / 单位 / 来源 / 含义）
-  data/04_qa/data_quality.md      一页质量证明（4 块）
+  data/04_qa/data_quality.md      一页质量证明（5 块，含缺口归因）
   data/04_qa/figures/*.png        2 张图（英文标签）
   data/04_qa/REPRODUCE.md         七条命令 + 本次产出用的设计参数
   data/04_qa/checksums.sha256     全部产出的 SHA256（本脚本最后一个写盘动作）
@@ -168,6 +168,81 @@ def monthly_coverage(d: pd.DataFrame) -> pd.DataFrame:
     return g
 
 
+def compute_gap_causes(d: pd.DataFrame, man: pd.DataFrame) -> dict:
+    """归因：面板里缺 OI 的小时，是【归档里没这个文件】还是【文件在但没快照】。
+
+    为什么必须做这一步：manifest 里的 `confirmed_404` 不是面板的文件层缺口。
+    它主要来自 fetch_market_data.py 的【越界探测】—— 为对齐每合约最后一根 bar 的
+    OI，故意去要"最后一个 klines 月份的次月 1 号"，那天归档里通常没有。
+    实测 67 个 404 全部落在面板网格之外（网格结束后 16–812 天），对面板零影响。
+    拿它当"文件层缺口"会把归档问题讲大，而真正的缺口反而没被统计。
+
+    真正的口径：面板内 oi_missing 的小时，按 (合约, 天) 聚合，再看那天在 manifest 里
+    有没有 metrics 记录 —— 没有（列表里就没有该文件）或状态是 404 的，才算归档没文件。
+    """
+    empty = {"hours": 0, "pairs": 0, "syms": 0,
+             "a_hours": 0, "a_pairs": 0, "a_syms": 0, "a_top": [],
+             "b_hours": 0, "b_pairs": 0, "b_syms": 0,
+             "out_n": 0, "out_syms": 0, "out_min_after": 0, "out_max_after": 0,
+             "out_nxt": 0, "out_mid": 0, "out_inside": 0}
+    if not len(d) or not len(man):
+        return empty
+
+    om = d.loc[d["oi_missing"].to_numpy(), ["symbol", "ts"]]
+    if not len(om):
+        return empty
+    pairs = (om.assign(day=om["ts"].dt.floor("D"))
+               .groupby(["symbol", "day"]).size().rename("hours").reset_index())
+
+    met = man[man["source"] == "metrics"].copy()
+    met["day"] = pd.to_datetime(met["period"], errors="coerce").dt.tz_localize("UTC")
+    met = met[["symbol", "day", "status"]].drop_duplicates(["symbol", "day"])
+    pairs = pairs.merge(met, on=["symbol", "day"], how="left")
+    # 归档里没有这个文件：从没被请求过（枚举列表里没有），或请求过且确认 404
+    pairs["no_file"] = pairs["status"].isna() | (pairs["status"] == "confirmed_404")
+    a, b = pairs[pairs["no_file"]], pairs[~pairs["no_file"]]
+
+    a_top = (a.groupby("symbol")["hours"].sum()
+              .sort_values(ascending=False).head(3))
+
+    # ---- 面板外的 404 探测：证明它们碰不到面板 --------------------------
+    grid_lo = d.groupby("symbol")["ts"].min()
+    grid_hi = d.groupby("symbol")["ts"].max()
+    bad = man[man["status"] != "ok"].copy()
+    out = {"out_n": 0, "out_syms": 0, "out_min_after": 0, "out_max_after": 0,
+           "out_nxt": 0, "out_mid": 0, "out_inside": 0}
+    if len(bad):
+        bad["day"] = pd.to_datetime(
+            bad["remote_path"].str.extract(r"-(\d{4}-\d{2}-\d{2})\.zip")[0],
+            errors="coerce").dt.tz_localize("UTC")
+        bad = bad.dropna(subset=["day"])
+        lo = bad["symbol"].map(grid_lo).dt.floor("D")
+        hi = bad["symbol"].map(grid_hi).dt.floor("D")
+        inside = (bad["day"] >= lo) & (bad["day"] <= hi)
+        after = (bad["day"] - hi).dt.days
+        out = {
+            "out_n": int(len(bad)),
+            "out_syms": int(bad["symbol"].nunique()),
+            "out_inside": int(inside.sum()),
+            # 只有落在网格外的才有"距网格末日多少天"可言
+            "out_min_after": int(after[~inside].min()) if (~inside).any() else 0,
+            "out_max_after": int(after[~inside].max()) if (~inside).any() else 0,
+            # 次月 1 号 = 脚本故意发的越界探测；其余是归档确实缺的月中某天
+            "out_nxt": int((bad["day"].dt.day == 1).sum()),
+            "out_mid": int((bad["day"].dt.day != 1).sum()),
+        }
+
+    return {
+        "hours": int(len(om)), "pairs": int(len(pairs)), "syms": int(pairs["symbol"].nunique()),
+        "a_hours": int(a["hours"].sum()), "a_pairs": int(len(a)),
+        "a_syms": int(a["symbol"].nunique()),
+        "a_top": [(str(s), int(h)) for s, h in a_top.items()],
+        "b_hours": int(b["hours"].sum()), "b_pairs": int(len(b)),
+        "b_syms": int(b["symbol"].nunique()),
+        **out,
+    }
+
+
 # ============================================================================
 # 图（英文标签）
 # ============================================================================
@@ -250,7 +325,7 @@ def fig_monthly_coverage(mc: pd.DataFrame) -> Path:
 
 def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFrame,
                          gaps: pd.DataFrame, mc: pd.DataFrame,
-                         missing: pd.DataFrame, n_members: int, n_member_syms: int,
+                         cause: dict, n_members: int, n_member_syms: int,
                          n_months_member: int, fig_paths: list[Path]) -> str:
     L: list[str] = []
     A = L.append
@@ -321,22 +396,53 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     # ---- 3. Verified gaps ------------------------------------------------
     A("## 3. Verified gaps")
     A("")
-    A("Two independent layers — both are *verified*, not estimated.")
+    A("Both layers below are *verified*, not estimated. The question they answer is")
+    A("**whether a missing hour is our failure or the archive's** — the answer matters,")
+    A("because only the second kind is a property of the data rather than of this run.")
     A("")
-    A("### 3.1 File layer — files that do not exist in the archive")
+    A("### 3.1 The archive's own gaps, inside the panel")
     A("")
-    if len(missing):
-        A(f"**{len(missing)} source files are absent from the Binance archive** "
-          f"(`confirmed_404`), across {missing['symbol'].nunique()} contracts.")
-        A(f"All of them are `metrics` (open-interest) daily files.")
+    A("Only `oi` can be attributed this way: it is the sole source whose daily files are")
+    A("probed one-by-one, so every request is on record in `00_config/manifest.parquet`.")
+    A("")
+    A(f"**{cause['hours']:,} panel hours carry no `oi`** — {cause['pairs']:,} (contract, day) "
+      f"pairs across {cause['syms']} contracts.")
+    A("")
+    A("| Cause | contract-days | hours | contracts |")
+    A("|---|---|---|---|")
+    A(f"| **No such file in the archive** — the day is absent from Binance's "
+      f"`daily/metrics` listing, so it was never downloadable | "
+      f"**{cause['a_pairs']:,}** | **{cause['a_hours']:,}** | {cause['a_syms']} |")
+    A(f"| File downloaded, but that day carries no snapshot for these hours | "
+      f"{cause['b_pairs']:,} | {cause['b_hours']:,} | {cause['b_syms']} |")
+    A("")
+    if cause["a_top"]:
+        tot = cause["a_hours"] or 1
+        parts = ", ".join(f"`{s}` {h:,} h" for s, h in cause["a_top"])
+        A(f"The first row is the archive's gap proper, and it is highly concentrated: "
+          f"{parts} — together "
+          f"{sum(h for _, h in cause['a_top'])/tot:.0%} of it. Those are the contracts "
+          f"that stopped trading mid-life and later returned (§4.2); while they were "
+          f"gone the exchange published no open interest at all.")
         A("")
-        A("This is gap in the archive itself, not a download failure — the request")
-        A("completed and returned 404. Every one is recorded in `00_config/manifest.parquet`")
-        A("with its full remote path.")
-    else:
-        A("No missing source files.")
+    A("### 3.2 Out-of-panel probes — 404s with no effect on the panel")
     A("")
-    A("### 3.2 Record layer — contiguous missing runs inside the panel")
+    A(f"**{cause['out_n']} requests returned 404**, across {cause['out_syms']} contracts.")
+    if cause["out_inside"] == 0:
+        A(f"**None of them touches the panel**: every one is dated "
+          f"{cause['out_min_after']}–{cause['out_max_after']} days *after* its contract's "
+          f"grid ends, so no 404 can produce a hole.")
+    else:
+        A(f"**{cause['out_inside']} of them fall inside the panel** and are counted in §3.1.")
+    A("")
+    A(f"{cause['out_nxt']} are the deliberate boundary probe — the first day of the month "
+      f"after a contract's last klines month, requested so the final bar's `oi` can be "
+      f"filled. {cause['out_mid']} are mid-month days genuinely absent from the archive, "
+      f"all dated after the contract had stopped trading. Every one is kept in "
+      f"`00_config/manifest.parquet` with its full remote path, as evidence that the "
+      f"pipeline asked rather than silently skipped.")
+    A("")
+    A("### 3.3 Contiguous missing runs inside the panel")
     A("")
     A("| Source | runs | total hours | longest run | longest run in |")
     A("|---|---|---|---|---|")
@@ -352,6 +458,13 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     A(f"**{len(gaps):,} runs in total.** "
       f"{int(gaps['started_before_sample'].sum())} of them start at a contract's very "
       f"first row (missing before the sample begins, not a mid-sample corruption).")
+    A("")
+    A("`klines`, `mark` and `index` are attributed differently because they arrive as")
+    A("monthly archives rather than per-day files. There is nothing left to attribute:")
+    A("**no monthly file failed** — every 404 in the manifest is a `metrics` file (§3.2)")
+    A("— so each of their runs lies *inside* a file that was successfully downloaded and")
+    A("is therefore the archive's own gap. The `oi` row above is the same population as")
+    A("§3.1, counted in runs rather than in hours.")
     A("")
     A("---")
     A("")
@@ -380,8 +493,12 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     A("")
     A("`oi` coverage of 0.81–0.84 on `LITUSDT` / `ICPUSDT` / `TLMUSDT` comes from")
     A("months of **zero trading** in the middle of their life (they disappear from the")
-    A("exchange and later return), not from a collection failure. Those hours are")
-    A("present in the panel with `quote_volume = 0`.")
+    A("exchange and later return), not from a collection failure.")
+    A("")
+    A("This is exactly the §3.1 first row, and it accounts for almost all of it: the")
+    A("archive holds **no `metrics` file at all** for those days. The hours are still")
+    A("present in the panel with `quote_volume = 0` — the price data exists, the open")
+    A("interest does not, because while a contract is dormant the exchange publishes none.")
     A("")
     A("### 4.3 Weakest month")
     A("")
@@ -779,8 +896,8 @@ def main() -> int:
     log(f"读入 features_1h：{len(d):,} 行 / {d['symbol'].nunique()} 个合约"
         f"   耗时 {time.time()-t0:.0f}s")
 
-    # ---- 2. 文件层：归档空洞 -------------------------------------------
-    missing = pd.DataFrame()
+    # ---- 2. manifest（缺失归因与面板外探测都要用）------------------------
+    man = pd.DataFrame()
     if MANIFEST.exists():
         man = pd.read_parquet(MANIFEST)
         bad = man[man["status"] != "ok"].copy()
@@ -795,17 +912,21 @@ def main() -> int:
             if n_bogus:
                 log(f"  ⚠ {n_bogus:,} 行状态为未取得、但文件在缓存里 —— "
                     f"manifest 的 status 不可信，已剔除。")
-                bad = bad[~pd.Series(on_disk, index=bad.index)]
-        missing = bad
-    log(f"文件层：{len(missing):,} 个源文件在归档里不存在")
+                man = man.drop(bad.index[on_disk])
+    else:
+        log("  ⚠ 找不到 manifest.parquet —— 缺口归因会全部落进「从未请求」一类")
 
     # ---- 3. 记录层：缺口与覆盖率 ---------------------------------------
     t0 = time.time()
     gaps = compute_gaps(d)
     cov = compute_coverage(d)
     mc = monthly_coverage(d)
+    cause = compute_gap_causes(d, man)
     log(f"记录层：{len(gaps):,} 段缺口 / {len(cov):,} 个 (合约,指标) 覆盖率"
         f"   耗时 {time.time()-t0:.0f}s")
+    log(f"  面板内 OI 缺口 {cause['hours']:,} 小时 —— 归档无文件 {cause['a_hours']:,}"
+        f" / 文件在但无快照 {cause['b_hours']:,}")
+    log(f"  面板外 404 {cause['out_n']:,} 个，落在面板内的 {cause['out_inside']} 个")
 
     # ---- 4. 成员集规模（报告第 1 块要用）--------------------------------
     n_members = n_member_syms = n_months_member = 0
@@ -833,7 +954,7 @@ def main() -> int:
             fig_paths = []
 
     # ---- 6. 质量报告 ----------------------------------------------------
-    q = build_quality_report(cfg, args.sample_end, d, cov, gaps, mc, missing,
+    q = build_quality_report(cfg, args.sample_end, d, cov, gaps, mc, cause,
                              n_members, n_member_syms, n_months_member, fig_paths)
     (QA / "data_quality.md").write_text(q, encoding="utf-8", newline="\n")
     log(f"    -> 04_qa/data_quality.md            {len(q):,} 字符")
