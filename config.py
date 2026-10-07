@@ -3,15 +3,16 @@ Phase 1 设计参数（研究设计的一部分，跨运行稳定）。
 
 原则：
   · 本文件只放【设计参数】—— 定义"研究是什么"。改这里 = 改研究设计。
-  · 【工程控制】走 CLI，不进本文件。全项目实际存在的参数共 20 个：
+  · 【工程控制】走 CLI，不进本文件。全项目实际存在的参数共 22 个：
 
-      样本窗口   --sample-end                    六个脚本都要；必须月末日
-      路径       --out-root                      六个脚本全部必填
-                 --raw-root --l2-root --fe-root --pool --manifest
+      样本窗口   --sample-end                    七个脚本都要；必须月末日
+      路径       --out-root                      七个脚本全部必填
+                 --raw-root --l2-root --fe-root --pool
+      驱动器     --from --only --dry-run         run_phase1.py：分段续跑、试跑
       冒烟       --subset --batch
       断点       --skip-download --keep-cache --keep-existing --list-only
       网络/校验  --jobs --refresh-exchange-info --exchange-info
-                 --no-validate --no-schema-note --verify
+                 --no-validate --no-schema-note --verify --skip-figures
 
     判断标准：**改它会不会改变产出？**
       · 会（如 --sample-end）→ 设计参数，但因为它逐次运行不同、且必须显式，

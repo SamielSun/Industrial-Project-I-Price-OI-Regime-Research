@@ -3,7 +3,7 @@
 """
 build_deliverables —— 从已完成的产出里生成 D1 的交付文档与完整性证明
 
-它在 Phase 1 中的位置：Step 6b（七条命令的最后一条）。
+它在 Phase 1 中的位置：Step 6b（六个步骤的最后一步，见 phase1/run_phase1.py）。
 
 职责一句话
 ----------
@@ -14,7 +14,7 @@ build_deliverables —— 从已完成的产出里生成 D1 的交付文档与�
   data/04_qa/data_dictionary.md   逐列定义（列名 / 类型 / 单位 / 来源 / 含义）
   data/04_qa/data_quality.md      一页质量证明（5 块，含缺口归因）
   data/04_qa/figures/*.png        2 张图（英文标签）
-  data/04_qa/REPRODUCE.md         七条命令 + 本次产出用的设计参数
+  data/04_qa/REPRODUCE.md         一条总命令 + 六个步骤 + 本次产出用的设计参数
   data/04_qa/checksums.sha256     全部产出的 SHA256（本脚本最后一个写盘动作）
 
 四份文档全部落在 `04_qa/` —— `data/` 根目录下只有六个数据子目录，没有散文件。
@@ -577,7 +577,7 @@ def build_data_dictionary(cfg, sample_end: str, n_rows: int, n_syms: int) -> str
     A("└── 04_qa/                            D1 deliverables + integrity proof")
     A("    ├── data_quality.md               quality evidence (Step 6b)")
     A("    ├── data_dictionary.md            this file")
-    A("    ├── REPRODUCE.md                  the seven commands + design parameters")
+    A("    ├── REPRODUCE.md                  how to rebuild all of this")
     A("    ├── checksums.sha256              SHA256 of every file under data/")
     A("    └── figures/*.png                 coverage charts")
     A("```")
@@ -699,7 +699,8 @@ def build_reproduce(cfg, sample_end: str) -> str:
     A("")
     A(f"sample_end = `{sample_end}`　sample_start = `{cfg.sample_start}`")
     A("")
-    A("Run the seven commands in order to rebuild every D1 output from scratch.")
+    A("One command rebuilds every D1 output from scratch; the six steps it runs are")
+    A("listed further down for when one of them needs debugging.")
     A("")
     A("## Design parameters of this output")
     A("")
@@ -717,6 +718,25 @@ def build_reproduce(cfg, sample_end: str) -> str:
     A("computation logic changed while parameters stayed the same, this snapshot cannot")
     A("show it — use the git history for that.")
     A("")
+    A("## One command")
+    A("")
+    A("```bash")
+    A("python phase1/run_phase1.py --out-root data --sample-end " + sample_end)
+    A("```")
+    A("")
+    A("This runs the six steps below in order, passing `--out-root` and `--sample-end`")
+    A("to each. It stops at the first non-zero exit and reports which step failed, so")
+    A("it can be resumed from there:")
+    A("")
+    A("```bash")
+    A("# resume from a step; labels are 0-2 / 3 / 4 / 5 / 6a / 6b")
+    A("python phase1/run_phase1.py --out-root data --sample-end " + sample_end + " --from 3")
+    A("```")
+    A("")
+    A("It does **not** run the verification below, and it adds no flags of its own —")
+    A("step-specific flags (`--subset`, `--keep-cache`, `--skip-download`, …) are used")
+    A("directly against that step's script.")
+    A("")
     A("## Prerequisites")
     A("")
     A("- Python 3.12 with `pandas` / `pyarrow` (2.3.3 / 23.0.1 here)")
@@ -728,7 +748,10 @@ def build_reproduce(cfg, sample_end: str) -> str:
     A("  needs no network.** Add `--refresh-exchange-info` only to update the gate-4")
     A("  criterion (needs VPN)")
     A("")
-    A("## The seven commands")
+    A("## The same thing, step by step")
+    A("")
+    A("What `run_phase1.py` executes, in order — useful when one step needs debugging,")
+    A("or when only part of the pipeline has to be re-run.")
     A("")
     A("```bash")
     A("# Step 0-2  enumerate archive -> hard filter -> monthly liquidity rank -> pool")
@@ -769,9 +792,10 @@ def build_reproduce(cfg, sample_end: str) -> str:
     A("")
     A("- **Only Steps 0–3 need a VPN** (S3 enumeration and CDN download). Steps 4–6b are")
     A("  pure local computation; Step 6a reads a committed snapshot.")
-    A("- Every script takes its output directory from `--out-root` (**required by all")
-    A("  seven**). Environment variables are not used — they do not survive across")
-    A("  shells, which once wrote smoke-test results into the production directory.")
+    A("- Every script takes its output directory from `--out-root`, and every one")
+    A("  **requires** it (`run_phase1.py` included). Environment variables are not used")
+    A("  — they do not survive across shells, which once wrote smoke-test results into")
+    A("  the production directory.")
     A("- **Step 6b must run last**: the checksums are its final write, and every file")
     A("  written before it is hashed. Re-running Steps 3–6a invalidates the checksums;")
     A("  re-run Step 6b to regenerate them.")
