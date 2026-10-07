@@ -44,17 +44,14 @@ class Config:
     """样本起点。由 OI 归档的断崖唯一定死，不是权衡结果。
     """
 
-    # ---- Universe 构造（§3）----
+    # ---- Universe 构造 ----
     K: int = 50
     """成员数"""
 
     liq_window_days: int = 30
     """流动性计算窗口"""
 
-    refresh_months: int = 1
-    """成员集刷新频率（月）"""
-
-    # ---- 四条资格闸（§3.1）----
+    # ---- 四条资格闸 ----
     min_history_bars: int = 2160
     """闸 2①：截至月初已有的 1h bar 数下限（= 90 天）。
 
@@ -78,7 +75,16 @@ class Config:
 
     min_oi_coverage: float = 0.90
     """闸 3①：trailing 30 天内 OI 快照非空占比下限。
-    不取 1.0 —— 存在全市场级偶发缺失（如 2022-03-07 一天 105 个合约同时为 0）。"""
+
+    不取 1.0 —— 归档本身就有缺失：面板内 818 段连续 OI 缺口、合计 32,514 小时
+    （见 data/04_qa/data_quality.md §3.1，那里逐段归因到"归档无文件"或
+    "文件在但该小时无快照"）。
+
+    ⚠️ 与 `oi == 0` 无关。那是【值等于 0】不是【快照缺失】，实测两者完全互斥
+    （`oi == 0 & oi_missing` 有 0 行），所以它对本闸没有任何影响 —— 旧的 docstring
+    拿"2022-03-07 一天 105 个合约同时为 0"当依据，既是类别错误，
+    那天的 105 个也不是最集中的（2025-07-21 是 223 个）。
+    """
 
     max_oi_gap_hours: int = 48
     """闸 3②：trailing 30 天内【最长连续缺失】的小时数上限。
@@ -86,8 +92,11 @@ class Config:
     这一条比覆盖率更有区分度：覆盖率看不出"整段断供"。「缺 1 小时」影响 1 个观测，
     「缺 48 小时」让 48 个观测全无 OI —— 对滚动窗口的破坏完全不同。
 
-    实测（候选池 285 合约 × 57 月 = 16,245 个单元）：被这一条单独拦下 77 个，
-    全样本最长连续缺失 7,573 小时（币安人生USDT 的 index）。
+    本闸的窗口是 30 天，所以这个量天然落在 [0, 720] 小时以内。
+    实测（候选池 285 合约 × 57 月 = 16,245 个单元）：被这一条单独拦下 77 个。
+
+    ⚠️ 不要拿"全样本最长连续缺失 7,573 小时"当依据 —— 那是 index 源、跨整个样本，
+    与本闸的 OI、30 天口径都不同。
     """
 
     stablecoin_bases: tuple[str, ...] = (
@@ -129,14 +138,18 @@ class Config:
     """
 
     # ---- 路径与IO：本类不含非设计参数 ----
-    # 原 `parquet_compression`（"zstd"）与 `event_lookbacks`(1,4,8,24) 已删除：
-    #   · 前者从未被任何代码读取 —— 七个写盘点各自硬编码 compression="zstd"，
+    # 原 `parquet_compression`（"zstd"）、`event_lookbacks`(1,4,8,24)、
+    # `refresh_months`(=1) 已删除，理由是同一条：**没有被任何代码读取，却经
+    # snapshot() 序列化进产出元信息冒充"设计参数"**。
+    #   · `parquet_compression` —— 七个写盘点各自硬编码 compression="zstd"，
     #     改这个字段不会有任何效果，留着会造成"改了却没生效"的误导。
-    #   · 后者是 Phase 2 的规划值，Phase 1 全程不使用，只被 snapshot() 序列化进
-    #     产出元信息冒充"设计参数"。Phase 2 定义这些列时再放进当时的 config.py。
+    #   · `event_lookbacks` —— Phase 2 的规划值，Phase 1 全程不使用。
+    #     Phase 2 定义这些列时再放进当时的 config.py。
+    #   · `refresh_months` —— 成员集本来就是逐月刷新（Step 6a 对每个月都评测），
+    #     改成 3 也不会有任何变化。它记的是一个行为，不是参数；要记就写注释。
 
     def snapshot(self) -> dict[str, Any]:
-        """设计参数的完整快照，供 Step 6b 写入 phase1/REPRODUCE.md（§6.1）。
+        """设计参数的完整快照，供 Step 6b 写入 phase1/REPRODUCE.md。
 
         只含【真正影响产出的】字段 —— 每一个都必须被至少一处代码读取。
         """
@@ -149,7 +162,7 @@ CONFIG = Config()
 
 
 # ============================================================================
-# --sample-end 校验（§5.3：强制显式、必须是月末日）
+# --sample-end 校验（强制显式、必须是月末日）
 # ============================================================================
 
 def is_month_end(s: str) -> bool:
@@ -178,7 +191,7 @@ def validate_sample_end(s: str, cfg: Config = CONFIG) -> None:
     """校验 --sample-end。通过则静默返回，否则抛 ConfigViolation。
 
     规则：
-      1. 必须提供（该参数必填且无默认值，§5.3）
+      1. 必须提供（该参数必填且无默认值）
       2. 必须是合法 ISO 日期
       3. 必须是月末日（因只用完整月）
       4. 不早于 sample_start
@@ -186,7 +199,7 @@ def validate_sample_end(s: str, cfg: Config = CONFIG) -> None:
     problems: list[str] = []
 
     if not isinstance(s, str) or not s:
-        raise ConfigViolation(["--sample-end 未提供。该参数【必填且无默认值】（§5.3）。"])
+        raise ConfigViolation(["--sample-end 未提供。该参数【必填且无默认值】。"])
 
     try:
         d = date.fromisoformat(s)

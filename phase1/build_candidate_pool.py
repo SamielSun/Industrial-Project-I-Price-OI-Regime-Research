@@ -43,6 +43,7 @@ import argparse
 import json
 import os
 import random
+import re
 import statistics
 import sys
 import time
@@ -51,7 +52,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -63,7 +64,7 @@ import config as cfg_mod                                     # noqa: E402
 # 不构造任何齐备的 DataFrame。schema 契约从 Step 4（建第 2 层表）起强制。
 
 # ============================================================================
-# 常量（下载参数依据见 §6.4）
+# 常量（下载参数）
 # ============================================================================
 
 S3_API = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
@@ -78,7 +79,7 @@ BACKOFF_BASE = 2          # 2^attempt 秒
 ROOT = Path(__file__).resolve().parent.parent
 # 产出根目录：由 --out-root 显式指定（configure_paths() 里解析）。
 # 原为环境变量 P11_DATA_ROOT —— 已删除：环境变量不跨 shell 保留，
-# 曾因此把冒烟结果写进正式目录（§5.3）。
+# 曾因此把冒烟结果写进正式目录。
 DATA = ROOT / "data"
 # 月频 klines 的原始 zip 暂存 —— 断点续传靠它。
 # 名字原为 `_p11_cache`：p11 是脚本改名前的旧前缀，与本流程无关，故改为 `_cache`
@@ -219,7 +220,6 @@ def s3_list(prefix: str, delimiter: str | None = "/") -> list[str]:
         if token:
             q["continuation-token"] = token
         body = http(f"{S3_API}?{urllib.parse.urlencode(q)}").decode("utf-8", "replace")
-        import re
         out += re.findall(r"<Key>(.*?)</Key>", body)
         out += [p for p in re.findall(r"<Prefix>(.*?)</Prefix>", body) if p != prefix]
         trunc = re.findall(r"<IsTruncated>(.*?)</IsTruncated>", body)
@@ -239,7 +239,7 @@ def enumerate_archive() -> tuple[set[str], set[str], dict]:
     syms = {n.rstrip("/").split("/")[-1] for n in names if n.rstrip("/").split("/")[-1]}
     log(f"        归档合约总数 {len(syms)}   耗时 {time.time()-t0:.1f}s")
 
-    # exchangeInfo：只为拿 base/quote/underlyingType 等元信息，不用它当合约清单（§3.1）
+    # exchangeInfo：只为拿 base/quote/underlyingType 等元信息，不用它当合约清单
     # ⚠️ 这里【不过滤】contractType —— 闸 4 需要看 TRADIFI_PERPETUAL 才能排除它
     ex_url = "https://www.binance.com/fapi/v1/exchangeInfo"
     info = {s["symbol"]: s for s in json.loads(http(ex_url))["symbols"]}
@@ -382,8 +382,6 @@ def persist_dropped(dropped: dict, kept: list, cfg: cfg_mod.Config) -> tuple:
 # 可用月份（S3 列表一次拿全，不需要逐月探测）
 # ============================================================================
 
-import re  # noqa: E402
-
 _MONTH_RE = re.compile(r"-1h-(\d{4})-(\d{2})\.zip$")
 
 
@@ -453,7 +451,7 @@ def read_quote_volumes(sym: str, ym: str) -> list[float] | None:
     lines = body.strip().split("\n")
     if not lines:
         return None
-    # 表头有无必须【逐文件检测】，不可按日期硬编码（§4.3）
+    # 表头有无必须【逐文件检测】，不可按日期硬编码
     first = lines[0].split(",", 1)[0].strip()
     rows = lines[1:] if not first.lstrip("-").replace(".", "").isdigit() else lines
     out = []
@@ -483,7 +481,7 @@ def build_monthly_stats(sym: str, months: list[str]) -> tuple[dict[str, float], 
 # ============================================================================
 # 草稿闸（本脚本能做的一条）—— 其余需要 OI 数据，归 Step 3 / Step 6
 #
-# §3.5 的排名是「对通过资格闸的合约排名」。本脚本只有 klines，所以只能做：
+# 排名是「对通过资格闸的合约排名」。本脚本只有 klines，所以只能做：
 #   草稿闸（对应闸 2 的存在性）：上一个月有效小时数 >= 24*15
 #
 # 【故意宽松】（宁可多留）：本脚本是粗筛，过严会误杀合法样本；
@@ -505,7 +503,7 @@ DRAFT_MIN_BARS_IN_PREV_MONTH = 24 * 15  # = 360 小时，只要上个月还活�
 
 
 def draft_gate_ok(bars: dict[str, int], months: list[str], i: int) -> bool:
-    """草稿闸。只用到第 i 个月【之前】的数据 —— 无前视（§3.5）。
+    """草稿闸。只用到第 i 个月【之前】的数据 —— 无前视。
 
     `i < 1` 是必须的：样本首月没有"上一个月"可比。
     `bars.get(prev, 0)` 的默认值处理两种"上月不存在"：
@@ -536,7 +534,6 @@ def main() -> int:
     configure_paths(Path(args.out_root))                  # 路径定死在最前面
     cfg = cfg_mod.CONFIG
     cfg_mod.validate_sample_end(args.sample_end)          # 失败抛 ConfigViolation
-    sample_end = date.fromisoformat(args.sample_end)
     all_months = month_list(cfg.sample_start[:7], args.sample_end[:7])
     smoke = bool(args.subset)
     log("=" * 74)
@@ -589,7 +586,7 @@ def main() -> int:
     log(f"\nStep 2  下载 {len(todo)} 个月频 klines…")
     statuses: dict[str, int] = {}
     # 逐文件的最终状态。必须显式记录 —— 靠"缓存文件在不在"反推会把
-    # 【已确认的 404】和【网络抖动】混为一谈，两者在缺失报告里处置完全不同（§4.4）。
+    # 【已确认的 404】和【网络抖动】混为一谈，两者在缺失报告里处置完全不同。
     #
     # 初值【只按文件在不在】判定，不算作"尝试过"：文件在就是 cached，
     # 不在就是裸的 retry_exhausted。若这次走 --skip-download、或某几项没被补跑轮
@@ -621,7 +618,7 @@ def main() -> int:
                         f"已用 {time.time()-t0:.0f}s")
         log(f"        首轮完成，耗时 {time.time()-t0:.0f}s  状态 {statuses}")
 
-        # 对未取得项补跑一轮（§6.4：把问题在同一次运行内解决）
+        # 对未取得项补跑一轮（把问题在同一次运行内解决）
         retry = [(s, ym) for (s, ym) in todo if not cache_path(s, ym).exists()]
         if retry:
             log(f"        对 {len(retry)} 个未取得项补跑一轮…")
@@ -632,6 +629,11 @@ def main() -> int:
                     attempted.add((sy, ymy))
                     statuses["retry2_" + st] = statuses.get("retry2_" + st, 0) + 1
             log(f"        补跑完成，耗时 {time.time()-t1:.0f}s")
+            # 补跑结果必须打出来：statuses 只在首轮之后打印过一次，
+            # 不报的话 retry2_* 这份计数就没人看得见。
+            r2 = {k[len("retry2_"):]: v for k, v in statuses.items()
+                  if k.startswith("retry2_")}
+            log(f"        补跑结果 {r2}")
 
     # ---- 排名 ----
     log("\n算逐月流动性排名（含草稿闸）…")
@@ -664,7 +666,7 @@ def main() -> int:
     pd.DataFrame({"symbol": sorted(union)}).to_csv(tmp, index=False)
     os.replace(tmp, CANDIDATE_POOL)
 
-    # manifest：逐文件状态（§7.3 的核心字段），供断点续传与排查
+    # manifest：逐文件状态（核心字段），供断点续传与排查
     now = datetime.now(timezone.utc).isoformat()
     rows = []
     for s, ym in todo:
@@ -683,18 +685,32 @@ def main() -> int:
             "status": st,
             "bytes": p.stat().st_size if exists else 0,
             "downloaded_at": now if exists else "",
+            # 显式空串，不能让这一列落成 float64 全 NaN —— `nan or ""` 是 nan 而
+            # bool(nan) 为 True，Step 3 会把全部 klines 误判成已落盘。
+            "raw_written_at": "",
         })
     mf = pd.DataFrame(rows, columns=[
         "source", "symbol", "period", "granularity", "remote_path",
         "filename", "status", "bytes", "downloaded_at", "raw_written_at"])
     # 只替换本步骤自己的 (source=klines, granularity=monthly) 记录，
     # 其余（Step 3 的 mark/index/funding/metrics 明细）原样保留。
+    #
+    # ⚠️ 键空间与 Step 3 重叠：它也写 klines/monthly 的行。所以重写自己的行时
+    # **必须把已有的 raw_written_at 带过来** —— 否则每次跑完 Step 0-2 都会清空
+    # Step 3 的 klines 进度戳，下一轮 Step 3 要把池内约 1 万个 klines 文件全部重下
+    # （实测 Step 3 的 1,676s 里绝大部分是这一次重复下载）。
     if MANIFEST.exists():
         old = pd.read_parquet(MANIFEST)
         for c in mf.columns:
             if c not in old.columns:
                 old[c] = ""
         own = (old["source"] == "klines") & (old["granularity"] == "monthly")
+        prev = old.loc[own, ["symbol", "period", "raw_written_at"]]
+        stamp = {k: str(v) for k, v in
+                 zip(zip(prev["symbol"], prev["period"]), prev["raw_written_at"])
+                 if v is not None and not pd.isna(v) and str(v).strip()}
+        mf["raw_written_at"] = [stamp.get((s, ym), "")
+                                for s, ym in zip(mf["symbol"], mf["period"])]
         mf = pd.concat([old[~own][mf.columns], mf], ignore_index=True)
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     tmp = MANIFEST.with_name(MANIFEST.name + ".part")
@@ -703,7 +719,7 @@ def main() -> int:
     n_fail = int((mf["status"] != "ok").sum())
     log(f"\nmanifest -> {MANIFEST}  ({len(mf):,} 行，非 ok {n_fail:,})")
 
-    # ---- 运行摘要（§4.4：★ 未取得 绝不能算进缺失）----
+    # ---- 运行摘要（★ 未取得 绝不能算进缺失）----
     # 没尝试过的项（--skip-download，或补跑轮没覆盖到）单列一类，与"尝试过但失败"
     # 分开报 —— 二者都写成 retry_exhausted 会把"没试"误报成"缺失"（见 final_status 处）。
     cnt: dict[str, int] = {}

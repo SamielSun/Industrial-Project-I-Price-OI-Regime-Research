@@ -16,7 +16,6 @@ output corresponds to.
 sample_start = 2021-12-01
 K = 50
 liq_window_days = 30
-refresh_months = 1
 min_history_bars = 2160
 require_live_at_month_start = True
 min_oi_coverage = 0.9

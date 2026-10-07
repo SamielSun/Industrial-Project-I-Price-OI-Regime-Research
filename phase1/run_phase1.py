@@ -75,7 +75,7 @@ def log(msg: str = "") -> None:
     print(f"[{int(el)//60:02d}:{int(el)%60:02d}] {msg}", flush=True)
 
 
-def run_step(label: str, script: str, out_root: str,
+def run_step(script: str, out_root: str,
              sample_end: str) -> tuple[int, float]:
     """跑一个步骤，stdio 继承。返回 (退出码, 耗时秒数)。
 
@@ -121,7 +121,7 @@ def main() -> int:
         print(f"\n参数校验失败：\n{e}", file=sys.stderr)
         return 2
 
-    todo = list(STEPS)
+    todo = STEPS
 
     log("=" * 78)
     log(f"run_phase1   sample_end={args.sample_end}")
@@ -141,7 +141,7 @@ def main() -> int:
         log("=" * 78)
         log(f"[{i}/{len(todo)}] Step {label}  {script}  —— {desc}")
         log("=" * 78)
-        code, secs = run_step(label, script, args.out_root, args.sample_end)
+        code, secs = run_step(script, args.out_root, args.sample_end)
         results.append((label, script, code, secs))
         if code != 0:
             log("")

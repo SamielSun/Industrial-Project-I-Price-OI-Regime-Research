@@ -11,15 +11,19 @@ build_universe —— Step 6：逐期资格判定 + PIT 成员集 + master 表
 
   评测窗口：`[月初 − liq_window_days, 月初)` —— **严格开口，否则前视**。
 
-四条闸（§6.1）
---------------
-  闸 1  非稳定币（按 baseAsset）
-  闸 2  ① 截至月初 bar 数 ≥ 2160（90 天）
-        ② 最后活跃日 ≥ 月初（仍在交易）
+四条闸（阈值全部取自 config.py，这里只写语义）
+------------------------------------------------
+  闸 1  非稳定币（按 base_asset，见 `config.stablecoin_bases`）
+  闸 2  ① 截至月初累计 bar 数 ≥ `min_history_bars`（90 天）
+        ② 最后活跃日 ≥ 月初（仍在交易，见 `require_live_at_month_start`）
         ⚠️ ② 必需 —— 合约死后 bar 数冻结而阈值固定，只数 bar 数会永远通过
-  闸 3  ① trailing 30 天 OI 覆盖率 ≥ 0.90
-        ② trailing 30 天最长连续缺失 ≤ 48h
+  闸 3  ① trailing 30 天（`liq_window_days`）OI 覆盖率 ≥ `min_oi_coverage`
+        ② 同窗口最长连续缺失 ≤ `max_oi_gap_hours`
   闸 4  非代币化传统金融资产（exchangeInfo 判据）
+
+  ⚠️ 闸 1 与闸 4 在本步【永远不会触发】：Step 1 的硬过滤已经按同一判据筛过，
+  候选池是它的子集。保留它们是为了让四条闸的日志完整（都打 0 拦下），
+  不要误读成"这一步拦住了 0 个"。
 
   流动性不设闸 —— note 的 `Top 30–50 liquid` 由排名承担。
 
@@ -45,7 +49,6 @@ import json
 import os
 import sys
 import time
-import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -107,6 +110,11 @@ def month_list(start: str, end: str) -> list[str]:
     return out
 
 
+def base_asset_of(symbol: str) -> str:
+    """合约名 → 基础资产名。闸 1 按 base_asset 判定，不按符号字面。"""
+    return symbol[:-4] if symbol.endswith("USDT") else symbol
+
+
 def max_run_true(a: np.ndarray) -> int:
     """布尔数组里最长连续 True 的长度。"""
     if not a.any():
@@ -140,7 +148,7 @@ def fetch_exchange_info() -> dict[str, dict]:
 # 为什么不存全量：全量 payload 是 9 个顶层键 × 920 条 × 40 个字段（几 MB），
 # 绝大部分与判据无关。但也不能只存闸 4 要的两个 —— 实测这样会导致
 # **Step 1 的过滤明细无法从产出重现**（"非 USDT 本位"要看 quoteAsset，
-# "稳定币"要看 baseAsset），于是 893 → 679 这条链对不上账。
+# "稳定币"要看 baseAsset），那两级的对账链就断了。
 EI_FIELDS = ("contractType", "underlyingType", "baseAsset", "quoteAsset")
 
 
@@ -274,7 +282,7 @@ def main() -> int:
     parts = []
     for f in sorted(FE.rglob("*.parquet")):
         parts.append(pq.read_table(str(f), columns=[
-            "symbol", "ts", "quote_volume", "oi", "oi_missing",
+            "symbol", "ts", "quote_volume", "oi_missing",
             "mark_close", "index_close", "bar_missing"],
             partitioning=None).to_pandas())
     d = pd.concat(parts, ignore_index=True).sort_values(["symbol", "ts"])
@@ -292,7 +300,7 @@ def main() -> int:
 
     # 资格评测的对象 = 【候选池】，不是全部归档合约。
     # 精筛这一步只关心"候选池里谁能当成员"，落选的合约在 Step 2 就被排除了，
-    # 它们的账在 archive_contracts.csv（1,057）与 dropped_contracts.csv（218）里。
+    # 它们的账在 archive_contracts.csv（1,061）与 dropped_contracts.csv（222）里。
     # （曾按 manifest 的 klines 记录扩到 677 个合约，为的是给落选者留一条
     #   not_in_candidate_pool 的记录；那样 eligibility 有 58% 的行是"无数据所以
     #   不通过"，信息量低，已收窄。）
@@ -309,7 +317,7 @@ def main() -> int:
 
     # ---- exchangeInfo（闸 4）----
     log("")
-    ei_src = {"from": "skipped", "snapshot_path": "", "fetched_at": "", "digest": ""}
+    ei_src: dict = {}
     if args.no_schema_note:
         info = {}
         log("  --no-schema-note：跳过 exchangeInfo —— 闸 4 失效，全部合约放行。"
@@ -318,6 +326,11 @@ def main() -> int:
         info, ei_src = load_or_fetch_exchange_info(
             args.refresh_exchange_info,
             Path(args.exchange_info) if args.exchange_info else None)
+        # 闸 4 的判据来自哪个 oracle 必须打出来：报告要能回答"这次闸 4 用的是
+        # 快照还是联网取的、快照是哪天抓的"。以前 ei_src 收了但不打印，等于没有。
+        log(f"  exchangeInfo：{len(info)} 条，来自 {ei_src.get('from', '')}"
+            f"（fetched_at {ei_src.get('fetched_at', '') or '—'}，"
+            f"digest {(ei_src.get('digest') or '—')[:12]}…）")
         # 不能静默降级：没有 exchangeInfo 就没有 underlyingType，
         # 闸 4 会把【全部】代币化资产判成加密资产放进池子。
         # 两种失败都要拦住：完全取不到（0 条），以及截断但合法的残包 ——
@@ -354,14 +367,11 @@ def main() -> int:
         cov = w.groupby("symbol")["oi_missing"].apply(lambda s: 1 - s.mean())
         mruns = w.groupby("symbol")["oi_missing"].apply(
             lambda s: max_run_true(s.to_numpy()))
-        oi_null_days = (w.assign(nul=w["oi"].isna())
-                         .groupby(["symbol", "day"])["nul"].max()
-                         .groupby("symbol").sum())
         win_days_all = pd.date_range(lo, cut, freq="D", inclusive="left").date
         cut_np = np.datetime64(cut.tz_convert(None))
 
         for s in all_syms:
-            base = s[:-4] if s.endswith("USDT") else s
+            base = base_asset_of(s)
             rec = info.get(s)
             arr = bars_cum.get(s, np.array([], dtype="datetime64[ns]"))
             r: dict = {
@@ -371,8 +381,6 @@ def main() -> int:
                 "last_active": last_act.get(s, pd.NaT),
                 "oi_cov": float(cov[s]) if s in cov.index else np.nan,
                 "oi_max_gap_h": int(mruns[s]) if s in mruns.index else 0,
-                "oi_null_days": int(oi_null_days.get(s, 0)),
-                "obs_days": int(w[w["symbol"] == s]["day"].nunique()),
                 "active_days": len(act_by_sym.get(s, set()) & set(win_days_all)),
             }
 
@@ -423,14 +431,11 @@ def main() -> int:
 
     # ---- 排名 ----
     # 排名只在【通过四闸】的合约月里做（原 in_pool 条件已删 —— 评测对象就是候选池）
-    E["rank"] = np.nan
     elig = E[E["eligible"] & E["liq"].notna()].copy()
     elig["rank"] = elig.groupby("month")["liq"].rank(ascending=False, method="first")
-    E = E.drop(columns=["rank"]).merge(
-        elig[["symbol", "month", "rank"]], on=["symbol", "month"], how="left")
+    E = E.merge(elig[["symbol", "month", "rank"]], on=["symbol", "month"], how="left")
 
-    M = E[E["rank"] <= cfg.K].copy()
-    M["is_member"] = True
+    M = E[E["rank"] <= cfg.K]
     M = M[["symbol", "month", "rank", "liq", "bars_before", "oi_cov",
            "oi_max_gap_h", "active_days"]].sort_values(["month", "rank"])
     log("")
@@ -461,7 +466,7 @@ def main() -> int:
 
     mrows = []
     for s in all_syms:
-        base = s[:-4] if s.endswith("USDT") else s
+        base = base_asset_of(s)
         rec = info.get(s)
         sub = d_by_sym.get(s)
         has = sub is not None and len(sub) > 0
@@ -515,13 +520,15 @@ def main() -> int:
     log("=" * 80)
     n = len(E)
     log(f"  评测总行数（合约×月）      {n:>9,}")
-    log(f"  闸 1  稳定币                  {int((~E['g1']).sum()):>9,}")
+    log(f"  闸 1  稳定币                  {int((~E['g1']).sum()):>9,}"
+        f"   ← 恒 0：Step 1 已按同一判据筛过")
     log(f"  闸 2① 历史不足               {int((~E['g2a']).sum()):>9,}")
     log(f"  闸 2② 已停止交易             {int((~E['live']).sum()):>9,}"
-        f"   （仅统计历史已够的）")
+        f"   （其中历史已够的 {int((~E['live'] & E['g2a']).sum()):,} 个）")
     log(f"  闸 3① OI 覆盖率低            {int((~E['g3a']).sum()):>9,}")
     log(f"  闸 3② OI 连续缺失过长        {int((~E['g3b']).sum()):>9,}")
-    log(f"  闸 4  非加密资产              {int((~E['g4']).sum()):>9,}")
+    log(f"  闸 4  非加密资产              {int((~E['g4']).sum()):>9,}"
+        f"   ← 恒 0：Step 1 已按同一判据筛过")
     log(f"  四闸全过                     {int(E['eligible'].sum()):>9,}")
     log(f"  取前 K={cfg.K} 后成为成员   {len(M):>9,}")
     log("=" * 80)

@@ -7,7 +7,8 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
 
 做什么
 ------
-  读 data/raw/ 的 1,144 个 parquet，建四张规范化表，按 year/chunk=YYYY-MM 落盘：
+  读 data/raw/ 下的全部 parquet（月频源每合约一个文件、metrics 按年分文件），
+  建四张规范化表，按 year/chunk=YYYY-MM 落盘：
 
     klines_1h       (symbol, ts)         12 列 —— 网格的【定义者】
     mark_index_1h   (symbol, ts)          5 列 —— 左连接到 klines 网格
@@ -20,17 +21,22 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
    `features_1h`（Step 5）才密集化。
 
 2. **三张网格表的 (symbol, ts) 集合逐一致**。mark/index/oi 里那些
-   klines 没有的小时一律丢弃 —— 这同时自然处理了两件事：
-     · 下架合约 mark 多写的尾部空行（123,916 行）
-     · LUNAUSDT 的 OI 孤立残留（跨到 2024-06，而 klines 止于 2022-05）
+   klines 没有的小时一律丢弃，这自然处理了尾部残留：
+     · 下架合约 mark 多写的、末根 bar 之后的空行（123,916 行）
+     · LUNAUSDT 的 OI 孤立残留（数据的最后一条是 2024-04-06 02:00，而 klines 止于 2022-05）
+   ⚠️ 代价：这条规则也丢掉【归档里确实存在】的 mark/index 行 —— 面板里 klines 没有
+   bar 的小时共 6,886 个，其中 raw 里 mark 有 6,863 小时、index 有 6,766 小时的数据，
+   全被排除。它们不是归档缺口，是网格规则的后果（data_quality.md §3.3 已按此归因）。
 
 3. **OI 终点对齐**：bar [ts, ts_end) 配 OI(ts_end)。
    即 `oi_1h.ts = 源 create_time - 1h`。这是 schema 已定的语义
    （`ts_end` = "OI 对齐时刻 = 决策时刻"）。
-   **`create_time` 的秒位必须截断**（实测 4,138 行非 0）—— 见 §3 oi_1h 处的说明。
+   **`create_time` 的秒位必须截断**（实测 4,138 行非 0）—— 见下方 oi_1h 一节的说明。
 
 4. **funding 落在结算时刻【起的】那根 bar**：`ts_funding == klines.ts`。
-   实测 calc_time 截断到整秒后 100% 落在整点、100% 等于某 bar 的 ts。
+   实测 calc_time 截断到整秒后 100% 落在整点；但**不是** 100% 等于某根 bar 的 ts ——
+   首根 bar 之前与末根 bar 之后的结算自然不在网格上（本脚本记在
+   `stats["funding不在网格"]` 里，Step 5 也算出同一现象，见那里的日志）。
    `funding_rate` 只在结算时刻有值；`funding_interval_hours` 的
    前向填充在 Step 5 做，不在这张表里。
 
@@ -45,12 +51,13 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
 产出
 ----
   data/01_layer2/{klines_1h,mark_index_1h,oi_1h,funding}/year=YYYY/chunk=YYYY-MM.parquet
-  4 表 × 57 月 = 228 个文件
+  4 张表 × 每个样本月一个 chunk
 
 用法
 ----
-  python phase1/build_layer2.py --sample-end 2026-08-31
-  python phase1/build_layer2.py --sample-end 2026-08-31 --subset BTCUSDT
+  python phase1/build_layer2.py --out-root data --sample-end 2026-08-31
+  python phase1/build_layer2.py --out-root /tmp/x --raw-root data \
+      --subset BTCUSDT --sample-end 2026-08-31        # 冒烟
 
 设计参数见 config.py；四张表的列契约见 lib/schema.py 的 LAYER2_SCHEMAS。
 """
@@ -223,10 +230,9 @@ def build_symbol(sym: str, years: list[int]
         # 对齐规则：ts_end == create_time（实测确认，例 TLMUSDT 2021-12-01：
         # bar [00:00,01:00) 的 oi = 102,744,323 = create_time 01:00 的快照）。
         # 秒位必须截断，否则静默丢数据：实测 4,138 行（64 个合约，如
-        # TLMUSDT 2022-05-09 11:00:59）的 create_time 秒位非 0，其中 1,147 行
+        # TLMUSDT 2022-05-09 11:00:59）的 create_time 秒位非 0，其中 4,083 行
         # 是该合约该小时唯一的快照。不截断则匹配不上任何 ts_end，
-        # 被静默记成 oi_missing=True，并把该合约的 OI 序列人为拉长
-        # （TLMUSDT 的 39 小时冻结即由此而来）。
+        # 被静默记成 oi_missing=True，并把该合约的 OI 序列人为拉长。
         # 同一小时若真有多条（整点 + 迟到），按时间取最后一条。
         oi = oi.assign(ts_end=oi["ts"].dt.floor("h"))
         stats["oi秒位非零"] = int((oi["ts"].dt.second != 0).sum())
@@ -261,8 +267,6 @@ def build_symbol(sym: str, years: list[int]
         on_grid = f["ts_funding"].isin(set(grid))
         stats["funding不在网格"] = int((~on_grid).sum())
         out["funding"] = f
-    else:
-        stats["funding_缺失"] += 1
 
     return out, stats
 
@@ -300,21 +304,20 @@ def conform(df: pd.DataFrame, table: str) -> pd.DataFrame:
     return pd.DataFrame(out, columns=[c.name for c in sch.columns])
 
 
-def write_chunk(table: str, ym: str, df: pd.DataFrame, *, do_validate: bool) -> tuple[int, int]:
+def write_chunk(table: str, ym: str, df: pd.DataFrame, *, do_validate: bool) -> int:
     """写一个 chunk（与已有内容【合并】，不是覆盖）。
 
     逐合约处理意味着同一个 chunk 会被写入 len(pool) 次，每次只带一个合约的增量。
     所以必须读回已有内容、合并、去重、排序后再写 —— 单纯的覆盖会让文件里
     只剩最后一个合约的数据。
 
-    返回 (本次新增行数, 合并后的总行数)。
+    返回合并后的总行数。
     """
     df = conform(df, table)
     key = list(LAYER2_SCHEMAS[table].primary_key)
     cols = [c.name for c in LAYER2_SCHEMAS[table].columns]
     year = ym[:4]
     out = L2 / table / f"year={year}" / f"chunk={ym}.parquet"
-    added = len(df)
     if out.exists():
         # ⚠️ pyarrow 会从目录名 year=YYYY 推断出一个分区列加进表里，
         #    physical schema 里并没有它。`partitioning=None` 关掉这个行为；
@@ -331,7 +334,7 @@ def write_chunk(table: str, ym: str, df: pd.DataFrame, *, do_validate: bool) -> 
     pq.write_table(pa.Table.from_pandas(df, preserve_index=False), tmp,
                    compression="zstd")
     os.replace(tmp, out)
-    return added, len(df)
+    return len(df)
 
 
 def main() -> int:
@@ -382,7 +385,7 @@ def main() -> int:
     # 不能依赖 write_chunk 的"读回合并"：本轮没处理的合约会在目录里留【旧代码/旧输入】
     # 的行，而且没人能发现 —— 实测 --subset 连跑两次后，目录里还留着上一次的合约，
     # 收尾的交叉校验是对整个目录做的，照样打印"三张网格表一致: 是"。
-    # 必须显式给 --subset 才保留旧产出（冒烟用）。
+    # 必须显式给 --keep-existing 才保留旧产出（冒烟用）。
     if not args.keep_existing:
         for tname in LAYER2_SCHEMAS:
             d_old = L2 / tname
@@ -397,7 +400,6 @@ def main() -> int:
     #          （285 × 57 ≈ 10 万次"读回+合并+重写"，二次方）。
     # 折中：每 --batch 个合约攒一批合并一次。缓冲区峰值 ≈ batch × 一个合约。
     agg: Counter = Counter()
-    rows_by_table: Counter = Counter()      # 本次写入的行数（仅用于日志）
     chunks_written: dict[str, set[str]] = {t: set() for t in LAYER2_SCHEMAS}
     pend: dict[str, dict[str, list[pd.DataFrame]]] = {
         t: defaultdict(list) for t in LAYER2_SCHEMAS
@@ -408,10 +410,8 @@ def main() -> int:
         nonlocal pend, pend_syms
         for tname in LAYER2_SCHEMAS:
             for ym, parts in pend[tname].items():
-                added, _total = write_chunk(tname, ym,
-                                            pd.concat(parts, ignore_index=True),
-                                            do_validate=not args.no_validate)
-                rows_by_table[tname] += added
+                write_chunk(tname, ym, pd.concat(parts, ignore_index=True),
+                            do_validate=not args.no_validate)
                 chunks_written[tname].add(ym)
         pend = {t: defaultdict(list) for t in LAYER2_SCHEMAS}
         pend_syms = 0

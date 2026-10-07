@@ -100,10 +100,6 @@ class TableSchema:
     def names(self) -> list[str]:
         return [c.name for c in self.columns]
 
-    @property
-    def dtypes(self) -> dict[str, str]:
-        return {c.name: c.dtype for c in self.columns}
-
 
 def pandas_dtype_of(sem: str) -> str:
     return SEMANTIC_TO_PANDAS[sem]
@@ -166,7 +162,7 @@ SOURCE_SCHEMAS: dict[str, TableSchema] = {
         name="premiumIndexKlines", columns=_cols(*_KLINE_12),
         primary_key=("open_time",), source_timestamp_col="open_time",
         source_has_header_variants=True,
-        note="登记备查；本项目不使用（基差由 mark/index 近似，见 §8.2）",
+        note="登记备查；本项目不使用（基差由 mark/index 近似）",
     ),
     "metrics": TableSchema(
         name="metrics",
@@ -197,7 +193,7 @@ SOURCE_SCHEMAS: dict[str, TableSchema] = {
 
 
 # ============================================================================
-# 第 2 层 schema（4 张规范化表，§8.2）
+# 第 2 层 schema（4 张规范化表）
 # ============================================================================
 
 LAYER2_SCHEMAS: dict[str, TableSchema] = {
@@ -225,7 +221,8 @@ LAYER2_SCHEMAS: dict[str, TableSchema] = {
             ("index_close", "float64", "← indexPriceKlines.close"),
         ),
         primary_key=("symbol", "ts"), source_timestamp_col="ts",
-        note="mark 与 index 时间戳实测完全重合，故合并为一表（§8.2）",
+        note="mark 与 index 合为一表：同网格、同主键、同源节奏，"
+             "但两者缺失并不重合（面板里 mark 缺 27,224 小时 / index 缺 41,175）",
     ),
     "oi_1h": TableSchema(
         name="oi_1h",
@@ -296,7 +293,7 @@ def get_schema(name: str) -> TableSchema:
 def raw_source_columns(source: str) -> list[str]:
     """源归一化后的列名顺序，供解析器使用。
 
-    注意：表头有无必须【逐文件检测】，不可按日期硬编码（§2.2）。
+    注意：表头有无必须【逐文件检测】，不可按日期硬编码。
     """
     return list(get_schema(source).names)
 
@@ -334,7 +331,7 @@ def validate(
       9. 标识列为 tz-aware UTC       挡 naive datetime
 
     【不在此处】：值域与跨列一致性检查 —— 它们是统计判断、阈值需标定，
-    属质量巡检而非结构契约（§6.3 已决定不做）。上面九条已覆盖会导致数值
+    属质量巡检而非结构契约（已决定不做）。上面九条已覆盖会导致数值
     异常的根因（解析失败 → 整列为空 / dtype 错 / 时间戳非整点）。
     """
     if isinstance(schema, str):
@@ -407,11 +404,11 @@ def validate(
         if dupes:
             problems.append(
                 f"主键 {tuple(pk)} 有 {dupes} 行重复。"
-                f"实测源文件存在完全一致的副本行，去重是必需步骤（§6.1）。")
+                f"实测源文件存在完全一致的副本行，去重是必需步骤。")
         else:
             try:
                 if not df[pk].equals(df[pk].sort_values(pk, kind="stable")):
-                    problems.append(f"未按主键 {tuple(pk)} 排序（§6.1）")
+                    problems.append(f"未按主键 {tuple(pk)} 排序")
             except TypeError as e:
                 problems.append(f"主键排序检查失败：{e}")
 

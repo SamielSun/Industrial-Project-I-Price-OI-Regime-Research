@@ -7,7 +7,7 @@ fetch_market_data —— 为候选池合约下载全部可用历史，存成 raw
 
 做什么
 ------
-  1. 读候选池（297 个合约）
+  1. 读候选池（285 个合约）
   2. 逐个源【枚举归档】，拿到真实存在的文件清单（不靠日期推算 —— 见下方"为什么"）
   3. 下载 + 【就地解压】→ 攒批 → 落 raw parquet → 删掉这批 zip
   4. 逐文件写 manifest（含 raw_written_at 进度戳），供断点续传
@@ -82,7 +82,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))   # 项目根：
 import config as cfg_mod                                     # noqa: E402
 
 # ============================================================================
-# 常量（下载参数依据见 §6.4）
+# 常量（下载参数）
 # ============================================================================
 
 S3_API = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
@@ -103,7 +103,7 @@ INFLIGHT = CONCURRENCY * 8
 
 ROOT = Path(__file__).resolve().parent.parent
 # 产出根目录：由 --out-root 显式指定（configure_paths() 里解析）。
-# 原为环境变量 P3_DATA_ROOT —— 已删除，理由同 build_candidate_pool.py（§5.3）。
+# 原为环境变量 P3_DATA_ROOT —— 已删除，理由同 build_candidate_pool.py。
 DATA = ROOT / "data"
 RAW = DATA / "raw"
 CACHE = RAW / "_cache"
@@ -150,7 +150,7 @@ def log(msg: str) -> None:
 
 
 # ============================================================================
-# 网络层（§4.1 的两条工程规则）
+# 网络层（两条工程规则）
 # ============================================================================
 
 def quote_seg(seg: str) -> str:
@@ -300,7 +300,7 @@ def enum_metrics(sym: str) -> set[str]:
 
 
 # ============================================================================
-# 解析（表头有无【逐文件检测】，不可按日期硬编码 —— §4.3）
+# 解析（表头有无【逐文件检测】，不可按日期硬编码）
 # ============================================================================
 
 KLINES_COLS = ["open_time", "open", "high", "low", "close", "volume",
@@ -592,6 +592,14 @@ def main() -> int:
             st = getattr(r, "status", "") or ""
             # 注意：对【空列】hasattr 会返回 True，所以必须查列名而不是 hasattr
             wr = (getattr(r, "raw_written_at", "") or "") if has_wr else ""
+            # ⚠️ NaN 必须当成"没有戳"。`nan or ""` 返回的仍是 nan，而 bool(nan) 是
+            # True —— Step 0-2 首次建 manifest 时该列是 float64 全 NaN，不挡住的话
+            # 这里会把【全部 klines】判成已落盘、一个都不下，Step 4 随后报"没有
+            # klines 文件"退出 4，而错误现象指向 Step 4，极难定位。
+            if wr is None or pd.isna(wr):
+                wr = ""
+            else:
+                wr = str(wr)
             size[key] = int(getattr(r, "bytes", 0) or 0)
             if wr:
                 written[key] = wr
@@ -630,12 +638,10 @@ def main() -> int:
     buf: dict[tuple[str, str], list[tuple[str, pd.DataFrame]]] = defaultdict(list)
     buf_rows: Counter = Counter()
     pend: Counter = Counter()
-    periods_of: dict[tuple[str, str], list[str]] = defaultdict(list)
     for src, sy, period, _ in todo_m + todo_d:
         if (src, sy) not in pend:
             order.append((src, sy))
         pend[(src, sy)] += 1
-        periods_of[(src, sy)].append(period)
 
     def flush_one(key: tuple[str, str]) -> None:
         nonlocal n_rows
@@ -666,7 +672,7 @@ def main() -> int:
 
     # persist 必须定义在 run_pass 之前 —— run_pass 中途会调用它落盘进度，
     # 而 def 语句要执行到才绑定名字（曾因此 NameError）。
-    def persist(final: bool = False) -> None:
+    def persist() -> None:
         """把当前进度写进 manifest（原子写）。
 
         必须能【中途反复调用】：原来只在全部跑完后写一次，于是 SIGKILL / 断电 /
@@ -705,8 +711,6 @@ def main() -> int:
         tmp_ = MANIFEST.with_name(MANIFEST.name + f".{os.getpid()}.part")
         mf_.to_parquet(tmp_, engine="pyarrow", compression="zstd")
         os.replace(tmp_, MANIFEST)
-        if not final:
-            return
 
     def run_pass(todo, label: str) -> None:
         """下载 + 就地解压 + 按合约落盘。一遍过，无第二遍读盘。"""
@@ -769,7 +773,7 @@ def main() -> int:
         run_pass(todo_m, "月频 klines/mark/index/funding")
         run_pass(todo_d, "日频 metrics (OI)")
 
-        # 补跑一轮未取得项（§6.4：把问题在同一次运行内解决）
+        # 补跑一轮未取得项（把问题在同一次运行内解决）
         retry_jobs = [j for j in todo_m + todo_d
                       if status.get((j[0], j[1], j[2])) == "retry_exhausted"]
         if retry_jobs:
@@ -791,11 +795,7 @@ def main() -> int:
             pass
         log("    收尾完成；重跑会从断点继续（已打 raw_written_at 的不会再下）")
 
-    # ---- manifest ----
-    now = datetime.now(timezone.utc).isoformat()
-
-
-    persist(final=True)
+    persist()
     n_written = sum(1 for k in jobs if written.get((k[0], k[1], k[2])))
 
     log("")

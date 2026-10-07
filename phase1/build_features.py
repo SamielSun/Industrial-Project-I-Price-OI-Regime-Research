@@ -78,11 +78,11 @@ T_START = time.time()
 
 def configure_paths(out_root: Path, l2_root: Path | None,
                     pool: Path | None) -> None:
-    global DATA, L2, OUT, FE_DIR, CANDIDATE_POOL
+    # FE_DIR 不在这里定：main() 会把它指向暂存目录 features_1h.new
+    global DATA, L2, OUT, CANDIDATE_POOL
     DATA = out_root.resolve()
     L2 = (l2_root or (DATA / "01_layer2")).resolve()
     OUT = DATA / "02_features"
-    FE_DIR = OUT / "features_1h"
     CANDIDATE_POOL = (pool or (ROOT / "data" / "03_reference"
                                / "candidate_pool.csv")).resolve()
 
@@ -155,14 +155,11 @@ def build_symbol(sym: str, ks: dict, mis: dict, ois: dict, fus: dict,
     st["网格行"] = len(base)
 
     # ---- klines_1h ----
-    k = ks.get(sym)
-    if k is not None:
-        base = base.merge(k.drop_duplicates(subset=["ts"], keep="last"),
-                          on=["ts", "ts_end"], how="left")
-    else:
-        for c in ("open", "high", "low", "close", "volume", "quote_volume",
-                  "trades", "taker_buy_volume", "taker_buy_quote_volume"):
-            base[c] = float("nan")
+    # ks 与 bmap 同源于 kl，且 bmap 只保留 last_day 非空的合约，所以
+    # 只要 sym in bmap 就一定有 ks[sym] —— 无需 else 分支。
+    k = ks[sym]
+    base = base.merge(k.drop_duplicates(subset=["ts"], keep="last"),
+                      on=["ts", "ts_end"], how="left")
     base["bar_missing"] = base["close"].isna()
     st["bar_missing"] = int(base["bar_missing"].sum())
 
@@ -246,11 +243,10 @@ def conform(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out, columns=COLS)
 
 
-def write_chunk(ym: str, df: pd.DataFrame, *, do_validate: bool) -> tuple[int, int]:
-    """写一个 chunk（与已有内容合并）。返回 (本次新增行数, 合并后总行数)。"""
+def write_chunk(ym: str, df: pd.DataFrame, *, do_validate: bool) -> int:
+    """写一个 chunk（与已有内容合并）。返回合并后的总行数。"""
     df = conform(df)
     out = FE_DIR / f"year={ym[:4]}" / f"chunk={ym}.parquet"
-    added = len(df)
     if out.exists():
         old = pq.read_table(str(out), partitioning=None).to_pandas()
         df = pd.concat([old[COLS], df], ignore_index=True)
@@ -264,7 +260,7 @@ def write_chunk(ym: str, df: pd.DataFrame, *, do_validate: bool) -> tuple[int, i
     pq.write_table(pa.Table.from_pandas(df, preserve_index=False), tmp,
                    compression="zstd")
     os.replace(tmp, out)
-    return added, len(df)
+    return len(df)
 
 
 # ============================================================================
@@ -346,29 +342,26 @@ def main() -> int:
 
     # ---- 逐合约建，按批合并 ----
     agg: Counter = Counter()
-    rows_written = 0
     chunks: set[str] = set()
     pend: dict[str, list[pd.DataFrame]] = defaultdict(list)
     pend_syms = 0
 
     def flush() -> None:
-        nonlocal pend, pend_syms, rows_written
+        nonlocal pend, pend_syms
         for ym, parts in pend.items():
-            added, _ = write_chunk(ym, pd.concat(parts, ignore_index=True),
-                                   do_validate=not args.no_validate)
-            rows_written += added
+            write_chunk(ym, pd.concat(parts, ignore_index=True),
+                        do_validate=not args.no_validate)
             chunks.add(ym)
         pend = defaultdict(list)
         pend_syms = 0
 
     t0 = time.time()
-    n_grid = n_trim = 0
+    n_trim = 0
     for i, sym in enumerate(pool, 1):
         if sym not in bmap:
             agg["无 klines"] += 1
             continue
         g0, g1 = bmap[sym]
-        n_grid += 1
         df, st = build_symbol(sym, ks, mis, ois, fus, g0, g1)
         agg.update(st)
         # 统计裁掉了多少（原 klines 该合约在 g1 之后的行）
@@ -394,6 +387,8 @@ def main() -> int:
     log(f"  index 缺             {agg['index缺']:>12,}")
     log(f"  funding 结算         {agg['结算次数']:>12,}")
     log(f"  interval 回填        {agg['interval回填']:>12,}")
+    log(f"  interval 网格前播种的合约 {agg['interval网格前播种']:>7,}"
+        f"   ← 首根 bar 之前已有结算，种子取自那一次")
     log(f"  interval 首结算前为 null {agg['interval首结算前']:>9,}")
     log(f"  funding 未 join 上（网格外） {agg['funding未join上']:>7,}")
     log(f"  裁掉死尾行           {n_trim:>12,}")
