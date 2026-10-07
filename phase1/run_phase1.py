@@ -30,7 +30,7 @@ run_phase1 —— 一条命令跑完 Phase 1 的六个处理步骤
   python phase1/run_phase1.py --out-root data --sample-end 2026-08-31 --dry-run
 
 任一一步失败即停在该步，不会继续往下跑。要单跑某一步，直接调那个脚本 ——
-六个脚本的命令见 data/04_qa/REPRODUCE.md 的「The same thing, step by step」。
+六个脚本的命令见 phase1/REPRODUCE.md 的「The same thing, step by step」。
 
 三条设计约束（改这个文件时不要破坏）
 ------------------------------------

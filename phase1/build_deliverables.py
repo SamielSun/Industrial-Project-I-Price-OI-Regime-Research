@@ -14,8 +14,11 @@ build_deliverables —— 从已完成的产出里生成 D1 的交付文档与�
   data/04_qa/data_dictionary.md   逐列定义（列名 / 类型 / 单位 / 来源 / 含义）
   data/04_qa/data_quality.md      一页质量证明（5 块，含缺口归因）
   data/04_qa/figures/*.png        2 张图（英文标签）
-  data/04_qa/REPRODUCE.md         一条总命令 + 六个步骤 + 本次产出用的设计参数
+  phase1/REPRODUCE.md             一条总命令 + 六个步骤 + 本次产出用的设计参数
   data/04_qa/checksums.sha256     全部产出的 SHA256（本脚本最后一个写盘动作）
+
+REPRODUCE.md 是唯一一份落在 `data/` 之外的交付物，也唯一一份进版本控制：
+它是【怎么产出数据】的说明，没有数据时也必须能读到（`data/` 整个被 gitignore）。
 
 四份文档全部落在 `04_qa/` —— `data/` 根目录下只有六个数据子目录，没有散文件。
 
@@ -51,6 +54,9 @@ FE = DATA / "02_features" / "features_1h"
 REF = DATA / "03_reference"
 QA = DATA / "04_qa"
 FIG = QA / "figures"
+# REPRODUCE.md 刻意不放在 data/ 下 —— 它是代码侧的说明，进版本控制。
+# 因此它不依赖 --out-root，不在 configure_paths() 里重绑。
+REPRO = ROOT / "phase1" / "REPRODUCE.md"
 MANIFEST = DATA / "00_config" / "manifest.parquet"
 
 T_START = time.time()
@@ -79,6 +85,17 @@ def configure_paths(out_root: Path) -> None:
 def log(msg: str) -> None:
     el = time.time() - T_START
     print(f"[{int(el)//60:02d}:{int(el)%60:02d}] {msg}", flush=True)
+
+
+def write_text_atomic(path: Path, text: str) -> None:
+    """原子写文本：先写 .part，再 os.replace 换入。
+
+    只给 phase1/REPRODUCE.md 用 —— 它进了版本控制，写一半崩掉留下的撕裂文件
+    会被 git 当成一次真实改动提交进去。data/ 下的文档被撕了重跑一次即可。
+    """
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.part")
+    tmp.write_text(text, encoding="utf-8", newline="\n")
+    os.replace(tmp, path)
 
 
 # ============================================================================
@@ -533,8 +550,11 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     A("```")
     A("")
     A("`04_qa/checksums.sha256` covers every file under `data/` except two:")
-    A("itself and the temporary download cache `00_config/_cache/`.")
-    A("It **does** cover this report, the dictionary and `REPRODUCE.md`.")
+    A("itself and the temporary download cache `00_config/_cache/`. It **does** cover")
+    A("this report, the dictionary and the figures.")
+    A("")
+    A("`phase1/REPRODUCE.md` sits outside `data/` on purpose: it is instructions rather")
+    A("than output, so git tracks it instead of the checksums.")
     A("")
     A("**It proves internal consistency** (your output equals the output that was")
     A("generated), **not provenance** (that the downloaded files equal the archive) —")
@@ -577,9 +597,10 @@ def build_data_dictionary(cfg, sample_end: str, n_rows: int, n_syms: int) -> str
     A("└── 04_qa/                            D1 deliverables + integrity proof")
     A("    ├── data_quality.md               quality evidence (Step 6b)")
     A("    ├── data_dictionary.md            this file")
-    A("    ├── REPRODUCE.md                  how to rebuild all of this")
     A("    ├── checksums.sha256              SHA256 of every file under data/")
     A("    └── figures/*.png                 coverage charts")
+    A("")
+    A("phase1/REPRODUCE.md                   how to rebuild all of this (tracked by git)")
     A("```")
     A("")
     A("---")
@@ -794,8 +815,10 @@ def build_reproduce(cfg, sample_end: str) -> str:
     A("- **Step 6b must run last**: the checksums are its final write, and every file")
     A("  written before it is hashed. Re-running Steps 3–6a invalidates the checksums;")
     A("  re-run Step 6b to regenerate them.")
-    A("- `04_qa/REPRODUCE.md` is written *before* the checksums, so it is hashed too.")
-    A("  Editing it by hand makes `--verify` fail — regenerate instead.")
+    A("- **This file is in `phase1/` and tracked by git**, not in `data/` — it is")
+    A("  instructions rather than output. Step 6b rewrites it on every run; commit the")
+    A("  change, so the log of which window and parameters each output used survives")
+    A("  the next `data/` wipe.")
     A("")
     return "\n".join(L)
 
@@ -985,8 +1008,8 @@ def main() -> int:
 
     # ---- 8. REPRODUCE.md ------------------------------------------------
     repro = build_reproduce(cfg, args.sample_end)
-    (QA / "REPRODUCE.md").write_text(repro, encoding="utf-8", newline="\n")
-    log(f"    -> 04_qa/REPRODUCE.md               {len(repro):,} 字符")
+    write_text_atomic(REPRO, repro)
+    log(f"    -> phase1/REPRODUCE.md              {len(repro):,} 字符")
 
     # ---- 9. 校验和（最后一个写盘动作）----------------------------------
     n_ck = len(checksum_targets())

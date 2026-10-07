@@ -17,7 +17,7 @@ Phase 1 设计参数（研究设计的一部分，跨运行稳定）。
     判断标准：**改它会不会改变产出？**
       · 会（如 --sample-end）→ 设计参数，但因为它逐次运行不同、且必须显式，
         仍走 CLI；产出时由 Step 6b 把它连同本文件的全部字段写进
-        data/04_qa/REPRODUCE.md（「本次产出用的设计参数」一节），以便追溯。
+        phase1/REPRODUCE.md（「本次产出用的设计参数」一节），以便追溯。
       · 不会（如 --jobs、--out-root）→ 纯工程控制，放本文件只会污染设计快照。
 
   · 早期设计里的 --no-refresh / --symbols 从未实现，已于本次清理时删除，
@@ -136,7 +136,7 @@ class Config:
     #     产出元信息冒充"设计参数"。Phase 2 定义这些列时再放进当时的 config.py。
 
     def snapshot(self) -> dict[str, Any]:
-        """设计参数的完整快照，供 Step 6b 写入 data/04_qa/REPRODUCE.md（§6.1）。
+        """设计参数的完整快照，供 Step 6b 写入 phase1/REPRODUCE.md（§6.1）。
 
         只含【真正影响产出的】字段 —— 每一个都必须被至少一处代码读取。
         """
