@@ -1,4 +1,4 @@
-# ---- 数据产出（约 2.2 GB，可由 data/REPRODUCE.md 从零重建，不进版本控制）----
+# ---- 数据产出（约 2.2 GB，可由 data/04_qa/REPRODUCE.md 从零重建，不进版本控制）----
 data/
 
 # ---- Python ----

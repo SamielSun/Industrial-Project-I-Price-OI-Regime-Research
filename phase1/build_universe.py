@@ -3,7 +3,7 @@
 """
 build_universe —— Step 6：逐期资格判定 + PIT 成员集 + master 表
 
-它在 Phase 1 中的位置：Step 6（见 phase1/guidance.md §2.2 Step 6a 与 §3）。
+它在 Phase 1 中的位置：Step 6a（逐月四条资格闸 → PIT 成员集）。
 
 做什么
 ------
@@ -325,7 +325,7 @@ def main() -> int:
         if len(info) < 300:
             log("")
             log(f"  ✗ exchangeInfo 只有 {len(info)} 条（< 300）—— 取不到或残包，拒绝继续。")
-            log("    需要 VPN（www.binance.com 的 DNS 被污染，见 guidance §2.1）；")
+            log("    需要 VPN（www.binance.com 的 DNS 被污染）；")
             log("    或从版本控制里取回 phase1/exchange_info_snapshot.json；")
             log("    若只想跑通流程做冒烟，加 --no-schema-note。")
             return 3

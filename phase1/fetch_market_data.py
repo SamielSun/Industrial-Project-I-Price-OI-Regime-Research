@@ -3,7 +3,7 @@
 """
 fetch_market_data —— 为候选池合约下载全部可用历史，存成 raw 数据
 
-它在 Phase 1 中的位置：Step 3（见 phase1/guidance.md §2 处理流程）。
+它在 Phase 1 中的位置：Step 3（下载候选池的五个源，存成 raw parquet）。
 
 做什么
 ------
@@ -53,7 +53,7 @@ OCEANUSDT / REEFUSDT / RENUSDT / UNFIUSDT）的 indexPrice 与 fundingRate
   python phase1/fetch_market_data.py --out-root data --sample-end 2026-08-31 --list-only
   python phase1/fetch_market_data.py --out-root data --sample-end 2026-08-31 --keep-cache
 
-依据：phase1/guidance.md §4.1（工程规则）§2.2 Step 3（数据源与路径）§6.4（下载参数）§4.4（缺失分类）
+设计参数见 config.py；下载参数与路径模板见本文件顶部常量与 monthly_path()。
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ def configure_paths(out_root: Path) -> None:
 
     与 build_candidate_pool.py 的 DATA 根目录必须一致 —— Step 3 读的是
     Step 0–2 写下的 candidate_pool.csv。（不读它的 klines 缓存：两者路径规则
-    不同，见 guidance.md 的「一个已知的重复下载」。）
+    不同 —— 而本脚本只读 candidate_pool.csv，不读它的 klines 缓存。）
     """
     global DATA, RAW, CACHE, MANIFEST, CANDIDATE_POOL
     DATA = out_root.resolve()

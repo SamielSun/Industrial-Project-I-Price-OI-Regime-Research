@@ -1,8 +1,8 @@
 """
 Schema 契约 —— Phase 1 的 API 契约。下游 Phase 2–5 依此编写代码。
 
-权威定义在本文件。../phase1/guidance.md §8.2/§8.3 描述【语义】（每列什么意思、
-单位、为什么）；本文件定义【类型】。
+权威定义在本文件。各列的【语义】（每列什么意思、单位、为什么）见
+../data/04_qa/data_dictionary.md；本文件只定义【类型】。
 
 自测：python -m lib.schema
 
@@ -255,7 +255,7 @@ LAYER2_SCHEMAS: dict[str, TableSchema] = {
 
 # ============================================================================
 # 第 3 层：features_1h
-# 列顺序与 ../phase1/guidance.md §8.3 的表格一致
+# 列顺序与 ../data/04_qa/data_dictionary.md 的表格一致
 # ============================================================================
 
 FEATURES_1H = TableSchema(

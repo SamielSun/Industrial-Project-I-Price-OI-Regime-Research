@@ -3,7 +3,7 @@
 """
 build_candidate_pool —— 选出「后面要为哪些合约下数据」
 
-它在 Phase 1 中的位置：Step 0–2（见 phase1/guidance.md §2 处理流程）。
+它在 Phase 1 中的位置：Step 0–2（枚举归档 / 硬过滤 / 候选池）。
 
 做什么
 ------
@@ -34,7 +34,7 @@ Phase 1 最终要为候选池合约下「日频 OI + mark/index/funding」，实
   # 冒烟/核验：
   python phase1/build_candidate_pool.py --out-root /tmp/x --sample-end 2026-08-31 --subset A B C
 
-依据：phase1/guidance.md §2.2 Step 0（枚举）、§3（四条闸与排名）、§6.4（下载参数）
+设计参数（四条闸与排名）见 config.py 的 docstring；下载参数见本文件顶部的常量。
 """
 
 from __future__ import annotations
@@ -83,7 +83,8 @@ DATA = ROOT / "data"
 # 月频 klines 的原始 zip 暂存 —— 断点续传靠它。
 # 名字原为 `_p11_cache`：p11 是脚本改名前的旧前缀，与本流程无关，故改为 `_cache`
 # （与 Step 3 的 `data/raw/_cache` 同名同义：都是"读一次就丢"的下载暂存）。
-# 放在 00_config/ 下是因为它不能落在校验和扫描的六个子目录里（见 build_qa.py）。
+# 放在 00_config/ 下是因为它不能落在校验和扫描的子目录里（见
+# build_deliverables.py 的 checksum_targets()）。
 CACHE_DIR = DATA / "00_config" / "_cache"
 MANIFEST = DATA / "00_config" / "manifest.parquet"
 CANDIDATE_POOL = DATA / "03_reference" / "candidate_pool.csv"
@@ -592,10 +593,10 @@ def main() -> int:
     #
     # 初值【只按文件在不在】判定，不算作"尝试过"：文件在就是 cached，
     # 不在就是裸的 retry_exhausted。若这次走 --skip-download、或某几项没被补跑轮
-    # 覆盖到，初值就会变成终态被写进 manifest —— 而 build_qa 把 manifest 里
-    # 一切非 ok 记录当作缺失，于是"没尝试过"被误报成"缺失"。
+    # 覆盖到，初值就会变成终态被写进 manifest —— 而 Step 6b 的缺失报告把 manifest
+    # 里一切非 ok 记录当作缺失，于是"没尝试过"被误报成"缺失"。
     # 实测：18,832 项全在缓存里（摘要自报 cached=18,832、新下载 0），
-    # manifest 却有 1,074 行 retry_exhausted，全部混进 missing_files.parquet。
+    # manifest 却有 1,074 行 retry_exhausted，全部混进缺失报告。
     # 故初值用 cached（真值），retry_exhausted 只留给【确实尝试过且失败】的项。
     final_status: dict[tuple[str, str], str] = {
         (s_, ym_): ("cached" if cache_path(s_, ym_).exists() else "retry_exhausted")

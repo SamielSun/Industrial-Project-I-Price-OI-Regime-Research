@@ -3,7 +3,7 @@
 """
 build_features —— 建 features_1h（19 列密集网格）
 
-它在 Phase 1 中的位置：Step 5（见 phase1/guidance.md §2 处理流程）。
+它在 Phase 1 中的位置：Step 5（把第 2 层 4 张表合成 19 列密集面板）。
 
 做什么
 ------
@@ -42,7 +42,7 @@ build_features —— 建 features_1h（19 列密集网格）
   python phase1/build_features.py --out-root /tmp/x --l2-root <正式 data> \\
       --subset BTCUSDT --sample-end 2026-08-31      # 冒烟
 
-依据：phase1/guidance.md §2.2 Step 5（features_1h）§4.2（死尾）§5.2（validate）
+设计参数见 config.py；19 列的列契约见 lib/schema.py 的 FEATURES_1H。
 """
 
 from __future__ import annotations
