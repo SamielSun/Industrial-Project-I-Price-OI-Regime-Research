@@ -463,7 +463,6 @@ def main() -> int:
     # 预分组：直接在 7.25M 行上按合约过滤会做 285 次全表扫描（实测 5 分钟）
     d_by_sym = {s: g for s, g in d.groupby("symbol", sort=False)}
     daily_by_sym = {s: g for s, g in daily.groupby("symbol", sort=False)}
-    elig_by_sym = {s: g for s, g in E.groupby("symbol", sort=False)}
 
     mrows = []
     for s in all_syms:
@@ -472,21 +471,6 @@ def main() -> int:
         sub = d_by_sym.get(s)
         daily_sub = daily_by_sym.get(s)
         has = sub is not None and len(sub) > 0
-        sub_e = elig_by_sym.get(s)
-        reason = ""
-        if sub_e is not None and len(sub_e):
-            # 顺序很重要：先问"它到底进没进过宇宙"。
-            # 原来先取第一个非空的 fail_reason，而 2021-12 没有任何合约能过闸，
-            # 于是 bad 永远非空 —— 248 个【真的当过成员】的合约全被标成 dropped。
-            if sub_e["eligible"].any() and sub_e["rank"].notna().any():
-                reason = ""
-            elif not sub_e["eligible"].any():
-                reason = "never_eligible"
-            elif sub_e["rank"].isna().all():
-                reason = "never_ranked_in_top_K"
-            else:
-                bad = sub_e[sub_e["fail_reason"] != ""]
-                reason = bad["fail_reason"].iloc[0] if len(bad) else "unknown"
         mrows.append({
             "symbol": s,
             "base_asset": base,
@@ -503,7 +487,11 @@ def main() -> int:
             "contract_type": rec.get("contractType") if rec else None,
             "underlying_type": rec.get("underlyingType") if rec else None,
             "in_exchange_info": rec is not None,
-            "dropped_reason": reason,
+            # 原 dropped_reason 已删除：它是"为什么这个合约从没当过成员"的一行摘要，
+            # 但评测范围收窄到候选池后只剩 4 个非空值（never_eligible），
+            # 且信息与 universe_eligibility 的【逐月 fail_reason】完全重复、粒度更粗。
+            # 要查原因请读 universe_eligibility（每个 (合约,月) 都有 fail_reason）。
+            # 原 not_in_candidate_pool 分支随评测范围收窄而不可达，一并删除。
         })
     MA = pd.DataFrame(mrows)
 
