@@ -474,8 +474,8 @@ def main() -> int:
         mrows.append({
             "symbol": s,
             "base_asset": base,
-            "in_pool": s in pool_set,
-            "has_data": has,
+            # 原 in_pool / has_data 已删除：两者都是常量（评测范围就是候选池，
+            # 且候选池 285 个全部有数据 —— Step 3 只为它们下载）。
             "first_bar": sub["ts"].min() if has else pd.NaT,
             "last_bar": sub["ts"].max() if has else pd.NaT,
             "n_bars": len(sub) if has else 0,
