@@ -426,9 +426,9 @@ def main() -> int:
     log(f"  评测完成，{len(E):,} 行  耗时 {time.time()-t0:.0f}s")
 
     # ---- 排名 ----
-    # 排名【只在候选池内】—— 落选的 394 个合约没有数据，排名无意义
+    # 排名只在【通过四闸】的合约月里做（`in_pool` 已恒真 —— 评测对象就是候选池）。
     E["rank"] = np.nan
-    elig = E[E["in_pool"] & E["eligible"] & E["liq"].notna()].copy()
+    elig = E[E["eligible"] & E["liq"].notna()].copy()
     elig["rank"] = elig.groupby("month")["liq"].rank(ascending=False, method="first")
     E = E.drop(columns=["rank"]).merge(
         elig[["symbol", "month", "rank"]], on=["symbol", "month"], how="left")
