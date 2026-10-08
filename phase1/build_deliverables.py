@@ -419,12 +419,26 @@ def compute_report_facts(d: pd.DataFrame, cov: pd.DataFrame, mc: pd.DataFrame,
     for ym in below.index[:5]:
         metric = str(mc.loc[ym, srcs].idxmin())
         col = METRICS[metric]
-        sub = d.loc[(ym_col == ym).to_numpy(), ["symbol", col]]
+        sub = d.loc[(ym_col == ym).to_numpy(), ["symbol", "ts", col]]
         miss = sub[col].isna() if col.endswith("_close") else sub[col].astype(bool)
+        ms = sub.loc[miss]
+        present = int(sub["symbol"].nunique())
+        # 诊断：这个月的低谷是「某一天大范围断供」还是「散在很多天」。
+        # 单日覆盖过半在场合约才算断供 —— 否则不足以解释整个月的均值被拉低。
+        if len(ms):
+            per_day = (ms.groupby(ms["ts"].dt.floor("D"))["symbol"].nunique()
+                         .sort_values(ascending=False))
+            top_day = str(per_day.index[0])[:10]
+            top_n = int(per_day.iloc[0])
+            n_days = int(per_day.size)
+            med_day = int(per_day.median())
+        else:
+            top_day, top_n, n_days, med_day = "—", 0, 0, 0
         worst_months.append({
             "month": str(ym), "metric": metric, "coverage": float(mc_min.loc[ym]),
-            "affected": int(sub.loc[miss, "symbol"].nunique()),
-            "present": int(sub["symbol"].nunique()),
+            "affected": int(ms["symbol"].nunique()), "present": present,
+            "top_day": top_day, "top_n": top_n, "n_days": n_days, "med_day": med_day,
+            "outage": bool(present and top_n >= 0.5 * present),
         })
 
     # ---- §4.4 刻意不标记的 ----
@@ -441,6 +455,8 @@ def compute_report_facts(d: pd.DataFrame, cov: pd.DataFrame, mc: pd.DataFrame,
         "dormant": dormant,
         "mc_below_n": int(len(below)),
         "worst_months": worst_months,
+        "n_worst_outage": sum(1 for w in worst_months if w["outage"]),
+        "worst_diffuse": [w["month"] for w in worst_months if not w["outage"]],
         "outages": outages,
         "oi_zero_rows": int(len(oi0)),
         "oi_zero_syms": int(oi0["symbol"].nunique()) if len(oi0) else 0,
@@ -597,8 +613,7 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     A("")
     A("**The median hides the distribution — that is why both are shown.** "
       "`mark` and `index` have far fewer contracts at exactly 100% coverage than "
-      "`klines` does, because both are absent for the same "
-      f"{plural(len(facts['zero_syms']), 'contract')} "
+      "`klines` does, because both are absent for the same contract "
       f"(`{'`, `'.join(facts['zero_syms'])}` — see §4.1).")
     A("")
     for p in fig_paths:
@@ -678,20 +693,19 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
       f"first row (missing before the sample begins, not a mid-sample corruption).")
     A("")
     A("`klines`, `mark` and `index` are attributed differently because they arrive as")
-    A("monthly archives rather than per-day files. There is nothing left to attribute:")
+    A("monthly archives rather than per-day files. That settles the *files*: no monthly")
     if not facts["nonok_sources"]:
-        A("**No request failed at all** — the manifest holds no non-`ok` row.")
+        A("file failed at all — the manifest holds no non-`ok` row.")
     elif facts["nonok_sources"] == ["metrics"]:
-        A(f"**no monthly file failed** — every one of the {cause['out_n']} 404s in the")
-        A("manifest is a `metrics` file (§3.2).")
+        A(f"file failed — every one of the {cause['out_n']} 404s in the manifest is a")
+        A("`metrics` file (§3.2).")
     else:
-        A(f"the manifest's failures come from "
-          f"{', '.join('`' + s + '`' for s in facts['nonok_sources'])},")
-        A("so those runs cannot be attributed without opening the files.")
+        A(f"file of source {', '.join('`' + s + '`' for s in facts['nonok_sources'])} was")
+        A("never downloaded, so those runs cannot be attributed without opening them.")
     A("")
-    A("But **`mark` and `index` are not purely the archive's gap.** Layer 2 defines the")
-    A("grid from `klines_1h` and drops every `mark`/`index` row at an hour `klines` does")
-    A("not have — and the archive holds most of those rows:")
+    A("It does **not** settle the *rows*, and for `mark`/`index` the difference is large.")
+    A("Layer 2 defines the grid from `klines_1h` and drops every `mark`/`index` row at an")
+    A("hour `klines` does not have — and the archive holds most of them:")
     A("")
     A("| Source | panel hours missing | of which `klines` has no bar | archive actually holds them |")
     A("|---|---|---|---|")
@@ -766,31 +780,42 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     A(f"Coverage is not flat. **{facts['mc_below_n']} of the {facts['n_months']} months "
       f"have at least one source below 0.99.** The weakest five:")
     A("")
-    A("| Month | Weakest source | Coverage | Contracts affected |")
-    A("|---|---|---|---|")
+    A("| Month | Weakest source | Coverage | Contracts affected | Worst day |")
+    A("|---|---|---|---|---|")
     for w in facts["worst_months"]:
         A(f"| {w['month']} | `{w['metric']}` | {w['coverage']:.4f} | "
-          f"{w['affected']} of {w['present']} |")
+          f"{w['affected']} of {w['present']} | {w['top_day']} — "
+          f"{w['top_n']} contracts |")
     A("")
-    A("`Contracts affected` separates one broken contract from an exchange-wide event.")
-    A("Two causes account for every month in the table:")
+    A("`Worst day` is the day on which most contracts lost that source. "
+      "It separates two very different shapes — and the table shows both:")
     A("")
-    A(f"**① The earliest months are structurally thin.** Too few contracts have "
-      f"{cfg.min_history_bars // 24} days")
-    A("of history yet, so one missing contract moves the monthly average more.")
+    n_out = facts["n_worst_outage"]
+    A(f"**① Single-day outages ({n_out} of the five).** On one day, most listed "
+      f"contracts lose the same source at once. Those are exchange-wide and are listed "
+      f"in full below; they also hit months that do not appear in this table.")
     A("")
     if facts["outages"]:
-        A(f"**② Exchange-wide outages.** In {plural(len(facts['outages']), 'window')}, at")
-        A("least half of all contracts present lose the same source at the same hour:")
-        A("")
         A("| Source | From | To | Hours | Contracts |")
         A("|---|---|---|---|---|")
         for o in facts["outages"]:
             A(f"| `{o['metric']}` | {o['start'][:16]} | {o['end'][:16]} | "
               f"{o['hours']} | {o['contracts']} |")
-    else:
-        A("**② No exchange-wide outage** — no hour has more than half of the contracts")
-        A("missing the same source.")
+        A("")
+    if facts["worst_diffuse"]:
+        ms = " / ".join(f"`{m}`" for m in facts["worst_diffuse"])
+        A(f"**② Not attributed ({len(facts['worst_diffuse'])} of the five: {ms}).** "
+          f"Their missing hours are spread across many days and many contracts — the "
+          f"worst day covers only a minority of contracts — so neither an outage nor a "
+          f"single bad contract explains them:")
+        A("")
+        A("| Month | Source | days with any gap | median contracts on such a day |")
+        A("|---|---|---|---|")
+        for w in facts["worst_months"]:
+            if not w["outage"]:
+                A(f"| {w['month']} | `{w['metric']}` | {w['n_days']} | {w['med_day']} |")
+        A("")
+        A("This is reported as **not yet explained** rather than folded into ①.")
     A("")
     A("### 4.4 What is deliberately NOT flagged")
     A("")
