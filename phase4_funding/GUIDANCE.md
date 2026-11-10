@@ -1,95 +1,103 @@
-# Phase 4 — Funding × Regime Interaction · Guidance
+# Phase 4 — Funding × Regime 交互 · 实施指南
 
-**Status.** Design locked. This document specifies what Phase 4 does and how. It supersedes the 16-γ interaction prototype in `HANDOFF.md` §3.5–3.7 where the two conflict; the mentor's idea note is the authority for Phase 4. No implementation code here.
+**状态。** 设计已锁定。本文件规定 Phase 4 做什么、怎么做。与 `HANDOFF.md` §3.5–3.7 冲突时以本文件为准；导师的 idea note 是 Phase 4 的最终依据。本文件不含实现代码。
 
-**Audience.** The implementer and the academic supervisor. The sponsor sees the final tables, not this file.
+**读者。** 实现者与学术导师。sponsor 看最终表格，不看本文件。
 
-**Superseded artefacts.** `phase4_funding/tables/l1_cellmeans.parquet` and `l2_interactions.parquet` were produced under the old 16-γ design. E1/E2 below replace them; do not cite the old tables.
+**被取代的产物。** 旧的 `l1_cellmeans` / `l2_interactions` 表（16-γ 设计）已在清理中删除；E1/E2 取代它们，不要引用旧表。
 
 ---
 
-## 0. What the note requires
+## 0. note 要求什么
 
-The only direct Phase 4 definition is §10 of the note:
+note 对 Phase 4 的唯一直接定义在 §10：
 
 > **Phase 4: Funding Interaction**
 > - Split each regime by funding state: negative, neutral, high, and extreme.
 > - Output: 4x4 table of price/OI regimes versus funding states with forward return and volatility by bucket.
+>
+> （译：把每个 regime 按 funding 状态拆成 negative / neutral / high / extreme 四档；输出 price/OI regime × funding state 的 4×4 表，按 bucket 给 forward return 和 volatility。）
 
-The two supporting passages are explicitly illustrative:
+两段支撑材料都明确是示例：
 
 > **§7** — "Funding should be used as a conditioning variable, not necessarily as the primary signal."
+>
+> （译：funding 应作为条件变量，而不一定是主信号。）
 >
 > **§7 Example research questions:**
 > - Does Price Up + OI Up perform better when funding is neutral?
 > - Does Price Up + OI Up become a reversal signal when funding is extreme?
 > - Does Price Down + OI Down mean-revert faster after high liquidation/funding stress?
 > - Does Price Down + OI Up predict continuation when funding is still neutral?
+>
+> （译：① Price Up + OI Up 在 funding 为 neutral 时表现更好吗？② Price Up + OI Up 在 funding 为 extreme 时是否变成反转信号？③ Price Down + OI Down 在高清算/funding 压力后是否更快均值回归？④ Price Down + OI Up 在 funding 仍为 neutral 时是否预测延续？）
 
-> **§11 Example Output Table** — six rows — "These are hypotheses, not conclusions."
+> **§11 Example Output Table** — 六行 — "These are hypotheses, not conclusions."
+>
+> （译：示例输出表，六行；"这些是假设，不是结论。"）
 
-Consequences for Phase 4:
+对 Phase 4 的含义：
 
-- The deliverable is a **stratified 4×4 conditional-performance table**, not a model.
-- The examples are slices of the table, not an exhaustive hypothesis list.
-- The note does not prescribe a regression, a contrast family, a multiplicity correction, or an economic threshold.
-- The note's §9 baselines (price alone, OI alone, funding alone, random timing) belong to Phase 3: experiments 5–9 and 8 already cover them. Phase 4 does not repeat them.
-- E2 (the 12 within-regime contrasts) is the **project's** formalization of the note's example questions. It is not a note requirement; it exists because the project needs a pre-declared inferential layer for the Phase 5 gate. Label it as such in any write-up.
-
----
-
-## 1. Locked design
-
-| Item | Locked choice |
-|---|---|
-| Primary object | **E1**: 4×4 conditional surface. **E2**: 12 within-regime funding contrasts. |
-| Funding states | Nested, exactly as the note: `negative` f ≤ p25; `neutral` p25 < f ≤ p75; `high` f > p75 (**includes extreme**); `extreme` f > p90. `high ⊇ extreme`. |
-| Regimes | R1 price up + OI up; R2 up + OI down; R3 down + OI up; R4 down + OI down. |
-| Return outcomes | `fwd_h` (raw, note §8 A) and `y_raw` (market-neutral, Phase 3 headline). `y_raw` is the verdict measure; `fwd_h` is the note-literal descriptive measure. |
-| Volatility outcome | Realized volatility `rv` over the h hours after the event. E1 reports arithmetic mean and median of `rv` (Phase 3 convention). E2 uses `lrv = log(rv)` and reports `exp(contrast) − 1` in %. |
-| Horizons | 1, 4, 8, 24 hours. |
-| Weighting | Event-weighted primary; one-vote-per-contract-day robustness. |
-| Inference | Contract + month two-way fixed effects, CGM two-way clustered SE, BH within each 12-test family, drop5 per contrast. **No 16-γ ANOVA.** |
-| Table statistics | Mean + median, clustered CI for the mean, n in a separate panel. No p-values in E1. |
-| Phase 5 gate | Return-only: any `y_raw` contrast passes BH 12 + drop5. Volatility does not gate; it is a risk overlay. |
-| Out of scope | Baselines, IC, absolute bp/day scale, β appendix, 16-γ interaction, threshold optimisation, cross-exchange, Phase 5 backtest, R4 stress (Phase 3 experiment 14b). |
+- 交付物是一张**分层的 4×4 条件表现表**，不是模型。
+- 示例只是这张表的切片，不是完整的假设清单。
+- note 没有规定回归、对比家族、多重校正或经济阈值。
+- note §9 的 baseline（price alone、OI alone、funding alone、random timing）属于 Phase 3：实验 5–9 与实验 8 已经覆盖，Phase 4 不重复。
+- E2 的 12 个 within-regime 对比是**项目**对 note 示例问题的形式化，不是 note 的要求；它存在是因为项目需要一个预先声明的推断层来支撑 Phase 5 闸门。写作时必须标注这一点。
 
 ---
 
-## 2. Definitions and sample
+## 1. 锁定设计
 
-### 2.1 Sample
-
-Inherit Phase 1–3 frozen conventions; do not rebuild.
-
-| Item | Value |
+| 项 | 锁定选择 |
 |---|---|
-| Universe | Monthly top-50 by trailing 30-day quote volume, four gates; 249 contracts; 54 months (2022-03 … 2026-08). |
-| Event | 1h bar where |Δprice| and |ΔOI| both exceed the contract's trailing 90-day p70 (≥30 days history). |
-| Headline sample | `in_universe` and `excl_reason == "ok"`; `cell ∈ {1,2,3,4}`; h=1: 256,076 event rows with a valid forward return. |
-| No funding state | 219 events (0.09%) have all four funding booleans false (p25 missing). Exclude from E1/E2/E5; report the count. |
-| E1/E2 sample at h=1 | 255,857 rows. h=4/8/24 differ only by `ok_{h}h` losses. |
-| Contract-months | 2,700 = 50 contracts × 54 months. |
-| lrv missing | h=1: 2,244 event rows (0.9%); drop for volatility analyses only. |
+| 主对象 | **E1**：4×4 条件面。**E2**：12 个 within-regime funding 对比。 |
+| Funding 状态 | 按 note 嵌套定义：`negative` f ≤ p25；`neutral` p25 < f ≤ p75；`high` f > p75（**包含 extreme**）；`extreme` f > p90。`high ⊇ extreme`。 |
+| Regime | R1 价涨 + OI 增；R2 涨 + OI 减；R3 跌 + OI 增；R4 跌 + OI 减。 |
+| 收益口径 | `fwd_h`（raw，note §8 A）与 `y_raw`（市场中性，Phase 3 headline）。判定用 `y_raw`；`fwd_h` 是 note 字面的描述口径。 |
+| 波动口径 | 事件后 h 小时的已实现波动 `rv`。E1 报 `rv` 的算术平均与中位数（Phase 3 口径）。E2 用 `lrv = log(rv)`，报 `exp(对比) − 1` 的 %。 |
+| 期限 | 1、4、8、24 小时。 |
+| 权重 | event 等权为主；合约-日等权（one vote per contract-day）为稳健性。 |
+| 推断 | 合约 + 月份双向固定效应；CGM 双向聚类 SE；每个 12 检验家族内 BH；逐对比 drop5。**不做 16-γ ANOVA。** |
+| 表内统计量 | 均值 + 中位数；均值的聚类 CI；n 单独一张表。E1 不挂 p 值。 |
+| Phase 5 闸门 | 只看收益：任意 `y_raw` 对比过 BH 12 + drop5 即开。波动不 gate，只作风险 overlay。 |
+| Out of scope | baseline、IC、绝对 bp/day、β 附录、16-γ 交互、阈值优化、跨交易所、Phase 5 回测、R4 stress（Phase 3 实验 14b）。 |
 
-### 2.2 Regimes
+---
 
-`cell` 1–4 as defined by Phase 2/3. No change.
+## 2. 定义与样本
 
-### 2.3 Funding states — nested, not a partition
+### 2.1 样本
 
-Per contract, trailing 90 calendar days, p25/p75/p90 of the settlement funding series, carried as a step function from the most recent settlement. Strict `>` (the note says "above"); do not switch to `≥`.
+继承 Phase 1–3 的冻结口径；不重建。
+
+| 项 | 值 |
+|---|---|
+| Universe | 按过去 30 天报价成交额排名的月度 top-50，四道闸；249 个合约；54 个月（2022-03 … 2026-08）。 |
+| 事件 | 1h bar，|Δprice| 与 |ΔOI| 同时超过该合约过去 90 天 p70（≥30 天历史）。 |
+| Headline 样本 | `in_universe` 且 `excl_reason == "ok"`；`cell ∈ {1,2,3,4}`；h=1 有 256,076 个有有效前向收益的事件行。 |
+| 无 funding 状态 | 219 个事件（0.09%）四个 funding bool 全 False（p25 缺失）。从 E1/E2/E5 排除；报告数量。 |
+| E1/E2 样本（h=1） | 255,857 行。h=4/8/24 只差 `ok_{h}h` 的损失。 |
+| 合约-月 | 2,700 = 50 个合约 × 54 个月。 |
+| lrv 缺失 | h=1：2,244 个事件行（0.9%）；只在波动率分析中剔除。 |
+
+### 2.2 Regime
+
+`cell` 1–4，沿用 Phase 2/3 的定义，不改。
+
+### 2.3 Funding 状态——嵌套，不是分区
+
+每个合约，过去 90 日历天的结算 funding 序列，取 p25 / p75 / p90，从最近一次结算起按阶梯函数取值。严格 `>`（note 说 "above"）；不要改成 `≥`。
 
 ```
 negative : f ≤ p25
 neutral  : p25 < f ≤ p75
-high     : f > p75        # includes extreme
-extreme  : f > p90        # subset of high
+high     : f > p75        # 包含 extreme
+extreme  : f > p90        # high 的子集
 ```
 
-The four columns are **not mutually exclusive**. `high` and `extreme` are the same rows when p75 == p90.
+四列**不是互斥的**。当 p75 == p90 时，`high` 与 `extreme` 是同一批行。
 
-For estimation only, define the four disjoint latent states:
+仅用于估计，定义四个互斥的潜在状态：
 
 ```
 s0 = negative
@@ -98,36 +106,36 @@ s2 = high-only   (p75 < f ≤ p90)
 s3 = extreme     (f > p90)
 ```
 
-The reported `high` column is the union `s2 ∪ s3`; its mean is the sample-size-weighted average of the `s2` and `s3` means. The disjoint states are not reported in the main table; they are the appendix split (E5) and the estimation basis (E2).
+报告的 `high` 列是并集 `s2 ∪ s3`；它的均值是 `s2` 与 `s3` 均值的样本量加权平均。互斥状态不进主表；它们是 E5 的附录拆分，也是 E2 的估计基础。
 
-### 2.4 Return and volatility outcomes
+### 2.4 收益与波动因变量
 
-- `fwd_h = close_{t+h} / close_t − 1`. **Not in the panel**; join from `data/06_event_study/forward/freq=1h` (or `events/events_1h.parquet`) on `(symbol, ts_end)`. Map the panel's `symbol` code through `panel/freq=1h/symbols.parquet`; map `hour` to `ts_end = 2021-12-01 UTC + hour hours`.
-- `y_raw` is already in the panel: `fwd_h` minus the same-hour equal-weighted mean over the full market pool (7,010,789 rows). Market-neutral, not winsorised, not sign-flipped.
-- `rv_h` is the realized variance over the h hours after the event; `lrv = log(rv_h)`. Both are in the forward/panel pipeline; the panel carries `lrv`.
+- `fwd_h = close_{t+h} / close_t − 1`。**不在 panel 里**；从 `data/06_event_study/forward/freq=1h`（或 `events/events_1h.parquet`）按 `(symbol, ts_end)` 关联。panel 的 `symbol` code 通过 `panel/freq=1h/symbols.parquet` 映射成字符串；`hour` 通过 `ts_end = 2021-12-01 UTC + hour 小时` 映射。
+- `y_raw` 已在 panel 里：`fwd_h` 减去同时刻全市场池（7,010,789 行）的等权均值。市场中性、不截尾、不翻正。
+- `rv_h` 是事件后 h 小时的已实现方差；`lrv = log(rv_h)`。两者都在 forward/panel 管线里；panel 携带 `lrv`。
 
-Units: returns in bp (×1e4); volatility levels in % (rv × 100); volatility contrasts in % (`exp(Δlog rv) − 1`).
+单位：收益用 bp（×1e4）；波动水平用 %（rv × 100）；波动对比用 %（`exp(Δlog rv) − 1`）。
 
-### 2.5 Weighting
+### 2.5 权重
 
-- **Event-weighted**: each event row is one observation. This is the note's event-study unit.
-- **Contract-day-weighted**: one observation per `(symbol, UTC day, regime, disjoint funding state)`; average the dependent variable within the group; run the same FE model on the group means. Day = `hour // 24`, as in Phase 3 experiment 15.
-- For the nested `high` column: under event weighting, the union mean uses event counts as weights; under contract-day weighting, it uses contract-day-cell counts. Do not mix the two.
-- The contract-day weighting is the Phase 4 analogue of the note's §5 "daily aggregation for robustness". A literal daily-aggregated 4×4 (E6) is optional and not part of the locked design; Phase 3 experiment 15 already covers daily aggregation of the regime effect.
+- **Event 等权**：每个事件行一个观测。这是 note 的事件研究单位。
+- **合约-日等权**：每个 `(symbol, UTC 日, regime, 互斥 funding 状态)` 一个观测；组内对因变量取均值；同样的 FE 模型跑在组均值上。日 = `hour // 24`，与 Phase 3 实验 15 一致。
+- 对嵌套的 `high` 列：event 权重下，并集均值用事件数加权；合约-日权重下，用合约-日-格数加权。不要混。
+- 合约-日权重是 note §5 "daily aggregation for robustness" 在 Phase 4 的对应物。单独的日聚合 4×4（E6）可选，不在锁定设计里；Phase 3 实验 15 已覆盖 regime 层的日聚合。
 
 ---
 
-## 3. Estimands and notation
+## 3. 估计量与记号
 
-For regime `r` and disjoint funding state `s`, let `m_{r,s}` be the contract+month FE-adjusted cell mean:
+对 regime `r` 与互斥 funding 状态 `s`，令 `m_{r,s}` 为扣掉合约+月份固定效应后的格均值：
 
 ```
 y_it = Σ_{r,s} m_{r,s} · 1{regime=r, state=s} + α_contract + λ_month + ε_it
 ```
 
-The 16 disjoint cell indicators are a partition; one collinearity with the FE constant remains (the cell indicators sum to 1). Drop one reference cell (R4 × s3), estimate 15 coefficients, recover the 16 `m` up to an additive constant. All reported quantities are differences, so the constant cancels.
+16 个互斥格 dummy 是分区；与 FE 常数有一个共线（16 个 dummy 之和恒为 1）。丢掉一个参照格（R4 × s3），估 15 个系数，16 个 `m` 只识别到常数；所有报告量都是差，常数会抵消。
 
-Reported nested cell means:
+报告的嵌套格均值：
 
 ```
 μ(r, neg)     = m_{r,s0}
@@ -136,228 +144,228 @@ Reported nested cell means:
 μ(r, extreme) = m_{r,s3}
 ```
 
-`n` is the number of observations in the cell under the current weighting (event rows or contract-day cells). The weights are realized sample sizes and are treated as fixed.
+`n` 是当前权重下该格的观测数（事件行或合约-日-格）。权重是实现的样本量，视为固定。
 
-The contrast vector and its SE are linear combinations of the 15 coefficients, using the CGM covariance:
+对比向量及其 SE 是 15 个系数的线性组合，用 CGM 协方差：
 
 ```
 V = V_contract + V_month − V_contract×month
 SE(c) = sqrt(c' V c)
 ```
 
-`c` for the 12 contrasts is defined in §5.2.
+12 个对比的 `c` 见 §5.2。
 
 ---
 
-## 4. E1 — the 4×4 conditional surface
+## 4. E1 —— 4×4 条件面
 
-**Purpose.** The note's literal output: forward return and volatility by bucket.
+**目的。** note 的字面输出：按 bucket 给 forward return 与 volatility。
 
-**Sample.** E1/E2 sample (§2.1), one horizon at a time.
+**样本。** E1/E2 样本（§2.1），一次一个期限。
 
-**Table layout.** Rows R1–R4; columns `negative / neutral / high (incl. extreme) / extreme`; one table per horizon and weighting.
+**表布局。** 行 R1–R4；列 `negative / neutral / high（含 extreme）/ extreme`；每个期限、每种权重一张表。
 
-Each cell reports:
+每格报告：
 
-| Field | Definition |
+| 字段 | 定义 |
 |---|---|
-| `fwd_mean`, `fwd_median` | Raw forward return, bp. |
-| `y_mean`, `y_median` | Market-neutral `y_raw`, bp. |
-| `rv_mean`, `rv_median` | Realized volatility level, % (arithmetic mean/median of `rv`; Phase 3 convention). |
-| CI | 95% CI for each mean, CGM two-way clustered by contract and month. Descriptive; no p-values in E1. |
+| `fwd_mean`、`fwd_median` | 原始前向收益，bp。 |
+| `y_mean`、`y_median` | 市场中性 `y_raw`，bp。 |
+| `rv_mean`、`rv_median` | 已实现波动水平，%（`rv` 的算术均值/中位数；Phase 3 口径）。 |
+| CI | 每个均值的 95% CI，按合约与月份 CGM 双向聚类。描述性；E1 不挂 p 值。 |
 
-A separate 4×4 n panel reports, per cell:
+另附一张 4×4 的 n 表，每格报告：
 
-| Field | Definition |
+| 字段 | 定义 |
 |---|---|
-| `n_obs` | Event rows (event weighting) or contract-day-cell groups (contract-day weighting). |
-| `n_cdays` | Unique `(symbol, UTC day)` in the cell. |
-| `n_cmonths` | Unique `(symbol, calendar month)` in the cell. |
+| `n_obs` | 事件行（event 权重）或合约-日-格组（合约-日权重）。 |
+| `n_cdays` | 格内唯一 `(symbol, UTC 日)` 数。 |
+| `n_cmonths` | 格内唯一 `(symbol, 日历月)` 数。 |
 
-For the nested columns: `n_obs` of `high` is the sum over `s2` and `s3`; `n_cdays` and `n_cmonths` are the **unique** counts over the union (a contract-day can contain both `s2` and `s3`; do not add the two counts).
+对嵌套列：`high` 的 `n_obs` 是 `s2` 与 `s3` 之和；`n_cdays` 与 `n_cmonths` 是并集上的**唯一**计数（一个合约-日可能同时含 `s2` 和 `s3`，不要把两者相加）。
 
-**Expected anchors at h=1 (event weighting, y_raw)** — use for validation:
+**h=1 的预期锚点（event 权重，y_raw）**——用于校验：
 
-| Cell | n rows | n contract-months |
+| 格 | n 行数 | 合约-月数 |
 |---|---:|---:|
-| negative (all regimes) | 93,489 | 9,499 |
-| neutral (all regimes) | 123,907 | 9,461 |
-| high-only (all regimes) | 18,834 | 3,377 |
-| extreme (all regimes) | 19,627 | 2,777 |
-| high (incl. ext), all regimes | 38,461 | 4,471 (cell-level; unions overlap across regimes) |
+| negative（全 regime） | 93,489 | 9,499 |
+| neutral（全 regime） | 123,907 | 9,461 |
+| high-only（全 regime） | 18,834 | 3,377 |
+| extreme（全 regime） | 19,627 | 2,777 |
+| high（含 extreme，全 regime） | 38,461 | 4,471（格级；不同 regime 的并集会重叠） |
 | R1 × neutral | 37,038 | 2,384 |
-| R1 × high (incl. ext) | 13,184 | 1,183 (unique union, not 902+752) |
+| R1 × high（含 extreme） | 13,184 | 1,183（并集唯一数，不是 902+752） |
 | R1 × extreme | 6,905 | 752 |
-| R3 × extreme | 2,416 | 584 (thinnest disjoint cell) |
+| R3 × extreme | 2,416 | 584（最薄的互斥格） |
 
-The 400 contract-month gate (§3.7 of the old handoff) is retained as a **flag**, not a filter: mark any cell below 400. The thinnest disjoint cell is 584, so none is flagged at h=1; report the flag anyway.
+400 合约-月闸（旧 handoff §3.7）保留为**标记**，不是过滤：低于 400 的格打标。h=1 最薄的互斥格是 584，所以没有格被标记；仍然要报告这个检查。
 
-**Output.** `phase4_funding/tables/e1_surface.parquet` + `.csv`, long format: one row per `(weighting, h, regime, funding)`.
+**输出。** `phase4_funding/tables/e1_surface.parquet` + `.csv`，长表：每行一个 `(weighting, h, regime, funding)`。
 
 ---
 
-## 5. E2 — within-regime funding contrasts
+## 5. E2 —— within-regime funding 对比
 
-**Purpose.** The formal read of the note's row-wise example questions: within each regime, how does performance change across funding states? This is the project's operationalization, not a note requirement.
+**目的。** 对 note 的 row-wise 示例问题做正式读数：在每个 regime 内部，表现如何随 funding 状态变化？这是项目的操作化，不是 note 的要求。
 
-**Sample.** Same rows as E1, per horizon and weighting.
+**样本。** 与 E1 同一批行，每个期限、每种权重。
 
-**Dependent variables.**
+**因变量。**
 
-- `y_raw`: primary, enters the BH family.
-- `fwd_h`: note-literal descriptive, report estimate + 95% CI, **no BH, no p_bh**.
-- `lrv`: volatility, enters a separate BH family, reported as `exp(contrast) − 1` in %.
+- `y_raw`：主口径，进 BH 家族。
+- `fwd_h`：note 字面的描述口径，报估计 + 95% CI，**不进 BH，不报 p_bh**。
+- `lrv`：波动率，进单独的 BH 家族，报 `exp(对比) − 1` 的 %。
 
-### 5.1 Contrasts
+### 5.1 对比
 
-For each regime `r` (4) and each funding state `f ∈ {negative, high, extreme}` (3), versus `neutral`:
+对每个 regime `r`（4 个）与每个 funding 状态 `f ∈ {negative, high, extreme}`（3 个），都以 `neutral` 为参照：
 
 ```
 C1(r) = μ(r, negative) − μ(r, neutral)
-C2(r) = μ(r, high)     − μ(r, neutral)    # high includes extreme
-C3(r) = μ(r, extreme)  − μ(r, neutral)    # subset of high
+C2(r) = μ(r, high)     − μ(r, neutral)    # high 含 extreme
+C3(r) = μ(r, extreme)  − μ(r, neutral)    # high 的子集
 ```
 
-12 contrasts per `(dv, h, weighting)`. The three are correlated by construction (the high set contains the extreme set); BH is applied to all 12.
+每个 `(dv, h, weighting)` 有 12 个对比。三个对比按构造相关（high 集合包含 extreme 集合）；BH 对 12 个一起做。
 
-Derived, for interpretation only (not a separate test): the tail increment
+派生的尾部增量，只作解读（不单独检验）：
 
 ```
 C4(r) = μ(r, extreme) − μ(r, high) = w2 · (m_{r,s3} − m_{r,s2})
 ```
 
-Report it alongside C2/C3 in the text or appendix. Do not add it to the BH family.
+在正文或附录里与 C2/C3 并排报告；不要加进 BH 家族。
 
-### 5.2 Estimation
+### 5.2 估计步骤
 
-1. Build the 16 disjoint cell indicators (`regime × {s0,s1,s2,s3}`).
-2. Under event weighting: estimate the FE model on event rows.
-   Under contract-day weighting: aggregate to `(symbol, day, regime, state)` means first, then estimate the same FE model on the group means.
-3. Recover the 15 coefficients and the CGM covariance; form the nested means `μ(r, high)` with weights `w2`, `w3` from the current weighting's counts.
-4. Form the 12 contrast vectors `c`; estimate = `c'β`, SE = `sqrt(c'Vc)`, `t = estimate/SE`, `p` two-sided normal.
-5. BH within the 12 contrasts **per `(dv, h, weighting)`**; separate families for `y_raw` and `lrv`; `fwd` is descriptive and has no BH.
-6. `t_drop5`: for each contrast, compute the influence function `ψ_c = (X̃ c) · û`; score contracts by `|Σ ψ_c|`; drop the five largest; re-estimate the FE model and the contrast; report `t`.
-7. Flag `|t_drop5| ≤ 1.96` for any contrast that passed BH.
+1. 构造 16 个互斥格 dummy（`regime × {s0,s1,s2,s3}`）。
+2. event 权重：在事件行上估 FE 模型。
+   合约-日权重：先聚合到 `(symbol, day, regime, state)` 的组均值，再在组均值上估同一个 FE 模型。
+3. 取 15 个系数与 CGM 协方差；用当前权重的计数 `w2`、`w3` 组成嵌套均值 `μ(r, high)`。
+4. 构造 12 个对比向量 `c`；估计 = `c'β`，SE = `sqrt(c'Vc)`，`t = estimate/SE`，`p` 双侧正态。
+5. BH 在 12 个对比内、按 `(dv, h, weighting)` 分别做；`y_raw` 与 `lrv` 各自一个家族；`fwd` 是描述性，不做 BH。
+6. `t_drop5`：对每个对比，计算影响函数 `ψ_c = (X̃ c) · û`；按 `|Σ ψ_c|` 给合约打分；剔掉最大的 5 个；重新估 FE 模型与对比；报告 `t`。
+7. 对过了 BH 的对比，标记 `|t_drop5| ≤ 1.96` 的情况。
 
-### 5.3 Table
+### 5.3 表
 
-One row per `(weighting, dv, h, regime, contrast)`:
+每行一个 `(weighting, dv, h, regime, contrast)`：
 
-| Column | Meaning |
+| 列 | 含义 |
 |---|---|
-| `estimate` | bp for `y_raw`/`fwd`; log point for `lrv`. |
-| `estimate_pct` | `lrv` only: `(exp(estimate) − 1) × 100`. |
-| `se` | CGM clustered SE on the estimation scale. |
-| `t`, `p` | Two-sided. |
-| `p_bh` | BH within the 12; `NA` for `fwd`. |
-| `t_drop5` | Drop-five-contracts t; `NA` for `fwd` if not computed. |
-| `n_obs`, `n_cmonths` | Cell sizes for the contrast (union for high). |
-| `in_bh` | `TRUE` for `y_raw`, `lrv`; `FALSE` for `fwd`. |
+| `estimate` | `y_raw`/`fwd` 用 bp；`lrv` 用 log 点。 |
+| `estimate_pct` | 仅 `lrv`：`(exp(estimate) − 1) × 100`。 |
+| `se` | CGM 聚类 SE，估计尺度。 |
+| `t`、`p` | 双侧。 |
+| `p_bh` | 12 个内的 BH；`fwd` 为 `NA`。 |
+| `t_drop5` | 剔 5 个合约后的 t；`fwd` 不计算则为 `NA`。 |
+| `n_obs`、`n_cmonths` | 对比的格规模（high 用并集）。 |
+| `in_bh` | `y_raw`、`lrv` 为 `TRUE`；`fwd` 为 `FALSE`。 |
 
-**Output.** `phase4_funding/tables/e2_contrasts.parquet` + `.csv`.
-
----
-
-## 6. E3 — column profile (descriptive)
-
-**Purpose.** The other margin of the 4×4: within each funding state, how do the four regimes compare? This is descriptive context, not a second test family.
-
-**Sample.** Same as E1.
-
-**Table.** One table per `(h, weighting)`: rows = funding states `negative / neutral / high / extreme`; columns = R1–R4. Each cell reports `fwd_mean`, `y_mean`, `rv_mean`, and the clustered 95% CI for each mean; n in a separate panel.
-
-No p-values. If the column profile shows a strong pattern, a follow-up contrast family (regimes vs R4 within funding state) can be added later, but it is not part of the locked design.
-
-**Output.** `phase4_funding/tables/e3_column_profile.parquet` + `.csv`.
+**输出。** `phase4_funding/tables/e2_contrasts.parquet` + `.csv`。
 
 ---
 
-## 7. E4 — hypothesis map
+## 6. E3 —— column profile（描述性）
 
-**Purpose.** Read the note's six example rows against the E1/E2 output. The six are anchors, not the complete hypothesis set; the remaining cells are exploratory.
+**目的。** 4×4 的另一条边际：在每个 funding 状态内部，四个 regime 怎么比？这是描述性 context，不是第二个检验家族。
 
-For each anchor, report:
+**样本。** 与 E1 相同。
 
-| Anchor (note §11) | Cell(s) | What is read | Verdict |
+**表。** 每个 `(h, weighting)` 一张：行 = funding 状态 `negative / neutral / high / extreme`；列 = R1–R4。每格报 `fwd_mean`、`y_mean`、`rv_mean`，以及各均值的聚类 95% CI；n 另表。
+
+不挂 p 值。如果 column profile 出现强模式，后续可补一组「regimes vs R4 within funding state」的对比，但不在锁定设计里。
+
+**输出。** `phase4_funding/tables/e3_column_profile.parquet` + `.csv`。
+
+---
+
+## 7. E4 —— 假设映射
+
+**目的。** 用 E1/E2 的输出去读 note §11 的六个示例行。六行是锚点，不是完整假设集；其余格是 exploratory。
+
+每个锚点报告：
+
+| 锚点（note §11） | 格 | 读什么 | 判定 |
 |---|---|---|---|
-| R1 + neutral → continuation | (R1, neutral) | `fwd` mean/median sign; `y_raw` vs R1's other funding cells | consistent / inconsistent / unclear |
-| R1 + extreme positive → crowded reversal | (R1, extreme) | `fwd` sign; C3(R1); C4(R1) | consistent / inconsistent / unclear |
-| R2 + any funding → short-covering exhaustion | R2 row | three contrasts C1/C2/C3(R2) ≈ 0 (flat profile) | consistent / inconsistent / unclear |
-| R3 + neutral → downside continuation | (R3, neutral) | `fwd` sign; `y_raw` vs R3's other funding cells | consistent / inconsistent / unclear |
+| R1 + neutral → continuation | (R1, neutral) | `fwd` 均值/中位数符号；`y_raw` vs R1 其他 funding 格 | consistent / inconsistent / unclear |
+| R1 + extreme positive → crowded reversal | (R1, extreme) | `fwd` 符号；C3(R1)；C4(R1) | consistent / inconsistent / unclear |
+| R2 + any funding → short-covering exhaustion | R2 行 | 三个对比 C1/C2/C3(R2) ≈ 0（profile 平坦） | consistent / inconsistent / unclear |
+| R3 + neutral → downside continuation | (R3, neutral) | `fwd` 符号；`y_raw` vs R3 其他 funding 格 | consistent / inconsistent / unclear |
 | R3 + extreme negative → short-squeeze | (R3, negative) vs (R3, neutral) | C1(R3) > 0 | consistent / inconsistent / unclear |
-| R4 + stress / high vol → mean reversion | not a funding cell | out of scope; Phase 3 experiment 14b | out of scope |
+| R4 + stress / high vol → mean reversion | 不是 funding 格 | out of scope；Phase 3 实验 14b | out of scope |
 
-Proxy caveat: the labels have no one-sided extreme-negative bucket. `negative` (f ≤ p25) proxies the note's "extreme negative" for the R3 short-squeeze anchor; say so in the table note.
+代理口径提醒：标签没有单边的 extreme-negative 档；note 的 "extreme negative" 在 R3 short-squeeze 锚点上用 `negative`（f ≤ p25）代理。表注要写明。
 
-Verdict rules (qualitative, no new tests):
+判定规则（定性，不新增检验）：
 
-- **consistent**: the observed sign matches the note's expected direction, and the relevant `y_raw` contrast passes BH 12 + drop5 (where a contrast applies).
-- **inconsistent**: the sign is opposite, or the contrast is significant in the opposite direction.
-- **unclear**: sign matches but the contrast does not pass BH/drop5, or the cell is underpowered; report the n.
+- **consistent**：观察到的方向与 note 的预期一致，且相关 `y_raw` 对比过 BH 12 + drop5（若适用对比）。
+- **inconsistent**：方向相反，或对比显著地反向。
+- **unclear**：方向一致但对比没过 BH/drop5，或格太薄；报告 n。
 
-The `fwd` sign is the note-literal continuation/reversal read. `y_raw` is the verdict measure. The six anchors are not a confirmatory family; do not BH across them.
+`fwd` 的符号是 note 字面的 continuation/reversal 读数；`y_raw` 是判定口径。六个锚点不是确认性家族，不要对它们做 BH。
 
-**Output.** `phase4_funding/tables/e4_hypothesis_map.csv`.
-
----
-
-## 8. E5 — degeneracy diagnostic
-
-**Purpose.** Disclose that `high` and `extreme` are the same rows on degenerate funding days, and provide the high-only vs extreme split.
-
-### 8.1 Table note (all E1/E2 tables)
-
-State:
-
-- The four funding columns are overlapping conditions, not a partition: `high = f > p75` includes `extreme = f > p90`.
-- In the estimation sample, `p75 == p90` on **56.96%** of event rows (h=1) and **48.9%** of contract-months; on those rows `high` and `extreme` select the same observations, and `high` contains no high-only rows.
-- Label-wide (all 7,022,757 stated rows, 285 contracts): 64.85% p75==p90, 23.92% p25==p75, 16.55% all three equal; 46.0% of stated rows are `negative`. The estimation-sample figures above are the ones that describe the table.
-- 219 events with no funding state are excluded.
-- 206 of 249 estimation-sample contracts have at least one event row on a p75==p90 row.
-
-### 8.2 Appendix split
-
-A 4×4 table (rows R1–R4; columns `negative / neutral / high-only / extreme`) with `fwd_mean`, `y_mean`, `rv_mean`, and n. This is the disjoint-state view; the main table keeps the note's nested columns.
-
-Validation identity: the E1 `high` cell mean must equal `w2 × high-only + w3 × extreme` (max abs difference < 1e-12).
-
-**Output.** `phase4_funding/tables/e5_disjoint.parquet` + `.csv`; `e5_overlap.csv`.
+**输出。** `phase4_funding/tables/e4_hypothesis_map.csv`。
 
 ---
 
-## 9. Phase 5 gate
+## 8. E5 —— 退化诊断
 
-**Locked rule.** Phase 5 starts if **at least one of the 12 `y_raw` within-regime funding contrasts passes BH within its 12-test family (`p_bh < 0.05`) and survives drop5 (`|t_drop5| > 1.96`)**, at any horizon and in either weighting. No bp threshold; no requirement that both weightings agree.
+**目的。** 披露在退化的 funding 日上 `high` 与 `extreme` 是同一批行，并提供 high-only vs extreme 的拆分。
 
-The gate does not apply to volatility. Volatility contrasts are reported and used as a risk overlay (position sizing / stop width) once a return rule is selected.
+### 8.1 表注（所有 E1/E2 表）
 
-The gate sentence for the report:
+写明：
 
-> Phase 5 is unlocked by `<regime> × <funding>` at h = `<h>`, weighting = `<event|contract-day>`: `y_raw` contrast = `<bp>` (t = `<t>`, p_bh = `<p>`, t_drop5 = `<t5>`).
+- 四个 funding 列是重叠条件，不是分区：`high = f > p75` 包含 `extreme = f > p90`。
+- 在估计样本里，`p75 == p90` 占 **56.96%** 的事件行（h=1）与 **48.9%** 的合约-月；在这些行上 `high` 与 `extreme` 选到同一批观测，`high` 不含 high-only 行。
+- 全标签（7,022,757 个 stated 行、285 个合约）：64.85% p75==p90、23.92% p25==p75、16.55% 三档全等；46.0% 的 stated 行是 `negative`。描述这张表时用上面的估计样本数字。
+- 219 个无 funding 状态的事件已排除。
+- 估计样本的 249 个合约里，206 个至少有一行事件落在 p75==p90 的行上。
 
-If no contrast passes, Phase 5 does not start; that is a valid Phase 4 conclusion.
+### 8.2 附录拆分
 
-Multiplicity note: the gate is per-family. There are 8 `y_raw` families (4 horizons × 2 weightings), each with its own BH 12; there is no correction across the 8 families. This is a deliberate, liberal choice (locked with the project lead) and must be disclosed with the gate sentence: the family, the number of tests, and the fact that the gate is not family-wise across horizons/weightings.
+一张 4×4 表（行 R1–R4；列 `negative / neutral / high-only / extreme`），给 `fwd_mean`、`y_mean`、`rv_mean` 与 n。这是互斥状态视角；主表保留 note 的嵌套列。
+
+校验恒等式：E1 的 `high` 格均值必须等于 `w2 × high-only + w3 × extreme`（最大绝对差 < 1e-12）。
+
+**输出。** `phase4_funding/tables/e5_disjoint.parquet` + `.csv`；`e5_overlap.csv`。
+
+---
+
+## 9. Phase 5 闸门
+
+**锁定规则。** 只要 **12 个 `y_raw` within-regime funding 对比中至少一个在其 12 检验家族内过 BH（`p_bh < 0.05`）且扛住 drop5（`|t_drop5| > 1.96`）**，Phase 5 就开；任意期限、任意一种权重都算。不设 bp 阈值；不要求两种权重同号。
+
+闸门不适用于波动率。波动对比照常报告；选定收益规则后，用作风险 overlay（仓位/止损宽度）。
+
+报告里的闸门句：
+
+> Phase 5 由 `<regime> × <funding>` 解锁，h = `<h>`，weighting = `<event|contract-day>`：`y_raw` 对比 = `<bp>`（t = `<t>`，p_bh = `<p>`，t_drop5 = `<t5>`）。
+
+如果没有对比通过，Phase 5 不启动；这也是一个有效的 Phase 4 结论。
+
+多重性说明：闸门是按家族做的。`y_raw` 有 8 个家族（4 个期限 × 2 种权重），每个家族各自 BH 12；8 个家族之间不做校正。这是与项目负责人一起锁定的、刻意偏宽松的选择，必须在闸门句里披露：家族、检验数，以及闸门不做跨期限/跨权重的 family-wise 校正。
 
 ---
 
 ## 10. Out of scope
 
-- Baselines: price alone, OI alone, funding alone, random timing — Phase 3 experiments 5–9 and 8.
-- IC: the note's IC is conditional on a ranked score; the signal is a threshold label.
-- Absolute bp/day funding scale: not in the note.
-- β appendix (regime vs same-direction benchmark within funding): not in the note.
-- 16-γ interaction ANOVA: requires a disjoint high/extreme partition and removes the main effects from the reported object; rejected.
-- Threshold optimisation (p60/p70 grid): Phase 2 already did the threshold grid; p70 is frozen.
-- Cross-exchange, Phase 5 backtest, R4 stress (Phase 3 experiment 14b), 4h/8h labels (deferred; 1h first).
+- Baseline：price alone、OI alone、funding alone、random timing——Phase 3 实验 5–9 与实验 8。
+- IC：note 的 IC 是「若信号转成 ranked score」的条件句；本信号是阈值标签。
+- 绝对 bp/day funding 尺度：note 没有。
+- β 附录（regime vs 同向 benchmark within funding）：note 没有。
+- 16-γ 交互 ANOVA：需要把 high/extreme 拆成互斥格，并把主效应从报告对象里扣掉；已拒绝。
+- 阈值优化（p60/p70 网格）：Phase 2 已做阈值网格；p70 冻结。
+- 跨交易所、Phase 5 回测、R4 stress（Phase 3 实验 14b）、4h/8h 标签（先做 1h，后续再说）。
 
 ---
 
-## 11. Outputs
+## 11. 输出
 
 ```
 phase4_funding/
-  GUIDANCE.md                     this file
+  GUIDANCE.md                     本文件
   tables/
     e1_surface.parquet/.csv
     e2_contrasts.parquet/.csv
@@ -366,41 +374,41 @@ phase4_funding/
     e5_disjoint.parquet/.csv
     e5_overlap.csv
   figures/
-    f01_return_heatmap.png        raw fwd and y_raw, 4 horizons × 4 regimes × 4 funding
-    f02_vol_heatmap.png           rv mean, same layout
-    f03_contrast_forest.png       12 contrasts per DV/horizon/weighting, with 95% CI
+    f01_return_heatmap.png        raw fwd 与 y_raw，4 horizons × 4 regimes × 4 funding
+    f02_vol_heatmap.png           rv 均值，同样布局
+    f03_contrast_forest.png       12 个对比 × DV/horizon/weighting，带 95% CI
 ```
 
-Figure rules: heatmaps show the estimate and mark cells whose `y_raw` contrast passes BH 12 + drop5; the forest plot shows the 12 contrasts with 95% CI, points filled when BH passes. No bar charts of levels.
+图规则：热力图画估计值，并标记 `y_raw` 对比过 BH 12 + drop5 的格；forest plot 画 12 个对比与 95% CI，过 BH 的点用实心。不要画水平柱状图。
 
 ---
 
-## 12. Validation gates
+## 12. 校验闸门
 
-Run these before anything is written up:
+写报告前必须跑：
 
-1. **n reconciliation.** E1 n at h=1 matches the sample-size audit: 255,857 rows; disjoint totals 93,489 / 123,907 / 18,834 / 19,627; contract-month totals 9,499 / 9,461 / 3,377 / 2,777; R1 × neutral 2,384; R1 × extreme 752; thinnest disjoint cell 584 (R3 × extreme).
-2. **Raw return join.** For each hour, `fwd_h − y_raw` is constant across events (the market mean); max within-hour standard deviation < 1e-12. Also check the join covers all E1/E2 rows (no missing `fwd_h`).
-3. **High-union identity.** E1 `high` mean = `w2 × high-only + w3 × extreme`, max abs difference < 1e-12, at every `(h, weighting, regime)`.
-4. **Disjoint sums.** The 16 disjoint cells sum to the E1/E2 sample (n) at every `(h, weighting)`.
-5. **Contrast identity.** C2(r) = `w2 × (high-only − neutral) + w3 × (extreme − neutral)`; max abs difference < 1e-12.
-6. **BH families.** Exactly 12 tests per `(dv, h, weighting)` for `y_raw` and `lrv`; `p_bh` monotone; `fwd` has no `p_bh`.
-7. **Weighting.** Event and contract-day tables have the same cells and the same definitions; the contract-day high-union weights use contract-day-cell counts, not event counts.
-8. **Degeneracy flags.** The p75==p90 share recomputed on the E1/E2 sample matches 56.96% (rows) and 48.9% (contract-months); the high-union n uses unique counts, not sums.
-9. **Sample gates.** No cell below 400 contract-months at h=1; flag if any horizon/weighting produces one.
-10. **No stale 16-γ artefacts.** The old `l1_cellmeans` / `l2_interactions` are not used anywhere in E1–E5.
+1. **n 对账。** h=1 的 E1 n 与样本量审计一致：255,857 行；互斥合计 93,489 / 123,907 / 18,834 / 19,627；合约-月合计 9,499 / 9,461 / 3,377 / 2,777；R1 × neutral 2,384；R1 × extreme 752；最薄互斥格 584（R3 × extreme）。
+2. **原始收益关联。** 每个小时内，`fwd_h − y_raw` 在所有事件上恒定（等于市场均值）；小时内标准差最大值 < 1e-12。同时检查关联覆盖全部 E1/E2 行（无缺失 `fwd_h`）。
+3. **High 并集恒等式。** E1 的 `high` 均值 = `w2 × high-only + w3 × extreme`，在每个 `(h, weighting, regime)` 上最大绝对差 < 1e-12。
+4. **互斥格合计。** 16 个互斥格的 n 在每个 `(h, weighting)` 上等于 E1/E2 样本量。
+5. **对比恒等式。** C2(r) = `w2 × (high-only − neutral) + w3 × (extreme − neutral)`；最大绝对差 < 1e-12。
+6. **BH 家族。** `y_raw` 与 `lrv` 每个 `(dv, h, weighting)` 恰好 12 个检验；`p_bh` 单调；`fwd` 没有 `p_bh`。
+7. **权重。** event 与合约-日两张表的格与定义一致；合约-日的高并集权重用合约-日-格数，不用事件数。
+8. **退化标记。** 在 E1/E2 样本上复算 p75==p90 的占比，匹配 56.96%（行）与 48.9%（合约-月）；high 并集的 n 用唯一计数，不用求和。
+9. **样本闸。** h=1 没有格低于 400 合约-月；任何期限/权重出现低于 400 的格都要打标。
+10. **无残留 16-γ 产物。** 旧的 `l1_cellmeans` / `l2_interactions` 不在 E1–E5 的任何地方使用。
 
 ---
 
 ## 13. Checklist
 
-- [ ] Join `fwd_h` from `forward/freq=1h`; validate the within-hour identity.
-- [ ] Build E1 surface: 4 horizons × 2 weightings × {raw fwd, y_raw, rv} with mean/median/CI/n.
-- [ ] Build E5 disjoint cells and overlap stats; verify the high-union identity.
-- [ ] Build E2 contrasts: 12 per (dv, h, weighting); `y_raw` and `lrv` BH 12; `fwd` descriptive; drop5.
-- [ ] Build E3 column profile.
-- [ ] Build E4 hypothesis map (six anchors + exploratory cells).
-- [ ] Produce the three figures.
-- [ ] Run the validation gates.
-- [ ] Write the Phase 5 gate sentence (or the explicit "gate not met").
-- [ ] Update the table notes with the degeneracy disclosure.
+- [ ] 从 `forward/freq=1h` 关联 `fwd_h`；校验小时内恒等式。
+- [ ] 建 E1 面：4 个期限 × 2 种权重 × {raw fwd、y_raw、rv}，含 mean/median/CI/n。
+- [ ] 建 E5 互斥格与 overlap 统计；校验 high 并集恒等式。
+- [ ] 建 E2 对比：每个 (dv, h, weighting) 12 个；`y_raw` 与 `lrv` BH 12；`fwd` 描述性；drop5。
+- [ ] 建 E3 column profile。
+- [ ] 建 E4 假设映射（六个锚点 + exploratory 格）。
+- [ ] 出三张图。
+- [ ] 跑校验闸门。
+- [ ] 写 Phase 5 闸门句（或明确的「闸门未开」）。
+- [ ] 在表注里更新退化披露。
