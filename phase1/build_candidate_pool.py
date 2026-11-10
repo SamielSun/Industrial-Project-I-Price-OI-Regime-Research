@@ -110,29 +110,6 @@ def configure_paths(out_root: Path) -> None:
     DROPPED = DATA / "00_config" / "dropped_contracts.csv"
     KEPT = DATA / "00_config" / "kept_contracts.csv"
 
-# 闸 4 的判据：只有 exchangeInfo 的分类字段，不设手工名单。
-#
-#     contractType    PERPETUAL（加密）   vs  TRADIFI_PERPETUAL（传统金融）
-#     underlyingType  COIN（加密）        vs  EQUITY / HK_EQUITY / KR_EQUITY /
-#                                            CN_EQUITY / COMMODITY / PREMARKET /
-#                                            FX / INDEX
-#     通过 ⇔ contractType == "PERPETUAL" 且 underlyingType == "COIN"
-#
-# 为什么不用手工名单：首版列了 35 个，漏进 21 个代币化标的；补齐后仍漏
-# GOOGLUSDT / SPYUSDT / NBISUSDT，另漏 25 个当时不在池里的。结构性缺陷是
-# 【池子按排名滚动，新标的随时进池】—— 每轮都要人工重核，必然出错。
-#
-# 该判据同时排掉 PERPETUAL/INDEX 的合成指数永续（DEFIUSDT / BTCDOMUSDT /
-# ALLUSDT）—— 合成品，不是单一资产。
-#
-# 故意的例外：PAXGUSDT / XAUTUSDT 被标成 PERPETUAL/COIN，按此判据放行。
-# 它们是链上发行的加密原生合约（24/7、无收盘时段），结构上与加密永续无区别。
-#
-# ⚠️ 局限：exchangeInfo 只含【当前挂牌】的合约，已下架的查不到。
-#    实测池里查不到的合约全部是加密资产，故不另设名单；若将来发现查不到的
-#    里面有非加密资产，在这里补一个 {symbol} 集合。
-
-
 
 # ============================================================================
 # 小工具

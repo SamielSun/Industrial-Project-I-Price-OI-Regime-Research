@@ -1,70 +1,124 @@
 # PHASE 3 复现说明
 
-> **状态（2026-10-27）**：v2 管线已全部跑通。八个脚本、七个闸门文件，全部 PASS。
-> v1 的产物在 data/06_event_study/_archive_v1/，**只读留档，不要引用**。
+> **状态（2026-10-28）**：16 个实验全部落盘，7 个实验脚本 + 1 个画图脚本，闸门全过。
+> `exp5_9.py` 已按新定义重写（实验 5/6/7/9 + 13）；实验 8 单独一个脚本（安慰剂），`figures.py` 已按「画被检验的量」重写，
+> `descriptive.py` 的收益口径已从截尾同步到不截尾（`excess_fwd`）。
+> **截尾那一整套已经删掉了**：面板只剩 8 列，`stats_core.py` 已并入 `build.py`。
 
 ## 运行顺序
 
 ```
-python phase3_event/build_forward_panel.py --freq 1h     # 1. 前向面板（已有，7,252,717 行）
-python phase3_event/build_event_table.py   --freq 1h     # 2. 事件表（已有，923,235 行 × 73 列）
-python phase3_event/confirmatory.py                      # 3. 四个确认性检验（104 项闸门）
-python phase3_event/oi_increment.py                      # 4. 六格 OI 增量（38 项，15 秒）
-python phase3_event/descriptive.py                       # 5. 描述层 9/10/11/14（101 项，14 秒）
-python phase3_event/baselines_v2.py                      # 6. 四条基线 + 五价差（114 项，11 分钟）
-python phase3_event/figures_v2.py                        # 7. 事件路径 + 8 张图（51 项）
-python phase3_event/ic_decay_v2.py                       # 8. IC 衰减（7 项，5 分钟）
+# ---- 输入层（可选：输入已在盘上；重建约 2 分钟）----
+python phase3_event/build.py forward --freq 1h          # 57 秒，前向面板 7,252,717 行
+python phase3_event/build.py events  --freq 1h          # 48 秒，事件表 923,235 行 × 65 列
+
+# ---- 分析面板（拼一次，落盘，之后所有实验只读）----
+python phase3_event/build.py panel                      # 29 秒，18 项闸门，输出 8 列
+
+# ---- 实验（读 panel/ 与冻结输入，不重算数据；下列时长是 2026-10-28 实测）----
+python phase3_event/experiment/exp1_4.py                #  86 秒  实验 1/2/3 + 1b（1b 是 2×2 因子，含 BH 与 drop5）
+python phase3_event/experiment/exp5_9.py                #  39 秒  实验 5/6/7/9 + 13
+python phase3_event/experiment/exp8_placebo.py          #  23 秒  实验 8（安慰剂；种子见下）
+python phase3_event/experiment/event_path.py            #   2 秒  实验 12
+python phase3_event/experiment/descriptive.py           #  45 秒  实验 4/10/11/14（rev_prob 要 join panel+forward + 双向 FE）
+python phase3_event/experiment/robust_daily.py          #  36 秒  实验 15（日频汇总稳健性）
+
+# ---- 图 ----
+python phase3_event/figures.py                          #   4 秒  15 张图（Fig 1 / 1b / 2 / 3 / 4 / 5-7 / 8 / 9 / 10 / 11 / 12 / 13 / 14a / 14b / 15）
 ```
 
-## 产物
+**整条链从头跑一遍约 6.6 分钟**（2026-10-28 实测：57 + 48 + 29 + 86 + 39 + 23 + 25 + 2 + 45 + 36 + 4 = 394 秒），
+十一步全部 exit 0，闸门全过（forward / events 各自 PASS、面板 18/18、exp5_9 13/13、
+event_path 13/13、descriptive 101/101、robust_daily 17/17）。
 
-| 路径 | 内容 |
+**随机性全部由 `config.EVENT` 固定**：`random_draws = 1000`（抽多少轮）、`random_seed = 20240501`（种子，实验 8 用 `random_seed + h`）。实测连跑两次 `exp8_placebo.py`，16 行数值列哈希完全一致。
+
+Python：`C:\miniconda\python.exe`（有 pyarrow）。只出图的话装 pandas + matplotlib 就够，
+`figures.py` 有 CSV fallback（没有 pyarrow 也能画）。
+
+## 目录结构
+
+```
+phase3_event/
+  build.py                 ★ 三个构建步骤：forward / events / panel（唯一的口径实现；
+                             含市场中性化 cross_sectional_demean —— 主口径 `y_raw` 的定义）
+  infer.py                 推断：demean2 / cgm_cov / fe_ols / bh / p_two
+  figures.py               15 张图
+  PHASE3_GUIDANCE.md       要做什么 + 结果（16 个实验，唯一权威）
+  REPRODUCE.md             本文件
+  experiment/              实验（读 panel/ 与冻结输入，不重算数据）
+    exp1_4.py              实验 1–3 + 1b（1b 是 2×2 因子，含 BH 与 drop5）
+    exp5_9.py              实验 5/6/7/9 + 13
+exp8_placebo.py        实验 8（安慰剂）
+        event_path.py          实验 12
+    descriptive.py         实验 4（反转概率）/ 10 / 11 / 14（分合约、分市场）
+    robust_daily.py        实验 16（日频汇总稳健性：观测压到「合约×日×格」；另出 robust_daily_bycount，按「当天该状态出现几个小时」分桶）
+
+data/06_event_study/
+  forward/  events/  wide/     输入（只读，约 1.8 GB；Phase 3 只用 freq=1h 那一份）
+  panel/freq=1h/h={1,4,8,24}.parquet    ★ 分析面板（8 列，1.97M 行/期）
+  panel/freq=1h/symbols.parquet          合约编码表
+  tables/freq=1h/              各实验输出（12 张表 × parquet+csv = 24 个文件）
+  figures/                     15 张图
+```
+
+> `events/` 下只有 `events_1h.parquet`。原来的 `events_{4h,8h,1d}.parquet` 是 2026-10-26 的旧 schema
+> （缺 `excess_fwd_*`，带 4 个 `y_sig_*`），连主口径的因变量都没有，**已删除**；
+> 要做那个频率用 `build.py forward/events --freq <f>` 重建。
+
+## 分析面板的列
+
+| 列 | 含义 |
 |---|---|
-| tables/freq=1h/confirmatory_{return,vol,slope}.parquet | 实验 1–4 |
-| tables/freq=1h/oi_increment.parquet | 实验 5（六格） |
-| tables/freq=1h/descriptive_{core,path,by_symbol,by_state}.parquet | 实验 9/10/11/14 |
-| tables/freq=1h/baselines_v2.parquet、baselines_spread.parquet | 实验 13 + 五价差 |
-| tables/freq=1h/event_path_v2.parquet | 实验 12（392 行 = 2 样本 × 4 格 × 49 个 k） |
-| tables/freq=1h/ic_decay_v2.parquet | 实验 15（24 行） |
-| figures/f1…f8.png | 8 张图，全部从上面的表读出来 |
-| docs/step{4,7,8,9,10,11,12}_*.txt | 七个闸门文件 |
+| `symbol`, `hour` | 键（合约编码 / ts_end 的整小时）；`(symbol, hour)` 唯一 |
+| `dir` | +1 价格超阈上涨 / −1 下跌 / **0 价格没超阈** |
+| `oi3` | +1 OI 超阈增加 / 0 安静 / −1 减少 |
+| `cell` | −1 价格没超阈 / 0 价格超阈但 OI 安静 / 1–4 = R1–R4 |
+| `fund` | −1 无状态 / 0 低于 p25 / 1 中间 / 2 高于 p75 / 3 高于 p90 |
+| **`y_raw`** | **市场中性、不截尾**（**唯一口径**，所有判定实验都用它）|
+| `lrv` | `log(rv_h)`，不中性化不截尾 |
 
-## 冻结口径（D13–D20，改口径必须先改 DECISIONS.md）
+## 定死的口径（改任何一个都要重跑全部实验）
 
 | 项 | 值 |
 |---|---|
-| 主样本 | headline（256,079 事件）；full 只作稳健性 |
-| 前向期 | 24h 为主，1/4/8h 并列 |
-| 收益 | **市场中性**（逐小时减全市场等权均值）+ **全池 1%/99% 截尾** |
-| 波动 | log(rv_h)，不中性化、不截尾 |
-| 推断 | **只按合约聚类**（CGM 单向）；无 block bootstrap、无双向 |
-| 单位 | 内部小数；×100 = 百分数，×1e4 = bp |
-| 判定 | 普通显著性（等价性检验已取消，D15.2） |
+| 主样本 | headline：256,079 个事件（h=24 有效 255,807）|
+| 事件定义 | 价格和 OI **都**超过该合约自己过去 90 天的第 70 分位 |
+| 前向期 | 1 / 4 / 8 / 24 小时，四个等权，同一结构全部做 |
+| 收益 | 市场中性（每小时减全市场 7,010,789 行的等权均值）、**不截尾、不翻正** |
+| 波动 | `log(rv)`，不中性化不截尾 |
+| 估计（实验 1–3）| 合约 + 月份**双向固定效应**，迭代到两个方向组均值都 < **1e-7** |
+| 估计（实验 5–9）| **不加任何固定效应**，池起来比组均值（组合口径）|
+| 标准误 | **双向聚类**（CGM）：`V = V_合约 + V_月份 − V_合约×月份` |
+| 判定 | `\|t\| > 1.96`；BH 家族：实验 1/3 各 16 个、实验 4（反转概率）16 个、1b 20 个、5–9 共 28 个、16 每个指标 16 个（收益 + 波动共 32）（实验 2 不检验）|
+| 结果表 | **11 列**：`experiment, h, cell, estimate, se, ci_lo, ci_hi, t, p, p_bh, t_drop5` |
 
-## 闸门索引
+**容差是 1e-7，不是 1e-12**：1e-12 要 23 轮去均值、整个流程 4 分钟变 79 分钟，结果一致。
 
-| 文件 | 校验 |
-|---|---|
-| step4_checks_1h.txt | 事件表 923,235 行、R1–R4 计数、恒等式、截尾峰度 |
-| step7_checks_confirmatory.txt | 四个检验与独立复算逐位对拍（最大偏差 4.9e-11） |
-| step8_checks_oi_increment.txt | 六格；对照行口径与事件表**逐位相等**（偏差 0） |
-| step9_checks_descriptive.txt | p_cont ≡ hit_rate、mdd ≤ 0、表里无 p 值 |
-| step10_checks_baselines.txt | 五条基线的 n 锚点、funding 四档、每个 SE > 0 |
-| step11_checks_ic.txt | 小时数对齐 v1（33,400 / 40,312）、h=1 价格 IC 更强 |
-| step12_checks_figures.txt | 每张图的源表、行数、图内 n 与表内 n 对照 |
+## 实验 9 的时段口径（唯一一处与最初设计不同的地方）
 
-## 五条实测的坑（写脚本前必读）
+最初定「每小时、每边至少 5 个合约」。四状态每小时平均只有 2.2 个 R1、2.6 个 R4，
+按这个规则筛完四条信号的交集只剩 **5 个小时**——跑不出来。
+现在改成 **时段 = 自然日（24 小时）、每边 ≥5 个不同合约**：交集 710–711 天，
+等权逐日价差，Newey-West 滞后 1。可行性对照表在 `PHASE3_GUIDANCE.md` §9。
 
-1. **对照行必须用全市场池去均值**（7,010,789 行、每小时 173 个合约）。只用事件行去均值会得到 7 个，DiD 差 44%。
-2. **截尾阈值全池算一次、所有组共用**。按格内算会让 R1−R4 的 DiD 变号（+2.30 → −1.74 → +0.78bp）。
-3. **标签表与前向面板的分区键不一致**（月界那行落在不同 chunk）。逐分区 merge 会静默丢 9,446 个前向值，并把阈值算偏。
-4. **六格只能用在含 OI 安静的样本上**。事件子样本里 OI 全超阈，q²≡1、P·q²≡P，矩阵秩只有 4。
-5. **wide/close.parquet 的 ts 是 bar 开盘时刻**，存的是 ts+1h 的收盘。所以 P(T) 在 hour−1 行，错一格会让 price_change 差 4.5。
+## 四条口径陷阱（都踩过）
+
+1. **分区键不一致会静默丢数据**：标签表与前向面板的月界行落在不同 chunk，逐分区 merge
+   会丢 9,446 行。一律用全局键 `hour * n_sym + code`。
+2. **去均值基必须是全市场池**：7,010,789 行、每小时约 173 个合约。只用事件行会变成
+   7 个合约/小时，结果差 44%。
+3. **截尾不是中性变换**：h=1 时 R1 的事件被压 3.36%、它的同向池子只压 1.34%，
+   一刀下去砍事件砍得更多，会让均值的差缩小甚至变号。**所以主口径不截尾。**
+4. **funding 的 extreme ⊂ high**：`fund` 字段是互斥分区（extreme 单独一档），
+   但价差要「高于 p75 含 extreme」的重叠口径：`fhi = (fund == 2) | (fund == 3)`。
 
 ## 口径提醒
 
-- headline 与 full **嵌套**（headline ⊂ full），不能相加、不能并列做多重检验
-- excl_reason == ok 才算有效行
-- p_cont ≡ hit_rate 是恒等式，不是独立证据
-- 路径列（mfe/mae/mdd）**未截尾**，均值被极端路径主导，只看 p10/p50/p90
-- 所有绝对水平都是负的（截尾不对称把池均值压到 −8.4bp），**必须对随机基线读，不能对 0 读**
+- headline 与 full **嵌套**，不能相加、不能并列做多重检验
+- 价差估计量**只用在被比较的两组行上**：参照组（OI 安静行、funding 中间档）进样本会把
+  结果拉偏（同一批数据：正确做法 −0.94bp、混了参照组 −0.08bp）
+- 描述层（实验 10、11、13、14）**不报 p / t / SE**；实验 12 只有按合约聚类的 SE 与 95% 区间；实验 15 只有 Newey-West 的 SE 与 t、无 p 值
+- 新估计量先做**已知答案验证**：`exp5_9.self_test()` 构造已知 +5bp 的假数据，
+  并验证 `t_drop5` 真的重估（顺手抓到过一个把结果压成 0 的 bug）
+- 表里单位一律小数；×100 = 百分数，×1e4 = bp

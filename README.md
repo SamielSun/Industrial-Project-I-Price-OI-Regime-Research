@@ -41,6 +41,18 @@ Generated into `data/04_qa/` by the last pipeline step:
 | `figures/*.png` | Coverage distribution and monthly coverage |
 | `checksums.sha256` | SHA256 of every file under `data/` |
 
+## Before starting Phase 2 or later
+
+**[`phase3_event/PHASE3_GUIDANCE.md`](phase3_event/PHASE3_GUIDANCE.md)** — read this first. It is
+the single authority for Phase 3: the frozen conventions, the null hypothesis of the note mapped
+to the individual experiments, the 11-column result format, and the figure specification.
+
+`data/05_regime/data_dictionary.md` documents every Phase 2 output column, and
+`phase2_regime/REPRODUCE.md` is the rebuild recipe.
+
+Phase 1's own output is described by [`data/04_qa/data_dictionary.md`](data/04_qa/data_dictionary.md)
+and [`phase1/REPRODUCE.md`](phase1/REPRODUCE.md).
+
 ## Self-tests
 
 ```bash

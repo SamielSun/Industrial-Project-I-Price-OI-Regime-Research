@@ -19,6 +19,14 @@ build_universe —— Step 6：逐期资格判定 + PIT 成员集 + master 表
         ⚠️ ② 必需 —— 合约死后 bar 数冻结而阈值固定，只数 bar 数会永远通过
   闸 3  ① trailing 30 天（`liq_window_days`）OI 覆盖率 ≥ `min_oi_coverage`
         ② 同窗口最长连续缺失 ≤ `max_oi_gap_hours`
+        ⚠️ 两条【口径不同，不可合并】：
+           ① 的分母是窗口【全部】小时 —— 它问「这个月有多少小时拿得到 OI」，
+              bar 不存在的小时同样没有 OI，故算缺失。这一条兜住窗口被截断的合约
+              （如 BNXUSDT 2023-02 只剩 202/720 小时）。
+           ② 只数【OI 发布本身】的连续缺口，跳过 bar 不存在的小时 —— 那些小时
+              归档里其实有 OI，是第 2 层网格规则丢的（data_quality.md §3①）。
+              不跳过就会把 klines 归档洞记成「OI 不可靠」：2022-03 曾因此误拦
+              36 个合约，其中 18 个的流动性本在前 50。
   闸 4  非代币化传统金融资产（exchangeInfo 判据）
 
   ⚠️ 闸 1 与闸 4 在本步【永远不会触发】：Step 1 的硬过滤已经按同一判据筛过，
@@ -364,8 +372,21 @@ def main() -> int:
         lo = cut - pd.Timedelta(days=cfg.liq_window_days)
         w = d[(d["ts"] >= lo) & (d["ts"] < cut)]
         liq = w.groupby("symbol")["quote_volume"].median()
+        # ---- 闸 3①：分母保持【窗口全部小时】，不 mask ----
+        # 它回答的是「这个月有多少小时真正拿得到 OI」。bar 不存在的小时同样没有 OI
+        # （网格把整行置 NaN），所以那些小时必须算缺失 —— 这一条同时兜住了
+        # 「窗口被截断」的合约：BNXUSDT 2023-02 的 klines 只剩 202/720 小时，
+        # 放行它等于用一个残缺窗口去排名（它的 liq 也只是那 202 小时算出来的）。
         cov = w.groupby("symbol")["oi_missing"].apply(lambda s: 1 - s.mean())
-        mruns = w.groupby("symbol")["oi_missing"].apply(
+        # ---- 闸 3②：只审【OI 发布本身】的连续缺口，mask 掉 bar_missing ----
+        # 实测 bar 缺失的那些小时归档里其实【有】OI，是第 2 层的网格规则把它丢了
+        # （data_quality.md §3①）。旧口径把 klines 归档洞记成「OI 数据不可靠」，
+        # 2022-03 一次性拦下 36 个合约，其中 18 个的流动性本在前 50
+        # （SOLUSDT 是门槛的 36 倍）。改后这 18 个回到成员集。
+        # ⚠️ 两条闸分工不同，【不能一起 mask】：3② 一旦不看 bar，窗口残缺的合约
+        # 就会显示「覆盖率 100%、无缺口」，只能靠 3① 拦住。
+        oi_bad = w["oi_missing"] & ~w["bar_missing"]
+        mruns = oi_bad.groupby(w["symbol"]).apply(
             lambda s: max_run_true(s.to_numpy()))
         win_days_all = pd.date_range(lo, cut, freq="D", inclusive="left").date
         cut_np = np.datetime64(cut.tz_convert(None))
@@ -380,7 +401,10 @@ def main() -> int:
                 "bars_before": int(np.searchsorted(arr, cut_np)),
                 "last_active": last_act.get(s, pd.NaT),
                 "oi_cov": float(cov[s]) if s in cov.index else np.nan,
-                "oi_max_gap_h": int(mruns[s]) if s in mruns.index else 0,
+                # 窗口内没有任何行 → 记 NaN（未知），不是 0（完美）。
+                # 旧写法让 3② 对「无数据」放行、而 3① 拦下 —— 两条闸对同一情况判断相反，
+                # 且 `oi_max_gap_h=0` 单看会被读成「无缺口」。实测 6,451 个单元受影响。
+                "oi_max_gap_h": int(mruns[s]) if s in mruns.index else np.nan,
                 "active_days": len(act_by_sym.get(s, set()) & set(win_days_all)),
             }
 
@@ -526,7 +550,9 @@ def main() -> int:
     log(f"  闸 2② 已停止交易             {int((~E['live']).sum()):>9,}"
         f"   （其中历史已够的 {int((~E['live'] & E['g2a']).sum()):,} 个）")
     log(f"  闸 3① OI 覆盖率低            {int((~E['g3a']).sum()):>9,}")
-    log(f"  闸 3② OI 连续缺失过长        {int((~E['g3b']).sum()):>9,}")
+    log(f"  闸 3② OI 连续缺失过长        {int((~E['g3b']).sum()):>9,}"
+        f"   （其中窗口内无任何数据的 {int(E['oi_max_gap_h'].isna().sum()):,} 个，"
+        f"实为「未知」而非缺口）")
     log(f"  闸 4  非加密资产              {int((~E['g4']).sum()):>9,}"
         f"   ← 恒 0：Step 1 已按同一判据筛过")
     log(f"  四闸全过                     {int(E['eligible'].sum()):>9,}")

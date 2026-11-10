@@ -26,7 +26,7 @@ build_layer2 —— 从 raw 数据建第 2 层 4 张标准 1h 表
      · LUNAUSDT 的 OI 孤立残留（数据的最后一条是 2024-04-06 02:00，而 klines 止于 2022-05）
    ⚠️ 代价：这条规则也丢掉【归档里确实存在】的 mark/index 行 —— 面板里 klines 没有
    bar 的小时共 6,886 个，其中 raw 里 mark 有 6,863 小时、index 有 6,766 小时的数据，
-   全被排除。它们不是归档缺口，是网格规则的后果（data_quality.md §3.3 已按此归因）。
+   全被排除。它们不是归档缺口，是网格规则的后果（data_quality.md §3① 已按此归因）。
 
 3. **OI 终点对齐**：bar [ts, ts_end) 配 OI(ts_end)。
    即 `oi_1h.ts = 源 create_time - 1h`。这是 schema 已定的语义

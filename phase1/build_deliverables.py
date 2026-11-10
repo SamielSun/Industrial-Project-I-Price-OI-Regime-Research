@@ -146,8 +146,25 @@ def compute_coverage(d: pd.DataFrame) -> pd.DataFrame:
 
 
 def monthly_coverage(d: pd.DataFrame) -> pd.DataFrame:
-    """逐月的整体覆盖率（四个源各一条线，与 §2 的表同口径）。"""
+    """逐月的整体覆盖率（四个源各一条线，与 §2 的表同口径）。
+
+    除行加权均值（既有口径，保持不变）外，再算两列**稳健**口径：
+
+    · `<src>_med`      合约等权的月中位数 —— 回答"典型合约是否完整"；
+    · `<src>_below95`  覆盖率 < 0.95 的合约占比 —— 回答"有多少合约是真的残缺"。
+
+    为什么必须加：行加权均值会被单个坏合约和小的月度分母放大。实测 2022-01 只有
+    104 个合约，`ICPUSDT` 整月没有 OI，均值就从 1.0000 掉到 0.9904，而中位数仍是
+    1.0000 —— 图上只看均值会读成"早期数据质量差"，其实是 1/104 的记账。
+
+    阈值取 0.95：它把两类缺口分开了 ——
+      · 多日归档洞（2 天 = 6.7% 缺失 → 0.933；3 天 → 0.893）落在 0.95 以下，进下图；
+      · 单日全市场停摆（1 天 = 3.3% 缺失 → 0.967）落在 0.95 以上，只进上图的月中位数。
+    0.999 则相反：早期 OI 那 0.1% 的零散缺口会把几乎每个合约都算成"不完整"，份额
+    饱和在 0；0.99 又会让一次停摆把份额顶到 100%。
+    """
     d = d.assign(ym=d["ts"].dt.strftime("%Y-%m"))
+    srcs = list(METRICS)
     g = d.groupby("ym").agg(
         rows=("ts", "size"),
         klines=("bar_missing", lambda s: 1 - s.mean()),
@@ -155,6 +172,35 @@ def monthly_coverage(d: pd.DataFrame) -> pd.DataFrame:
         mark=("mark_close", lambda s: 1 - s.isna().mean()),
         index=("index_close", lambda s: 1 - s.isna().mean()),
     )
+    per = pd.DataFrame({
+        "ym": d["ym"].to_numpy(),
+        "symbol": d["symbol"].to_numpy(),
+        "klines": (~d["bar_missing"].to_numpy()).astype("float64"),
+        "oi": (~d["oi_missing"].to_numpy()).astype("float64"),
+        "mark": d["mark_close"].notna().to_numpy().astype("float64"),
+        "index": d["index_close"].notna().to_numpy().astype("float64"),
+    }).groupby(["ym", "symbol"], sort=False)[srcs].mean()
+    ym_level = per.index.get_level_values("ym")
+    for c in srcs:
+        g[f"{c}_med"] = per[c].groupby(level="ym").median()
+        g[f"{c}_below95"] = (per[c] < 0.95).groupby(ym_level).mean()
+
+    # ---- 逐日覆盖率 -> 月度【最差一天】-----------------------------------
+    # 月均值（哪怕是中位数）会把一日事件摊到 744 小时里：2022-10-02 停摆一天，
+    # 月度中位数只掉到 0.9677，读起来像"小抖动"；而 2022-02-26~28 三天的归档洞
+    # 只影响 37% 的合约，中位数干脆不动。最差一天这个口径把两者都还原：
+    # 停摆日 = 0%，三天洞 = 0.63（还有 63% 的合约有数据）。
+    cov_day = pd.DataFrame({
+        "day": d["ts"].dt.strftime("%Y-%m-%d").to_numpy(),
+        "ym": d["ym"].to_numpy(),
+        "klines": (~d["bar_missing"].to_numpy()).astype("float64"),
+        "oi": (~d["oi_missing"].to_numpy()).astype("float64"),
+        "mark": d["mark_close"].notna().to_numpy().astype("float64"),
+        "index": d["index_close"].notna().to_numpy().astype("float64"),
+    }).groupby(["day", "ym"])[srcs].mean()
+    worst = cov_day.groupby(level="ym")[srcs].min()
+    for c in srcs:
+        g[f"{c}_worstday"] = worst[c]
     return g
 
 
@@ -223,14 +269,17 @@ def compute_gap_causes(d: pd.DataFrame, man: pd.DataFrame) -> dict:
 
 
 def compute_grid_drops(d: pd.DataFrame) -> dict:
-    """面板缺 `mark`/`index` 的小时里，有多少其实是【第 2 层网格规则】丢掉的。
+    """面板缺 `mark`/`index`/`oi` 的小时里，有多少其实是【第 2 层网格规则】丢掉的。
 
-    第 2 层的网格由 `klines_1h` 定义，mark/index 里 klines 没有的小时一律丢弃。
-    实测那些小时里归档【确实有】mark/index —— 所以把它们一并算作"归档缺口"是错的。
+    第 2 层的网格由 `klines_1h` 定义，mark/index/oi 里 klines 没有的小时一律丢弃。
+    实测那些小时里归档【确实有】数据 —— 所以把它们一并算作"归档缺口"是错的。
 
-    这一步要读 raw（每合约一个文件，只读受影响的那几十个），面板本身看不出来。
+    这一步要读 raw，面板本身看不出来。三个源分两条路径：mark/index 是每合约一个
+    文件（只读受影响的那几十个），oi 在 metrics 年度文件里、且按 `ts_end` 对齐。
+
+    返回的 `days` 让文档能说明丢弃集中在哪几天（根因见 data_quality.md §3①）。
     """
-    out = {"mark": None, "index": None}
+    out: dict = {"mark": None, "index": None, "oi": None}
     bm = d.loc[d["bar_missing"].to_numpy(), ["symbol", "ts"]]
     if not len(bm):
         return out
@@ -241,6 +290,9 @@ def compute_grid_drops(d: pd.DataFrame) -> dict:
         miss = int(d[METRICS[metric]].isna().sum())
         in_grid = int((d[METRICS[metric]].isna() & d["bar_missing"]).sum())
         held = 0
+        # 按日期计数：文档要说明这些丢弃【集中在哪几天】—— 根因是归档那几天本身缺 bar，
+        # 而不是数据零星散落。只在已有的读循环里顺手记，不额外读文件。
+        days: dict[str, int] = {}
         for s in syms:
             f = RAW / src / f"symbol={s}.parquet"
             if not f.exists():
@@ -248,8 +300,32 @@ def compute_grid_drops(d: pd.DataFrame) -> dict:
             t = pq.read_table(str(f), columns=["open_time"]).to_pandas()
             # raw 的 open_time 是 int64【毫秒】，不是 datetime —— 必须显式给 unit
             ts = pd.to_datetime(t["open_time"], unit="ms", utc=True)
-            held += sum(1 for x in ts if (s, x) in keys)
-        out[metric] = {"missing": miss, "grid": in_grid, "held": held}
+            for x in ts:
+                if (s, x) in keys:
+                    held += 1
+                    k = x.strftime("%Y-%m-%d")
+                    days[k] = days.get(k, 0) + 1
+        out[metric] = {"missing": miss, "grid": in_grid, "held": held, "days": days}
+
+    # ---- oi：走【另一条读路径】才能算 ----
+    # 两个不同点：① 合并键是 `ts_end`，不是 `ts`（第 2 层 `o.merge(c, on="ts_end")`）；
+    # ② 来源是 metrics 的【年度文件】，不是每合约一个文件。
+    # 不把它算出来的话，§3① 的网格规则列表会漏掉 OI，§3② 也会把"被网格丢掉、
+    # 归档其实有快照"的小时误报成快照缺口。
+    bm_oi = d.loc[d["bar_missing"].to_numpy() & d["oi_missing"].to_numpy(),
+                  ["symbol", "ts"]].copy()
+    if len(bm_oi):
+        bm_oi["ts_end"] = bm_oi["ts"] + pd.Timedelta(hours=1)
+        need = set(zip(bm_oi["symbol"], bm_oi["ts_end"]))
+        want = set(bm_oi["ts_end"])
+        held_oi = 0
+        for f in sorted((RAW / "metrics").glob("year=*.parquet")):
+            t = pq.read_table(str(f), columns=["symbol", "create_time"]).to_pandas()
+            # 先按时间戳把 700 万行砍到几百行，再逐个查 —— 直接建全量 set 会慢一个量级
+            t = t[t["create_time"].isin(want)]
+            held_oi += sum(1 for k in zip(t["symbol"], t["create_time"]) if k in need)
+        out["oi"] = {"missing": int(d["oi_missing"].sum()),
+                     "grid": int(len(bm_oi)), "held": held_oi, "days": {}}
     return out
 
 
@@ -335,11 +411,51 @@ def compute_report_facts(d: pd.DataFrame, cov: pd.DataFrame, mc: pd.DataFrame) -
     # ---- oi == 0：刻意不标记的那一类 ----
     oi0 = d[d["oi"].notna() & (d["oi"] == 0)]
 
+    # ---- `at 100%` 那一列有多脆弱：排除停摆日重算 ----
+    # 只报 11 会让人误以为"只有 11 个合约的 mark 是完整的"。实测那 11 是被全市场
+    # 停摆日压出来的：排除 4 个停摆日，mark/index 升到 236 / 186；单个停摆日也足以
+    # 造成同样的错觉。不给出反事实，这一列就会被读成"数据大面积残缺"。
+    #
+    # 全用整数做：725 万行上 dt.strftime 造字符串要 40 多秒，是这一步原来的瓶颈。
+    # 日码 = epoch 纳秒 // 一天的纳秒；再按合约做 np.bincount 加权求和。
+    out_days = sorted({o["start"][:10] for o in outages})
+    day_ns = 86_400_000_000_000
+    codes = (d["ts"].dt.tz_convert("UTC").dt.tz_localize(None)
+             .astype("int64").to_numpy() // day_ns)
+    sym_codes, _ = pd.factorize(d["symbol"].to_numpy())
+    n_sym = int(sym_codes.max()) + 1
+    day_codes = [(dd, int(pd.Timestamp(dd, tz="UTC").value // day_ns)) for dd in out_days]
+    at100_excl: dict = {}
+    for metric, col in (("mark", "mark_close"), ("index", "index_close")):
+        miss = d[col].isna().to_numpy()
+        tot = np.bincount(sym_codes, weights=miss, minlength=n_sym)
+        rem_all = tot.copy()
+        best_n, best_d = 0, ""
+        for dd, dc in day_codes:
+            m = codes == dc
+            per = np.bincount(sym_codes[m], weights=miss[m], minlength=n_sym)
+            n = int(((tot - per) <= 0).sum())
+            if n > best_n:
+                best_n, best_d = n, dd
+            rem_all -= per
+        at100_excl[metric] = {"one_day": best_n, "one_day_name": best_d,
+                              "all_days": int((rem_all <= 0).sum())}
+
+    # ---- 有 bar 但零成交的小时：观测存在，但内容不是「价格没动」 ----
+    # 这一条【不带任何标记】（bar_missing=False），是最容易被当成正常行的一类。
+    # 停牌期间交易所继续按小时发 bar，价格冻结在最后成交价、量全部写 0。
+    zero_trade = (d["quote_volume"].notna() & (d["quote_volume"] == 0)
+                  & ~d["bar_missing"])
+    zt_top = d.loc[zero_trade, "symbol"].value_counts().head(3)
+
     return {
         "zero_syms": zero_syms,
         "mc_below_n": mc_below_n,
         "outages": outages,
         "oi_zero_rows": int(len(oi0)),
+        "at100_excl": at100_excl,
+        "n_zero_trade": int(zero_trade.sum()),
+        "zero_trade_top": zt_top,
     }
 
 # ============================================================================
@@ -388,30 +504,134 @@ def fig_coverage_distribution(cov: pd.DataFrame) -> Path:
     return out
 
 
-def fig_monthly_coverage(mc: pd.DataFrame) -> Path:
-    """月度覆盖率的折线（每个月一条，四个源）。"""
+def month_events(mc: pd.DataFrame, d: pd.DataFrame, thresh: float = 0.20) -> list[dict]:
+    """逐月汇总数据缺口事件，供图上的竖线与图下说明使用。
+
+    两类：
+      ① 有"某一天"的缺口：某天 ≥thresh 的在场合约缺某个源（归档洞 / 停摆 / OI 断供）；
+      ② 没有单日事件、但整月有 >10% 的合约缺某个源（合约级长缺口，如 2023-04 的 index）。
+
+    完全按数据算，不写死日期 —— 换样本或重下数据后标注自动跟着走。
+    """
+    day = d["ts"].dt.strftime("%Y-%m-%d").to_numpy()
+    cols = {"klines": d["bar_missing"].to_numpy(),
+            "oi": d["oi_missing"].to_numpy(),
+            "mark": d["mark_close"].isna().to_numpy(),
+            "index": d["index_close"].isna().to_numpy()}
+    per_day: dict[str, dict[str, float]] = {}
+    for name, arr in cols.items():
+        share = pd.Series(arr).groupby(day).mean()
+        for dd, sh in share[share >= thresh].items():
+            per_day.setdefault(dd, {})[name] = float(sh)
+
+    by_month: dict[str, dict] = {}
+    for dd, srcs in sorted(per_day.items()):
+        m = by_month.setdefault(dd[:7], {"days": [], "srcs": {}})
+        m["days"].append(dd)
+        for k, v in srcs.items():
+            m["srcs"][k] = max(m["srcs"].get(k, 0.0), v)
+
+    out = []
+    for ym, m in sorted(by_month.items()):
+        days = sorted(m["days"])
+        mm = days[0][5:7]
+        if len(days) == 1:
+            tag, when = days[0][5:], days[0]
+        elif (pd.Timestamp(days[-1]) - pd.Timestamp(days[0])).days == len(days) - 1:
+            tag = f"{mm}-{days[0][8:]}…{days[-1][8:]}"
+            when = f"{ym}-{days[0][8:]}…{days[-1][8:]}"
+        else:
+            tag = mm + "-" + "/".join(d[8:] for d in days)
+            when = ym + "-" + "/".join(d[8:] for d in days)
+        srcs = dict(sorted(m["srcs"].items(), key=lambda kv: -kv[1]))
+        bits = ", ".join(f"{k} {v:.0%}" for k, v in srcs.items())
+        if "klines" in srcs:
+            why = "klines archive hole (the grid is klines-defined, so the rest read NaN)"
+        elif srcs and list(srcs)[0] == "oi":
+            why = "exchange-wide OI gap"
+        else:
+            why = "exchange-wide outage"
+        out.append({"month": ym, "tag": tag, "when": when,
+                    "desc": f"{why}: {bits}"})
+
+    # ---- ② 没有单日事件、但整月有相当比例合约缺源的月份 ----------------
+    seen = {e["month"] for e in out}
+    for ym, r in mc.iterrows():
+        if ym in seen:
+            continue
+        low = {c: float(r[f"{c}_worstday"]) for c in METRICS
+               if float(r[f"{c}_worstday"]) < 0.90}
+        if not low:
+            continue
+        c = min(low, key=low.get)
+        out.append({"month": ym, "tag": ym[2:], "when": ym,
+                    "desc": f"{c} short all month: {100 * (1 - low[c]):.0f}% of contracts "
+                            f"lack it even on the best-covered day (no single bad day)"})
+    out.sort(key=lambda e: e["month"])
+    return out
+
+
+def fig_monthly_coverage(mc: pd.DataFrame, events: list[dict]) -> Path:
+    """月度覆盖率：每个月画【最差一天】的覆盖率（四个源），事件用竖虚线标日期。
+
+    为什么不用月均值/中位数：一个月有 700+ 小时，单日缺口会被摊薄到看不出——
+    2022-10-02 停摆一天，月度中位数只掉到 0.9677；2022-02-26~28 的三天归档洞只
+    影响 37% 的合约，中位数根本不动。改成"当月最差一天的覆盖率"以后，两种事件都
+    按真实幅度显示：停摆日 → 0%，三天洞 → 63%（还有 63% 的合约有数据）。
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(12, 3.6))
-    x = range(len(mc))
-    # 画序即层序：后画的在上。四条线在高覆盖率区间常整段重叠，
-    # 所以都带透明度，否则会把下面那条完全盖住，看上去像"那条线没了"。
-    for col, color in [("index", "#6a1b9a"), ("oi", "#c62828"),
-                       ("mark", "#1565c0"), ("klines", "#2f7d32")]:
-        ax.plot(x, mc[col].to_numpy(), label=col, color=color,
-                linewidth=1.4, alpha=0.8)
-    ax.set_ylim(0.94, 1.005)
-    ax.set_ylabel("coverage", fontsize=9)
+    colors = {"index": "#6a1b9a", "oi": "#c62828",
+              "mark": "#1565c0", "klines": "#2f7d32"}
+    x = np.arange(len(mc))
+    months = list(mc.index)
+
+    fig, ax = plt.subplots(figsize=(12.4, 6.9))
+    fig.subplots_adjust(left=0.075, right=0.985, top=0.865, bottom=0.45)
+
+    for c in ["index", "oi", "mark", "klines"]:
+        ax.plot(x, 100 * mc[f"{c}_worstday"].to_numpy(), label=c, color=colors[c],
+                linewidth=1.6, alpha=0.88, marker="o", markersize=2.6)
+    ax.set_ylim(-5, 107)
+    ax.set_yticks([0, 25, 50, 75, 100])
+    ax.set_ylabel("contracts covered (%)\non the month's worst day", fontsize=9)
+    ax.axhline(100, color="#999999", linewidth=0.8, linestyle="--")
+    ax.legend(fontsize=9, ncol=4, loc="lower left", framealpha=0.92)
+    ax.grid(alpha=0.25, linewidth=0.6)
     step = 6
     ax.set_xticks(list(x)[::step])
-    ax.set_xticklabels(list(mc.index)[::step], rotation=40, ha="right", fontsize=8)
-    ax.axhline(1.0, color="#999999", linewidth=0.8, linestyle="--")
-    ax.legend(fontsize=9, ncol=4, loc="lower right")
-    ax.set_title(f"Monthly coverage across {len(mc)} months", fontsize=12)
-    ax.grid(alpha=0.25, linewidth=0.6)
-    fig.tight_layout()
+    ax.set_xticklabels(months[::step], rotation=35, ha="right", fontsize=7.5)
+
+    # ---- 事件：竖虚线 + 日期标签 ----
+    for ev in events:
+        if ev["month"] not in months:
+            continue
+        i = months.index(ev["month"])
+        ax.axvline(i, color="#333333", linewidth=0.9, linestyle=(0, (3, 2)), alpha=0.8)
+        ax.annotate(ev["tag"], xy=(i, 107), xycoords=("data", "data"),
+                    xytext=(0, 3), textcoords="offset points",
+                    rotation=90, ha="center", va="bottom", fontsize=7.5, color="#333333")
+
+    fig.suptitle(f"Coverage by month ({len(mc)} months): share of contracts covered by each "
+                 f"source on that month's worst day", fontsize=11.5)
+
+    # ---- 图下说明 ----
+    y0 = 0.325
+    fig.text(0.075, y0 + 0.045,
+             "Dashed lines: months with a day on which at least 20% of live contracts lack a "
+             "source. Shares are measured on the panel grid:",
+             fontsize=8.5, color="#222222")
+    for k, ev in enumerate(events):
+        yy = y0 - k * 0.028
+        fig.text(0.075, yy, ev["when"], fontsize=8, color="#222222")
+        fig.text(0.175, yy, ev["desc"], fontsize=8, color="#333333")
+    fig.text(0.075, y0 - len(events) * 0.028 - 0.012,
+             "The grid is defined by klines, so on the five klines-hole days the other three "
+             "sources read NaN even though the raw archive holds them (§3 ①).",
+             fontsize=7.5, color="#555555")
+
     out = FIG / "monthly_coverage.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     # 同上：暂存名必须仍以 .png 结尾
@@ -428,7 +648,7 @@ def fig_monthly_coverage(mc: pd.DataFrame) -> Path:
 
 def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFrame,
                          mc: pd.DataFrame, cause: dict,
-                         facts: dict, panel: dict, grid_drops: dict,
+                         facts: dict, grid_drops: dict,
                          n_members: int, n_member_syms: int, n_months_member: int,
                          fig_paths: list[Path]) -> str:
     """data_quality.md —— 总体概览 + 覆盖率 + 必须知道的缺。
@@ -474,7 +694,8 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     # ---- 2. Coverage -----------------------------------------------------
     A("## 2. Coverage")
     A("")
-    A("Coverage = non-missing hours / total hours, per contract and source.")
+    A("Coverage = non-missing hours / total hours, per contract and source, measured **on the")
+    A("panel grid** — §① explains why `mark` / `index` understate what the archive holds.")
     A("")
     A("| Source | median | at 100% | ≥ 0.999 | < 0.99 | min |")
     A("|---|---|---|---|---|---|")
@@ -483,6 +704,31 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
         A(f"| `{metric}` | {c.median():.4f} | {int((c >= 1.0).sum())} | "
           f"{int((c >= 0.999).sum())} | {int((c < 0.99).sum())} | {c.min():.4f} |")
     A("")
+    ex = (facts.get("at100_excl") or {})
+    out_days = sorted({o["start"][:10] for o in facts["outages"]})
+    if ex.get("mark") and ex.get("index"):
+        em, ei = ex["mark"], ex["index"]
+        cm = int((cov[cov["metric"] == "mark"]["coverage"] >= 1.0).sum())
+        ci = int((cov[cov["metric"] == "index"]["coverage"] >= 1.0).sum())
+        A(f"**The `at 100%` column is brittle** — it is set by {len(out_days)} exchange-wide")
+        A("outage days, each 24 h, on which most listed contracts lose both price sources:")
+        A(f"{' · '.join('`' + x + '`' for x in out_days)}.")
+        A(f"Excluding `{em['one_day_name']}` alone lifts `mark` / `index` from {cm} / {ci} to "
+          f"{em['one_day']} / {ei['one_day']};")
+        A(f"excluding all of them, to **{em['all_days']}** / **{ei['all_days']}**. "
+          "Read the `≥ 0.999` column instead.")
+        A("")
+    # 「覆盖率不均匀」原先在 §3 单列一条，但它就是对表格 min 列的解释 —— 放在表格下更顺。
+    oi_cov = cov[cov["metric"] == "oi"]
+    n_low = int((oi_cov["coverage"] < 0.90).sum())
+    worst = oi_cov.nsmallest(1, "coverage").iloc[0] if n_low else None
+    if facts["zero_syms"]:
+        z = " / ".join(f"`{s}`" for s in facts["zero_syms"])
+        A(f"**Coverage is not uniform.** {z} has **no `mark` / `index` at all** — that is the")
+        A("`min = 0.0000` in the table above"
+          + (f", and {n_low} contracts have `oi` coverage below 0.90 (`{worst['symbol']}`)."
+             if n_low else ". No contract has `oi` coverage below 0.90."))
+        A("")
     A("**The median hides the distribution, which is why both are shown.** `klines` is")
     A("complete almost everywhere; `mark` and `index` commonly differ from it by a few")
     A("hours. The distribution and its stability over time:")
@@ -491,9 +737,17 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
         # 链接相对于【报告自己的目录】（04_qa/），不是 data/ —— 否则 Markdown 里是死链
         A(f"![{p.stem}]({p.relative_to(QA).as_posix()})")
         A("")
-    A("The dips visible in the second figure are the first months — too few contracts have")
-    A(f"the {cfg.min_history_bars // 24}-day history yet — and the exchange-wide outages")
-    A("listed in §3.")
+    A("The second figure plots, for every month, the share of contracts that have a given")
+    A("source **on that month's worst day**, so a one-day hole cannot be averaged away: the")
+    A("2022-10-02 outage reads 0%, while the three-day `klines` hole of 2022-02-26…28 reads")
+    A("63% (63% of contracts still had data). The dashed lines and the list underneath are")
+    A("the seven months with a day on which at least 20% of live contracts lack a source:")
+    A("two `klines` archive holes (§①), four exchange-wide outages (one of them index-only,")
+    A("2022-07-31) and one exchange-wide OI gap (2024-02-16); a further month, 2023-04, has")
+    A("a contract-level `index` gap rather than a bad day. The first months are **not**")
+    A(f"incomplete (`{mc.index[0]}` reads {mc.iloc[0]['klines']:.4f} on `klines`); the older")
+    A("\"early months look unstable\" reading came from averaging *rows* across a denominator")
+    A("of about 100 contracts, which let one contract with no OI dominate the line.")
     A("")
     A("---")
     A("")
@@ -501,50 +755,55 @@ def build_quality_report(cfg, sample_end: str, d: pd.DataFrame, cov: pd.DataFram
     # ---- 3. Gaps you must know -------------------------------------------
     A("## 3. Gaps you must know")
     A("")
+    # 网格规则【一次讲清三个源】。旧版把 mark/index 与 oi 分在 ①② 两处各讲一遍。
     gd_m, gd_i = grid_drops.get("mark"), grid_drops.get("index")
+    oi_held = (grid_drops.get("oi") or {}).get("held")
     if gd_m and gd_i:
-        A(f"**① `mark` / `index` NaN does not always mean the data is absent.** Layer 2")
-        A(f"builds the grid from `klines`, so {gd_m['held']:,} `mark` hours and "
-          f"{gd_i['held']:,} `index` hours that")
-        A("the archive *does* hold are dropped wherever `klines` has no bar. They are `NaN`")
-        A("in the panel even though the price exists.")
+        parts = [f"{gd_m['held']:,} `mark`", f"{gd_i['held']:,} `index`"]
+        if oi_held:
+            parts.append(f"{oi_held:,} `oi`")
+        A("**① The grid rule drops data the archive holds.** Layer 2 builds the panel grid")
+        A(f"from `klines`, so hours without a bar drop out of the other sources too: "
+          f"{', '.join(parts)} hours.")
+        A("They read `NaN` even though the value exists, and all of them are recoverable from")
+        A("`data/raw/`.")
+        top = sorted(gd_m["days"].items(), key=lambda kv: -kv[1])[:5]
+        if top:
+            listed = " · ".join(f"`{dt}`" for dt, _ in sorted(top))
+            share = sum(n for _, n in top) / gd_m["held"]
+            A(f"The `mark` drops are concentrated: five days carry {share:.0%} of them —")
+            A(f"{listed} — because the `klines` archive itself is")
+            A("missing bars there while `mark` / `index` / `metrics` exist.")
         A("")
     if cause["a_hours"]:
         frac = cause["a_traded"] / max(cause["a_hours"], 1)
         A(f"**② `oi` has real holes.** {cause['a_hours']:,} hours "
           f"({cause['a_pairs']:,} contract-days) have **no file in the")
         A(f"archive at all**, and in {frac:.0%} of those hours the contract was actively")
-        A(f"trading. The rest of the `oi` gap — {cause['b_hours']:,} hours — is files that")
-        A("exist but carry no snapshot for those hours.")
+        if oi_held:
+            A("trading. The genuine snapshot gaps — files that exist but carry no snapshot")
+            A(f"for those hours — number **{cause['b_hours'] - oi_held:,}**.")
+        else:
+            A(f"trading. The rest of the `oi` gap — {cause['b_hours']:,} hours — is files that")
+            A("exist but carry no snapshot for those hours.")
         A("")
-    oi_cov = cov[cov["metric"] == "oi"]
-    n_low = int((oi_cov["coverage"] < 0.90).sum())
-    if facts["zero_syms"]:
-        z = " / ".join(f"`{s}`" for s in facts["zero_syms"])
-        A(f"**③ Coverage is not uniform across contracts.** {z} has **no `mark` / `index`")
-        A("at all** (0 hours present out of its grid),")
-    else:
-        A("**③ Coverage is not uniform across contracts.** No contract is missing a source")
-        A("entirely, but")
-    if n_low:
-        worst = oi_cov.nsmallest(1, "coverage").iloc[0]
-        A(f"and {n_low} contracts have `oi` coverage below 0.90 — the lowest is "
-          f"`{worst['symbol']}`")
-        A(f"at {worst['coverage']:.4f}.")
-    else:
-        A("no contract has `oi` coverage below 0.90.")
-    A("")
-    if facts["outages"]:
-        days = sorted({o["start"][:10] for o in facts["outages"]})
-        A(f"**④ Exchange-wide outages.** {len(days)} days, each 24 h, on which most listed")
-        A(f"contracts lose both price sources at once: "
-          f"{' · '.join('`' + x + '`' for x in days)}.")
+    # 旧版【没有】这一条：不带任何标记、最容易被当成正常观测的一类。
+    nz = facts.get("n_zero_trade") or 0
+    if nz:
+        zt = facts.get("zero_trade_top")
+        who = (f"; `{zt.index[0]}` alone accounts for {zt.iloc[0]:,} of them"
+               if zt is not None and len(zt) else "")
+        A(f"**③ Hours that look like observations but are not.** {nz:,} hours carry a `klines`")
+        A("bar with `quote_volume == 0` (and zero `trades`): the contract was halted and the")
+        A(f"exchange kept publishing a frozen price{who}. They carry **no flag** —")
+        A("`bar_missing` is `False` — and `close.pct_change()` returns exactly 0 on every one")
+        A("of them. Filter with `quote_volume > 0` before any return or volatility work.")
         A("")
-    A("**⑤ Three things look missing but are not — do not filter or fill them.**")
-    A(f"`funding_rate` is null in {panel['funding_null_pct']:.2%} of rows (it only exists")
-    A("at settlement hours); `funding_interval_hours` is forward-filled;")
-    A(f"`oi == 0` ({facts['oi_zero_rows']:,} rows) is a market-wide publishing event, not a")
-    A("defect — downstream may filter with `oi > 0`.")
+    # 旧 ⑤ 的两条 funding 在 data_dictionary.md 已有专节（含同一个 16.65% 的数），
+    # 这里只留"该怎么做"的动作警告；`oi == 0` 那份字典里没有，必须留。
+    A(f"**④ `oi == 0` is not a gap.** {facts['oi_zero_rows']:,} rows are a market-wide")
+    A("publishing event, not a defect — downstream may filter with `oi > 0`. The funding")
+    A("columns are sparse and forward-filled by design; see the data dictionary.")
     A("")
     A("---")
     A("")
@@ -991,7 +1250,8 @@ def main() -> int:
         log("--skip-figures：跳过 PNG")
     else:
         try:
-            fig_paths = [fig_coverage_distribution(cov), fig_monthly_coverage(mc)]
+            fig_paths = [fig_coverage_distribution(cov),
+                         fig_monthly_coverage(mc, month_events(mc, d))]
             for p in fig_paths:
                 log(f"    -> {p.relative_to(DATA).as_posix()}  "
                     f"{p.stat().st_size/1024:.1f} KB")
@@ -1001,7 +1261,7 @@ def main() -> int:
 
     # ---- 7. 质量报告 ----------------------------------------------------
     q = build_quality_report(cfg, args.sample_end, d, cov, mc, cause,
-                             facts, panel, grid_drops, n_members, n_member_syms,
+                             facts, grid_drops, n_members, n_member_syms,
                              n_months_member, fig_paths)
     (QA / "data_quality.md").write_text(q, encoding="utf-8", newline="\n")
     log(f"    -> 04_qa/data_quality.md            {len(q):,} 字符")

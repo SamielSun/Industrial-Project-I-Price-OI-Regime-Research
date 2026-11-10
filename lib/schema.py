@@ -44,7 +44,8 @@ import pandas as pd
 __all__ = [
     "SchemaViolation", "Column", "TableSchema",
     "SEMANTIC_TO_PANDAS", "pandas_dtype_of", "normalize_dtype",
-    "SOURCE_SCHEMAS", "LAYER2_SCHEMAS", "FEATURES_1H", "ALL_SCHEMAS", "get_schema",
+    "SOURCE_SCHEMAS", "LAYER2_SCHEMAS", "FEATURES_1H", "REGIME_LABELS",
+    "ALL_SCHEMAS", "get_schema",
     "KLINE_12_NAMES", "raw_source_columns", "validate",
 ]
 
@@ -279,8 +280,56 @@ FEATURES_1H = TableSchema(
     note="密集网格：覆盖 [oi_archive_start, last_active_date]，缺行显式置 null",
 )
 
+
+# ============================================================================
+# Phase 2：regime_labels —— 三频率的标签表
+#
+# ⚠️ 本表的 ts / ts_end 间隔【随 freq 变】（1h / 4h / 8h），所以 validate()
+#    必须用 check_ts_end=False 调用 —— 那个内建检查断言的是「间隔恒 1h」，
+#    只对 1h 网格成立。生成器里改成按 freq 断言 ts_end − ts == freq。
+# ============================================================================
+
+REGIME_LABELS = TableSchema(
+    name="regime_labels",
+    columns=_cols(
+        ("symbol", "string"),
+        ("ts_end", "timestamp", "决策时刻，主键之一；Phase 3 的前向收益从这里起算"),
+        ("freq", "string", "1h / 4h / 8h / 1d（1d 是稳健性对照，见 config 注释）"),
+        ("ts", "timestamp", "bar 起点 = ts_end − freq"),
+        ("close", "float64", "决策时刻的价格"),
+        ("oi", "float64", "决策时刻的持仓量（币，非美元）"),
+        ("price_change", "float64", "跨度 n_bars 根 bar 的收益"),
+        ("oi_change", "float64", "同跨度的 oi 变化率"),
+        ("price_thr", "float64", "当时的 p70 阈值（逐合约、trailing 90 日历天）"),
+        ("oi_thr", "float64", "同上，OI 轴"),
+        ("regime", "string", "R1 / R2 / R3 / R4 / undefined"),
+        ("excl_reason", "string",
+         "ok / no_price / halt / no_oi / span_gap / warmup（互斥）"),
+        ("funding_negative", "bool", "f ≤ p25（note 的 Negative funding）"),
+        ("funding_neutral", "bool", "p25 < f ≤ p75（note 的 Neutral funding）"),
+        ("funding_high", "bool", "f > p75（note 的 High positive）"),
+        ("funding_extreme", "bool", "f > p90（note 的 Extreme）"),
+        ("funding_p25", "float64", "当时的 funding 分位阈值"),
+        ("funding_p75", "float64"),
+        ("funding_p90", "float64"),
+        ("mkt_vol_state", "string",
+         "low / mid / high / unknown（市场条件：波动率三分位）"),
+        ("in_universe", "bool", "该 (symbol, 当月) 是否为时点 universe 成员"),
+    ),
+    primary_key=("symbol", "ts_end", "freq"),
+    source_timestamp_col="ts_end",
+    note="Phase 2 产出，按 freq= 分区（4 频率 × 57 月 = 228 个文件）。"
+         "⚠️ 四个 funding bool 是【重叠条件】不是分区：funding_high ⊇ funding_extreme，"
+         "两者同时为 true 是正常的（实测 p75 == p90 出现在 63.1% 的观测上）。"
+         "⚠️ in_universe 的月份取 ts_end 的月（membership 的 month 是决策时刻）。"
+         "⚠️ mkt_vol_state 【不参与筛选】，只做分组：来自 (high−low)/close 的每小时横截面"
+         "中位经 24h 平滑后的 trailing 1 年 1/3、2/3 分位。它是市场级变量 —— 同一 ts_end "
+         "上所有合约取值相同。",
+)
+
 ALL_SCHEMAS: dict[str, TableSchema] = {
     **SOURCE_SCHEMAS, **LAYER2_SCHEMAS, FEATURES_1H.name: FEATURES_1H,
+    REGIME_LABELS.name: REGIME_LABELS,
 }
 
 
@@ -316,6 +365,7 @@ def validate(
     schema: TableSchema | str,
     *,
     check_ts_end: bool = True,
+    all_null_ok_cols: tuple[str, ...] = (),
 ) -> None:
     """校验 DataFrame 是否满足契约。失败抛 SchemaViolation（一次报全部问题）。
 
@@ -326,6 +376,8 @@ def validate(
       4. 主键无重复                  实测源文件存在完全一致的副本行
       5. 主键已排序                  实测近期文件时间戳非单调
       6. 无整列为空                  整列解析失败（列名对、类型对、全 NaN）
+                                     all_null_ok=True 时跳过 —— 只在【整块都是预热期】
+                                     的 chunk 上使用（阈值列合法地全为 NaN）
       7. 标识列落在整小时            挡毫秒/秒单位搞混
       8. ts_end - ts == 1h           同上，独立第二道
       9. 标识列为 tz-aware UTC       挡 naive datetime
@@ -389,9 +441,16 @@ def validate(
     # 单合约的 chunk 里某一列全空是正常的 —— 实测 TLMUSDT 在 2022-07 归档里
     # 一根 OI 都没有，整列自然为空。若在单合约下也判失败，
     # --subset <一个合约> 的冒烟运行必然误报。
+    # all_null_ok_cols：豁免【派生列】。本检查要挡的是"整列解析失败"，而派生列不是
+    # 从源解析来的 —— 它们的空值本身是有意义的数据。实测 regime_labels 的
+    # price_thr / oi_thr 在 1d 频率的 2021-12 合法地整列为空：1d 序列从 12-02 才有
+    # 第一个决策点，30 天预热刚好跨完整月，那个 chunk 一根可标注的观测都没有。
+    # 默认空元组，其余场景一律照旧拦截。
     n_syms = df["symbol"].nunique() if "symbol" in df.columns else n_rows
     if n_syms > 1:
         for c in common:
+            if c in all_null_ok_cols:
+                continue
             if n_rows > 0 and df[c].isna().all():
                 problems.append(
                     f'列 "{c}" 整列为空（{n_rows} 行 / {n_syms} 个合约全 NaN）。'
