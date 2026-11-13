@@ -28,6 +28,7 @@ COLORS = {"negative": "#b2182b", "neutral": "#2166ac",
           "high": "#e08214", "extreme": "#762a83"}
 HORIZONS = [1, 4, 8, 24]
 MARKERS = {1: "o", 4: "s", 8: "^", 24: "D"}
+MARKERS_F = {"R1": "o", "R2": "s", "R3": "^", "R4": "D"}
 
 
 def f_p4_4() -> None:
@@ -90,5 +91,45 @@ def f_p4_4() -> None:
     print(f"wrote {OUT / 'f_p4_4_path.png'}")
 
 
+def f_p4_5() -> None:
+    d = pd.read_parquet(TBL / "p4_5_beta.parquet")
+    d = d[(d["h"] == 1) & (d["weighting"] == "event")
+          & (d["outcome"].isin(["y_raw", "rev"]))].copy()
+    order = [(r, f) for r in ["R1", "R2", "R3", "R4"] for f in FUNDS]
+    fig, axes = plt.subplots(1, 2, figsize=(10.8, 6.0), sharey=True)
+    for ax, dv, xlab, ttl in (
+            (axes[0], "y_raw", "beta, bp (y_raw)", "P4-5a · return gap (bp)"),
+            (axes[1], "rev", "beta, pp (rev)", "P4-5b · reversal gap (pp)")):
+        s = d[d["outcome"] == dv].set_index(["regime", "funding"])
+        y = np.arange(len(order))
+        for i, (r, f) in enumerate(order):
+            row = s.loc[(r, f)]
+            ax.errorbar(float(row["beta"]), i,
+                        xerr=1.96 * float(row["se"]), fmt=MARKERS_F[r],
+                        color=COLORS[f], ms=4.5, lw=0.9, capsize=2,
+                        mec="white", mew=0.4, zorder=3)
+        ax.axvline(0, color="0.35", lw=0.8, zorder=1)
+        ax.set_yticks(y)
+        ax.set_yticklabels([f"{r} {f}" for r, f in order], fontsize=6.8)
+        ax.set_xlabel(xlab, fontsize=8.5)
+        ax.set_title(ttl, fontsize=9.5)
+        ax.grid(axis="x", lw=0.3, alpha=0.4)
+        ax.tick_params(labelsize=7.2)
+    axes[0].set_ylim(-0.6, len(order) - 0.4)
+    fig.suptitle("P4-5 · Beta vs matched benchmark (same direction, same funding), "
+                 "h=1, event-weighted", fontsize=10.5)
+    fig.text(0.5, 0.01,
+             "Positive = regime beats the same-direction, same-funding benchmark "
+             "(cell 0 + the other OI state).  Bars = 95% CI.  BH 16 + drop5 for "
+             "y_raw/rev; fwd is descriptive.", ha="center", fontsize=6.8,
+             color="#4a5568")
+    fig.tight_layout(rect=(0, 0.06, 1, 0.93))
+    OUT.mkdir(parents=True, exist_ok=True)
+    fig.savefig(OUT / "f04_beta_forest.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {OUT / 'f04_beta_forest.png'}")
+
+
 if __name__ == "__main__":
     f_p4_4()
+    f_p4_5()
