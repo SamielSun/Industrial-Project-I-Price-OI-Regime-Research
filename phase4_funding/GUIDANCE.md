@@ -332,7 +332,9 @@ cont = 1 − rev
 
 **样本。** P4 样本（`events` 表的 `mfe_h`/`mae_h`/`mdd_h`）。
 
-**面。** 4×4；每格 `mfe_mean`、`mae_mean`、`mdd_mean`、`mdd_p10/p50/p90`、n。MFE/MAE 已按方向翻正（Phase 3 build 的口径）；MDD ≤ 0。
+**面。** 4×4；每格 `mfe_mean`、`mae_mean`、`mdd_mean`、`mdd_p10/p50/p90`、n；均值保留在主表。MFE/MAE 已按方向翻正（Phase 3 build 的口径）；MDD ≤ 0。
+
+**与 Phase 3 的关系。** Phase 3 `descriptive_path` 是它的 marginal（4 state × 4 h，所有 funding 混合）；本块是同一张表按 funding 的条件分解。不重复检验、不做 reconciliation；均值被极端路径主导只作表注，`mdd_p10/p50/p90` 并列。
 
 **推断。** 描述性，不做检验。
 
@@ -340,7 +342,7 @@ cont = 1 − rev
 
 **note。** 🟡（Q3 / R4 stress）。
 
-**输出。** `phase4_funding/tables/p4_4_path.parquet` + `.csv`。
+**输出。** `phase4_funding/tables/p4_4_path.parquet` + `.csv`；`phase4_funding/figures/f_p4_4_path.png`（4 regime 面板，MFE vs |MAE|，颜色 = funding，标记 = 期限，p50）。
 
 ---
 
