@@ -1,10 +1,21 @@
-# Phase 4 — Funding × Regime 交互 · 实施指南
+# Phase 4 — Funding × Regime 条件事件研究 · 实施指南
 
-**状态。** 设计已锁定。本文件规定 Phase 4 做什么、怎么做。与 `HANDOFF.md` §3.5–3.7 冲突时以本文件为准；导师的 idea note 是 Phase 4 的最终依据。本文件不含实现代码。
+**状态。** 设计 v2，已锁定。本文件取代旧版 E1–E5（16-γ 原型及其后续），也取代 `HANDOFF.md` §3.5–3.7 中与本文件冲突的部分；导师的 idea note 是 Phase 4 的最终依据。本文件不含实现代码。
+
+**核心原则。** Phase 3 是**无条件** event study（regime R 之后发生什么）；Phase 4 是**同一套 event study 的 funding 条件版本**（在 funding 状态 F 下，regime R 之后发生什么）。note 的四个问题和六行示例，是 Phase 4 条件网格上的**特定切片**；Phase 4 不依赖 Phase 3 的结论来回答它们。
 
 **读者。** 实现者与学术导师。sponsor 看最终表格，不看本文件。
 
-**被取代的产物。** 旧的 `l1_cellmeans` / `l2_interactions` 表（16-γ 设计）已在清理中删除；E1/E2 取代它们，不要引用旧表。
+**标记说明。** 本文件的表格用文本标记，不是真底色（Markdown 不支持单元格底色；真底色需要 XLSX，本次不做）：
+
+| 标记 | 含义 |
+|---|---|
+| 🔵 | note §7 的四个 example research questions 之一 |
+| 🟡 | note §11 的六行 example output table 之一 |
+| 🟣 | note §10 的 4×4 output（forward return + volatility by bucket） |
+| — | 探索性，不对应 note 的具体问题 |
+
+一个格可以同时有多个标记。
 
 ---
 
@@ -38,11 +49,9 @@ note 对 Phase 4 的唯一直接定义在 §10：
 
 对 Phase 4 的含义：
 
-- 交付物是一张**分层的 4×4 条件表现表**，不是模型。
-- 示例只是这张表的切片，不是完整的假设清单。
-- note 没有规定回归、对比家族、多重校正或经济阈值。
-- note §9 的 baseline（price alone、OI alone、funding alone、random timing）属于 Phase 3：实验 5–9 与实验 8 已经覆盖，Phase 4 不重复。
-- E2 的 12 个 within-regime 对比是**项目**对 note 示例问题的形式化，不是 note 的要求；它存在是因为项目需要一个预先声明的推断层来支撑 Phase 5 闸门。写作时必须标注这一点。
+- 主交付物是**分层的 4×4 条件表现表**；note 的四个问题和六行是这张表上的切片。
+- note 的 §9 baseline（price alone、OI alone、funding alone、random timing）属于 Phase 3：实验 5–9 与实验 8 已覆盖，Phase 4 不重复。
+- note 没有规定回归、对比家族、多重校正或经济阈值；本文件的推断层是**项目**为了回答 note 与 Phase 5 闸门而加的，写作时标注。
 
 ---
 
@@ -50,17 +59,21 @@ note 对 Phase 4 的唯一直接定义在 §10：
 
 | 项 | 锁定选择 |
 |---|---|
-| 主对象 | **E1**：4×4 条件面。**E2**：12 个 within-regime funding 对比。 |
+| 主对象 | **P4-1…P4-7** 的 funding 条件事件研究；note 的四个问题 + 六行是其中的预声明切片。 |
 | Funding 状态 | 按 note 嵌套定义：`negative` f ≤ p25；`neutral` p25 < f ≤ p75；`high` f > p75（**包含 extreme**）；`extreme` f > p90。`high ⊇ extreme`。 |
 | Regime | R1 价涨 + OI 增；R2 涨 + OI 减；R3 跌 + OI 增；R4 跌 + OI 减。 |
-| 收益口径 | `fwd_h`（raw，note §8 A）与 `y_raw`（市场中性，Phase 3 headline）。判定用 `y_raw`；`fwd_h` 是 note 字面的描述口径。 |
-| 波动口径 | 事件后 h 小时的已实现波动 `rv`。E1 报 `rv` 的算术平均与中位数（Phase 3 口径）。E2 用 `lrv = log(rv)`，报 `exp(对比) − 1` 的 %。 |
+| Return 口径 | `fwd_h`（raw，note §8 A）与 `y_raw`（市场中性，Phase 3 headline）。判定用 `y_raw`；`fwd_h` 是 note 字面的描述口径。 |
+| Volatility 口径 | 事件后 h 小时的已实现波动 `rv`；P4-2 报算术均值/中位数，推断用 `lrv = log(rv)`，报 `exp(对比) − 1` 的 %。 |
+| Reversal/Continuation | `rev = 1{fwd_h · dir < 0}`（raw 符号，note §8 C 的定义）；`cont = 1 − rev`；LPM + FE。 |
+| Path | MFE / MAE / MDD（events 表已有），按 cell 描述。 |
+| Benchmark | 同方向、同 funding 档、价格超阈但**不是该 regime** 的行（cell 0 + 另一个 OI 状态）；用于 P4-5 的 β。 |
+| Stress | R4 × market-vol state（low/mid/high）为主；R4 × funding stress（ext/neg）为第二层。 |
 | 期限 | 1、4、8、24 小时。 |
 | 权重 | event 等权为主；合约-日等权（one vote per contract-day）为稳健性。 |
-| 推断 | 合约 + 月份双向固定效应；CGM 双向聚类 SE；每个 12 检验家族内 BH；逐对比 drop5。**不做 16-γ ANOVA。** |
-| 表内统计量 | 均值 + 中位数；均值的聚类 CI；n 单独一张表。E1 不挂 p 值。 |
-| Phase 5 闸门 | 只看收益：任意 `y_raw` 对比过 BH 12 + drop5 即开。波动不 gate，只作风险 overlay。 |
-| Out of scope | baseline、IC、绝对 bp/day、β 附录、16-γ 交互、阈值优化、跨交易所、Phase 5 回测、R4 stress（Phase 3 实验 14b）。 |
+| 推断 | 合约 + 月份双向固定效应；CGM 双向聚类 SE；每个（块 × 期限 × 权重）一个 BH 家族；逐对比/β 做 drop5。 |
+| note 切片 | 四个问题 + 六行是各自块家族内的**预声明子集**；不另开小家族。 |
+| Phase 5 闸门 | **P4-1a + P4-3 的 note 切片**过 BH + drop5 即开；P4-2 作 risk overlay；P4-5 作旁证。 |
+| Out of scope | IC、绝对 bp/day、阈值优化、跨交易所、Phase 5 回测、by-symbol（Phase 3 保留）、4h/8h（后续）。 |
 
 ---
 
@@ -72,17 +85,17 @@ note 对 Phase 4 的唯一直接定义在 §10：
 
 | 项 | 值 |
 |---|---|
-| Universe | 按过去 30 天报价成交额排名的月度 top-50，四道闸；249 个合约；54 个月（2022-03 … 2026-08）。 |
+| Universe | 月度 top-50（过去 30 天报价成交额），四道闸；249 个合约；54 个月（2022-03 … 2026-08）。 |
 | 事件 | 1h bar，|Δprice| 与 |ΔOI| 同时超过该合约过去 90 天 p70（≥30 天历史）。 |
-| Headline 样本 | `in_universe` 且 `excl_reason == "ok"`；`cell ∈ {1,2,3,4}`；h=1 有 256,076 个有有效前向收益的事件行。 |
-| 无 funding 状态 | 219 个事件（0.09%）四个 funding bool 全 False（p25 缺失）。从 E1/E2/E5 排除；报告数量。 |
-| E1/E2 样本（h=1） | 255,857 行。h=4/8/24 只差 `ok_{h}h` 的损失。 |
-| 合约-月 | 2,700 = 50 个合约 × 54 个月。 |
-| lrv 缺失 | h=1：2,244 个事件行（0.9%）；只在波动率分析中剔除。 |
+| Headline | `in_universe` 且 `excl_reason == "ok"`；`cell ∈ {1,2,3,4}`；h=1 有 256,076 个有有效前向收益的事件行。 |
+| 无 funding 状态 | 219 个事件（0.09%）四个 funding bool 全 False（p25 缺失）；从 P4 全部块排除并报告。 |
+| P4 样本（h=1） | 255,857 行。h=4/8/24 只差 `ok_{h}h` 的损失。 |
+| 合约-月 | 2,700 = 50 × 54。 |
+| lrv 缺失 | h=1：2,244 行（0.9%）；只在波动率块剔除。 |
 
 ### 2.2 Regime
 
-`cell` 1–4，沿用 Phase 2/3 的定义，不改。
+`cell` 1–4，沿用 Phase 2/3 定义，不改。
 
 ### 2.3 Funding 状态——嵌套，不是分区
 
@@ -95,9 +108,9 @@ high     : f > p75        # 包含 extreme
 extreme  : f > p90        # high 的子集
 ```
 
-四列**不是互斥的**。当 p75 == p90 时，`high` 与 `extreme` 是同一批行。
+四列**不是互斥的**。p75 == p90 时，`high` 与 `extreme` 是同一批行。
 
-仅用于估计，定义四个互斥的潜在状态：
+仅用于估计，定义四个互斥潜在状态：
 
 ```
 s0 = negative
@@ -106,36 +119,45 @@ s2 = high-only   (p75 < f ≤ p90)
 s3 = extreme     (f > p90)
 ```
 
-报告的 `high` 列是并集 `s2 ∪ s3`；它的均值是 `s2` 与 `s3` 均值的样本量加权平均。互斥状态不进主表；它们是 E5 的附录拆分，也是 E2 的估计基础。
+报告的 `high` 列是并集 `s2 ∪ s3`；均值按样本量加权。互斥状态进 P4-7 附录和 P4-5/P4-3 的估计。
 
-### 2.4 收益与波动因变量
+### 2.4 Outcome 与数据来源
 
-- `fwd_h = close_{t+h} / close_t − 1`。**不在 panel 里**；从 `data/06_event_study/forward/freq=1h`（或 `events/events_1h.parquet`）按 `(symbol, ts_end)` 关联。panel 的 `symbol` code 通过 `panel/freq=1h/symbols.parquet` 映射成字符串；`hour` 通过 `ts_end = 2021-12-01 UTC + hour 小时` 映射。
-- `y_raw` 已在 panel 里：`fwd_h` 减去同时刻全市场池（7,010,789 行）的等权均值。市场中性、不截尾、不翻正。
-- `rv_h` 是事件后 h 小时的已实现方差；`lrv = log(rv_h)`。两者都在 forward/panel 管线里；panel 携带 `lrv`。
+| 变量 | 来源 | 说明 |
+|---|---|---|
+| `fwd_h` | `events/events_1h.parquet`（或 `forward/freq=1h`） | raw 前向收益，`close_{t+h}/close_t − 1`。 |
+| `y_raw` | `panel/freq=1h/h={h}.parquet` | 市场中性前向收益（减同时刻全市场池 7,010,789 行等权均值）。 |
+| `rv_h` / `lrv` | `events` / `panel` | 已实现方差 / `log(rv)`。 |
+| `rev_h` / `cont_h` / `hit_h` | `events` | Phase 3 已算好的 0/1；同时用 `fwd_h · dir` 重算并校验。 |
+| `mfe_h` / `mae_h` / `mdd_h` | `events` | Phase 3 实验 11 的路径列。 |
+| `mkt_vol_state` | `events` / `labels` | low / mid / high / unknown。 |
+| funding 状态 | `labels`（`funding_negative/neutral/high/extreme`、p25/p75/p90） | 按 `(symbol, ts_end)` 关联。 |
+| benchmark（cell 0） | `panel` + `forward` | 同方向、同 funding 档、价格超阈但 OI 安静的行。 |
 
-单位：收益用 bp（×1e4）；波动水平用 %（rv × 100）；波动对比用 %（`exp(Δlog rv) − 1`）。
+关联键统一用 `(symbol, ts_end)`；panel 的 `symbol` code 通过 `panel/freq=1h/symbols.parquet` 映射；`hour` 通过 `ts_end = 2021-12-01 UTC + hour 小时` 映射。
+
+单位：收益 bp（×1e4）；波动水平 %（rv × 100）；波动对比 %（`exp(Δlog rv) − 1`）；反转/延续概率用百分点（pp）或 0–1 小数。
 
 ### 2.5 权重
 
-- **Event 等权**：每个事件行一个观测。这是 note 的事件研究单位。
-- **合约-日等权**：每个 `(symbol, UTC 日, regime, 互斥 funding 状态)` 一个观测；组内对因变量取均值；同样的 FE 模型跑在组均值上。日 = `hour // 24`，与 Phase 3 实验 15 一致。
-- 对嵌套的 `high` 列：event 权重下，并集均值用事件数加权；合约-日权重下，用合约-日-格数加权。不要混。
-- 合约-日权重是 note §5 "daily aggregation for robustness" 在 Phase 4 的对应物。单独的日聚合 4×4（E6）可选，不在锁定设计里；Phase 3 实验 15 已覆盖 regime 层的日聚合。
+- **Event 等权**：每个事件行一个观测；note 的事件研究单位。
+- **合约-日等权**：每个 `(symbol, UTC 日, regime, 互斥 funding 状态)` 一个观测；组内平均因变量；同样的 FE 模型跑在组均值上。日 = `hour // 24`（Phase 3 实验 15）。
+- 对嵌套 `high` 列：event 权重用事件数；合约-日权重用合约-日-格数。不要混。
+- 合约-日权重是 note §5 "daily aggregation for robustness" 的 Phase 4 对应物；单独的日聚合（可选块，不在 P4-1…P4-7 里）不在锁定设计内。
 
 ---
 
 ## 3. 估计量与记号
 
-对 regime `r` 与互斥 funding 状态 `s`，令 `m_{r,s}` 为扣掉合约+月份固定效应后的格均值：
+对 regime `r` 与互斥 funding 状态 `s`，令 `m_{r,s}` 为扣合约+月份 FE 后的格均值：
 
 ```
 y_it = Σ_{r,s} m_{r,s} · 1{regime=r, state=s} + α_contract + λ_month + ε_it
 ```
 
-16 个互斥格 dummy 是分区；与 FE 常数有一个共线（16 个 dummy 之和恒为 1）。丢掉一个参照格（R4 × s3），估 15 个系数，16 个 `m` 只识别到常数；所有报告量都是差，常数会抵消。
+16 个互斥格 dummy 是分区；与 FE 常数有一个共线（16 个 dummy 之和恒为 1）。丢一个参照格（R4 × s3），估 15 个系数，16 个 `m` 只识别到常数；所有报告量都是差，常数抵消。
 
-报告的嵌套格均值：
+嵌套格均值：
 
 ```
 μ(r, neg)     = m_{r,s0}
@@ -144,81 +166,95 @@ y_it = Σ_{r,s} m_{r,s} · 1{regime=r, state=s} + α_contract + λ_month + ε_it
 μ(r, extreme) = m_{r,s3}
 ```
 
-`n` 是当前权重下该格的观测数（事件行或合约-日-格）。权重是实现的样本量，视为固定。
+`n` 是当前权重下该格的观测数（事件行或合约-日-格）；权重是实现的样本量，视为固定。
 
-对比向量及其 SE 是 15 个系数的线性组合，用 CGM 协方差：
+对比与 β 的 SE 都是 15 个系数的线性组合，用 CGM 协方差：
 
 ```
 V = V_contract + V_month − V_contract×month
 SE(c) = sqrt(c' V c)
 ```
 
-12 个对比的 `c` 见 §5.2。
+**P4-3 的 LPM**：因变量 `rev` 是 0/1；同样的 15 个格 dummy + 合约/月 FE；系数是概率差；SE 用同一 CGM。`cont = 1 − rev` 同表报告（`cont` 的概率 = `1 − rev` 的概率；hit rate 与 `cont` 在事件方向上一致，Phase 3 已验）。
+
+**P4-5 的 β**：对每个 regime `r`、funding 列 `f`，样本 = 该 regime 的行 + 同方向、同 `f`、非该 regime 的 benchmark 行（cell 0 + 另一个 OI 状态）；dummy=1 为该 regime，0 为 benchmark；合约/月 FE；β 是「控制构成后，该 regime 相对同向 benchmark 的超额」。16 个 β（4 regime × 4 funding 列）。
 
 ---
 
-## 4. E1 —— 4×4 条件面
+## 4. 实验地图（主表）
 
-**目的。** note 的字面输出：按 bucket 给 forward return 与 volatility。
+| ID | 实验块 | 主 outcome | 样本 | 主要对比 | 推断 | note |
+|---|---|---|---|---|---|---|
+| **P4-1** | 条件收益 | `fwd_h`、`y_raw` 均值/中位数 | headline | **P4-1a**：12 个 within-regime（各 funding 档 vs neutral）；**P4-1b**：12 个 within-funding（各 regime vs R4） | FE + CGM；BH 12；drop5 | 🔵🟡🟣 |
+| **P4-2** | 条件波动 | `rv` 水平、`lrv` 对比 | headline | 12 个 within-regime | FE + CGM；BH 12；drop5 | 🟣 |
+| **P4-3** | 条件反转/延续 | `rev`、`cont` | headline | 12 个 within-regime；另报 benchmark 水平 | LPM + FE；BH 12；drop5 | 🔵🟡 |
+| **P4-4** | 条件路径 | MFE / MAE / MDD | headline | 按 cell | 描述（均值/中位数/p10/p90） | 🟡 |
+| **P4-5** | 条件 β | `y_raw`/`fwd` 与 `rev` vs benchmark | regime + benchmark | 16 β × 2 outcome | FE/LPM + CGM；BH 16；drop5 | 🔵🟡 |
+| **P4-6** | 条件 stress | R4 × market-vol；R4 × funding stress | R4 + benchmark | 按 state | 描述 + 小家族 | 🟡 |
+| **P4-7** | 稳健性 | all | all | nested vs disjoint、event vs 合约-日、drop5、薄格 | 诊断 | — |
 
-**样本。** E1/E2 样本（§2.1），一次一个期限。
+**图例**：🔵 = §7 问题；🟡 = §11 六行；🟣 = §10 output；— = 探索性。
 
-**表布局。** 行 R1–R4；列 `negative / neutral / high（含 extreme）/ extreme`；每个期限、每种权重一张表。
+---
 
-每格报告：
+## 5. note 切片地图
+
+### 5.1 §7 的四个问题
+
+| 问题 | Phase 4 切片 | 类型 | note |
+|---|---|---|---|
+| Q1 R1 在 neutral 时更好？ | P4-1a `C1/C2/C3(R1)`（neutral vs 其他档，符号反读）+ P4-5a `β(R1, neu)` | 均值/β | 🔵 |
+| Q2 R1 在 extreme 时 reversal？ | P4-3 `C3(R1)`（ext vs neu 的反转概率）+ P4-1a `C3(R1)`（均值符号）+ P4-5b `β(R1, ext)` | 概率/均值/β | 🔵 |
+| Q3 R4 在 stress 后更快 mean-revert？ | P4-6 `R4 × stress` + P4-4 `R4` 路径 + P4-1a `R4` 的 1/4/8/24h 梯度 | 描述/路径 | 🔵 |
+| Q4 R3 在 neutral 时 continuation？ | P4-3 `C1/C2/C3(R3)`（neutral vs 其他档；cont = 1−rev）+ P4-1a `C1/C2/C3(R3)` + P4-5b `β(R3, neu)` | 概率/均值/β | 🔵 |
+
+### 5.2 §11 的六行
+
+| §11 行 | Phase 4 切片 | note |
+|---|---|---|
+| R1 + neutral → continuation | P4-1a `(R1, neu)` 均值 + P4-3 `(R1, neu)` 的 `cont` | 🟡 |
+| R1 + extreme positive → crowded reversal | P4-3 `C3(R1)` + P4-1a `C3(R1)` + P4-5b `β(R1, ext)` | 🟡 |
+| R2 + any → short-covering exhaustion | P4-1a R2 四档 profile + P4-3 R2 四档 `rev/cont` | 🟡 |
+| R3 + neutral → downside continuation | P4-1a `(R3, neu)` 均值 + P4-3 `(R3, neu)` 的 `cont` | 🟡 |
+| R3 + extreme negative → short-squeeze | P4-1a `C1(R3)`（negative vs neutral）+ P4-3 `C1(R3)` | 🟡 |
+| R4 + stress / high vol → mean reversion | P4-6 + P4-4 | 🟡 |
+
+### 5.3 §10 的 4×4 output
+
+| note §10 | Phase 4 切片 | note |
+|---|---|---|
+| 4×4 table，forward return + volatility by bucket | **P4-1 + P4-2** 的全部 4×4 面 | 🟣 |
+
+### 5.4 代理口径
+
+- **extreme negative**：标签没有单边 extreme-negative 档；note 的 "extreme negative" 在 R3 short-squeeze 上用 `negative`（f ≤ p25）代理。表注写明。
+- **liquidation / stress**：没有 liquidation 数据；P4-6 用 market-vol state（low/mid/high）代理，funding stress（ext/neg）作第二层。表注写明。
+
+---
+
+## 6. P4-1 — 条件收益
+
+**目的。** note §10 的 return 切片；Q1/Q2/Q4 的均值层。
+
+**样本。** P4 样本（§2.1），一次一个期限。
+
+### 6.1 4×4 面
+
+行 R1–R4；列 `negative / neutral / high（含 extreme）/ extreme`。每格：
 
 | 字段 | 定义 |
 |---|---|
-| `fwd_mean`、`fwd_median` | 原始前向收益，bp。 |
+| `fwd_mean`、`fwd_median` | raw 前向收益，bp。 |
 | `y_mean`、`y_median` | 市场中性 `y_raw`，bp。 |
-| `rv_mean`、`rv_median` | 已实现波动水平，%（`rv` 的算术均值/中位数；Phase 3 口径）。 |
-| CI | 每个均值的 95% CI，按合约与月份 CGM 双向聚类。描述性；E1 不挂 p 值。 |
+| CI | 均值的 95% CI，CGM 双向聚类。描述性。 |
 
-另附一张 4×4 的 n 表，每格报告：
+n 另表：`n_obs`（事件行或合约-日-格）、`n_cdays`、`n_cmonths`。对嵌套 `high`：`n_obs` 是 `s2+s3` 之和；`n_cdays`/`n_cmonths` 是并集唯一数（不要加 `s2` 与 `s3` 的计数）。
 
-| 字段 | 定义 |
-|---|---|
-| `n_obs` | 事件行（event 权重）或合约-日-格组（合约-日权重）。 |
-| `n_cdays` | 格内唯一 `(symbol, UTC 日)` 数。 |
-| `n_cmonths` | 格内唯一 `(symbol, 日历月)` 数。 |
+### 6.2 对比
 
-对嵌套列：`high` 的 `n_obs` 是 `s2` 与 `s3` 之和；`n_cdays` 与 `n_cmonths` 是并集上的**唯一**计数（一个合约-日可能同时含 `s2` 和 `s3`，不要把两者相加）。
+**P4-1a：within-regime（正式，note 家族）**
 
-**h=1 的预期锚点（event 权重，y_raw）**——用于校验：
-
-| 格 | n 行数 | 合约-月数 |
-|---|---:|---:|
-| negative（全 regime） | 93,489 | 9,499 |
-| neutral（全 regime） | 123,907 | 9,461 |
-| high-only（全 regime） | 18,834 | 3,377 |
-| extreme（全 regime） | 19,627 | 2,777 |
-| high（含 extreme，全 regime） | 38,461 | 4,471（格级；不同 regime 的并集会重叠） |
-| R1 × neutral | 37,038 | 2,384 |
-| R1 × high（含 extreme） | 13,184 | 1,183（并集唯一数，不是 902+752） |
-| R1 × extreme | 6,905 | 752 |
-| R3 × extreme | 2,416 | 584（最薄的互斥格） |
-
-400 合约-月闸（旧 handoff §3.7）保留为**标记**，不是过滤：低于 400 的格打标。h=1 最薄的互斥格是 584，所以没有格被标记；仍然要报告这个检查。
-
-**输出。** `phase4_funding/tables/e1_surface.parquet` + `.csv`，长表：每行一个 `(weighting, h, regime, funding)`。
-
----
-
-## 5. E2 —— within-regime funding 对比
-
-**目的。** 对 note 的 row-wise 示例问题做正式读数：在每个 regime 内部，表现如何随 funding 状态变化？这是项目的操作化，不是 note 的要求。
-
-**样本。** 与 E1 同一批行，每个期限、每种权重。
-
-**因变量。**
-
-- `y_raw`：主口径，进 BH 家族。
-- `fwd_h`：note 字面的描述口径，报估计 + 95% CI，**不进 BH，不报 p_bh**。
-- `lrv`：波动率，进单独的 BH 家族，报 `exp(对比) − 1` 的 %。
-
-### 5.1 对比
-
-对每个 regime `r`（4 个）与每个 funding 状态 `f ∈ {negative, high, extreme}`（3 个），都以 `neutral` 为参照：
+对每个 regime `r`，三个 funding 档 vs neutral：
 
 ```
 C1(r) = μ(r, negative) − μ(r, neutral)
@@ -226,189 +262,244 @@ C2(r) = μ(r, high)     − μ(r, neutral)    # high 含 extreme
 C3(r) = μ(r, extreme)  − μ(r, neutral)    # high 的子集
 ```
 
-每个 `(dv, h, weighting)` 有 12 个对比。三个对比按构造相关（high 集合包含 extreme 集合）；BH 对 12 个一起做。
+12 个对比；`y_raw` 进 BH 家族；`fwd` 只报描述性 CI（不进 BH，不报 p_bh）。派生尾部增量 `C4(r) = μ(r, extreme) − μ(r, high) = w2·(m_{r,s3} − m_{r,s2})` 只作解读，不进家族。
 
-派生的尾部增量，只作解读（不单独检验）：
+**P4-1b：within-funding（探索性，—）**
+
+对每个 funding 列 `f`，三个 regime vs R4：
 
 ```
-C4(r) = μ(r, extreme) − μ(r, high) = w2 · (m_{r,s3} − m_{r,s2})
+D1(f) = μ(R1, f) − μ(R4, f)
+D2(f) = μ(R2, f) − μ(R4, f)
+D3(f) = μ(R3, f) − μ(R4, f)
 ```
 
-在正文或附录里与 C2/C3 并排报告；不要加进 BH 家族。
+12 个；单独 BH 12；不对应 note 的具体问题，标 —。
 
-### 5.2 估计步骤
+### 6.3 家族与表
 
-1. 构造 16 个互斥格 dummy（`regime × {s0,s1,s2,s3}`）。
-2. event 权重：在事件行上估 FE 模型。
-   合约-日权重：先聚合到 `(symbol, day, regime, state)` 的组均值，再在组均值上估同一个 FE 模型。
-3. 取 15 个系数与 CGM 协方差；用当前权重的计数 `w2`、`w3` 组成嵌套均值 `μ(r, high)`。
-4. 构造 12 个对比向量 `c`；估计 = `c'β`，SE = `sqrt(c'Vc)`，`t = estimate/SE`，`p` 双侧正态。
-5. BH 在 12 个对比内、按 `(dv, h, weighting)` 分别做；`y_raw` 与 `lrv` 各自一个家族；`fwd` 是描述性，不做 BH。
-6. `t_drop5`：对每个对比，计算影响函数 `ψ_c = (X̃ c) · û`；按 `|Σ ψ_c|` 给合约打分；剔掉最大的 5 个；重新估 FE 模型与对比；报告 `t`。
-7. 对过了 BH 的对比，标记 `|t_drop5| ≤ 1.96` 的情况。
+- P4-1a：每个 `(weighting, h)` 12 个对比，BH 12；`y_raw` 是判定口径；`fwd` 描述性。
+- P4-1b：每个 `(weighting, h)` 12 个，BH 12，探索性。
+- drop5：对 P4-1a 的每个对比做（剔影响最大的 5 个合约后重估）。
+- 表列：`estimate`、`se`、`t`、`p`、`p_bh`、`t_drop5`、`n_obs`、`n_cmonths`、`in_bh`、`note_marker`。
 
-### 5.3 表
-
-每行一个 `(weighting, dv, h, regime, contrast)`：
-
-| 列 | 含义 |
-|---|---|
-| `estimate` | `y_raw`/`fwd` 用 bp；`lrv` 用 log 点。 |
-| `estimate_pct` | 仅 `lrv`：`(exp(estimate) − 1) × 100`。 |
-| `se` | CGM 聚类 SE，估计尺度。 |
-| `t`、`p` | 双侧。 |
-| `p_bh` | 12 个内的 BH；`fwd` 为 `NA`。 |
-| `t_drop5` | 剔 5 个合约后的 t；`fwd` 不计算则为 `NA`。 |
-| `n_obs`、`n_cmonths` | 对比的格规模（high 用并集）。 |
-| `in_bh` | `y_raw`、`lrv` 为 `TRUE`；`fwd` 为 `FALSE`。 |
-
-**输出。** `phase4_funding/tables/e2_contrasts.parquet` + `.csv`。
+**输出。** `phase4_funding/tables/p4_1_surface.parquet`、`p4_1_contrasts.parquet`（含 1a/1b）+ `.csv`。
 
 ---
 
-## 6. E3 —— column profile（描述性）
+## 7. P4-2 — 条件波动
 
-**目的。** 4×4 的另一条边际：在每个 funding 状态内部，四个 regime 怎么比？这是描述性 context，不是第二个检验家族。
+**目的。** note §10 的 volatility 切片；风险 overlay。
 
-**样本。** 与 E1 相同。
+**样本。** P4 样本，剔除 `lrv` 缺失。
 
-**表。** 每个 `(h, weighting)` 一张：行 = funding 状态 `negative / neutral / high / extreme`；列 = R1–R4。每格报 `fwd_mean`、`y_mean`、`rv_mean`，以及各均值的聚类 95% CI；n 另表。
+**面。** 4×4；每格 `rv_mean`、`rv_median`（算术口径，Phase 3 一致）、`lrv_mean`、n、CI。
 
-不挂 p 值。如果 column profile 出现强模式，后续可补一组「regimes vs R4 within funding state」的对比，但不在锁定设计里。
+**对比。** 12 个 within-regime（同 P4-1a 的 C1/C2/C3，因变量换成 `lrv`）；`exp(对比) − 1` 的 %；BH 12；drop5。
 
-**输出。** `phase4_funding/tables/e3_column_profile.parquet` + `.csv`。
+**note。** 🟣（§10 output）；不对应 §7 的具体问题。
 
----
-
-## 7. E4 —— 假设映射
-
-**目的。** 用 E1/E2 的输出去读 note §11 的六个示例行。六行是锚点，不是完整假设集；其余格是 exploratory。
-
-每个锚点报告：
-
-| 锚点（note §11） | 格 | 读什么 | 判定 |
-|---|---|---|---|
-| R1 + neutral → continuation | (R1, neutral) | `fwd` 均值/中位数符号；`y_raw` vs R1 其他 funding 格 | consistent / inconsistent / unclear |
-| R1 + extreme positive → crowded reversal | (R1, extreme) | `fwd` 符号；C3(R1)；C4(R1) | consistent / inconsistent / unclear |
-| R2 + any funding → short-covering exhaustion | R2 行 | 三个对比 C1/C2/C3(R2) ≈ 0（profile 平坦） | consistent / inconsistent / unclear |
-| R3 + neutral → downside continuation | (R3, neutral) | `fwd` 符号；`y_raw` vs R3 其他 funding 格 | consistent / inconsistent / unclear |
-| R3 + extreme negative → short-squeeze | (R3, negative) vs (R3, neutral) | C1(R3) > 0 | consistent / inconsistent / unclear |
-| R4 + stress / high vol → mean reversion | 不是 funding 格 | out of scope；Phase 3 实验 14b | out of scope |
-
-代理口径提醒：标签没有单边的 extreme-negative 档；note 的 "extreme negative" 在 R3 short-squeeze 锚点上用 `negative`（f ≤ p25）代理。表注要写明。
-
-判定规则（定性，不新增检验）：
-
-- **consistent**：观察到的方向与 note 的预期一致，且相关 `y_raw` 对比过 BH 12 + drop5（若适用对比）。
-- **inconsistent**：方向相反，或对比显著地反向。
-- **unclear**：方向一致但对比没过 BH/drop5，或格太薄；报告 n。
-
-`fwd` 的符号是 note 字面的 continuation/reversal 读数；`y_raw` 是判定口径。六个锚点不是确认性家族，不要对它们做 BH。
-
-**输出。** `phase4_funding/tables/e4_hypothesis_map.csv`。
+**输出。** `phase4_funding/tables/p4_2_vol.parquet` + `.csv`。
 
 ---
 
-## 8. E5 —— 退化诊断
+## 8. P4-3 — 条件反转 / 延续
 
-**目的。** 披露在退化的 funding 日上 `high` 与 `extreme` 是同一批行，并提供 high-only vs extreme 的拆分。
+**目的。** Q2/Q4 的 reversal/continuation 概率；§11 的 reversal/exhaustion 行。
 
-### 8.1 表注（所有 E1/E2 表）
+**定义。**
 
-写明：
+```
+rev  = 1{ fwd_h · dir < 0 }
+cont = 1 − rev
+```
 
-- 四个 funding 列是重叠条件，不是分区：`high = f > p75` 包含 `extreme = f > p90`。
-- 在估计样本里，`p75 == p90` 占 **56.96%** 的事件行（h=1）与 **48.9%** 的合约-月；在这些行上 `high` 与 `extreme` 选到同一批观测，`high` 不含 high-only 行。
-- 全标签（7,022,757 个 stated 行、285 个合约）：64.85% p75==p90、23.92% p25==p75、16.55% 三档全等；46.0% 的 stated 行是 `negative`。描述这张表时用上面的估计样本数字。
-- 219 个无 funding 状态的事件已排除。
-- 估计样本的 249 个合约里，206 个至少有一行事件落在 p75==p90 的行上。
+`dir ∈ {+1, −1}` 是事件方向（panel 的 `dir`；cell 0 的行也有方向）。用 raw `fwd_h` 的符号，这是 note §8 C 的定义；不要用 `y_raw` 的符号（市场中性会改符号）。校验：与 events 表的 `rev_h` 在 R1–R4 上逐行一致。
 
-### 8.2 附录拆分
+**样本。** P4 样本 + 同方向、同 funding 的 benchmark（cell 0）行；`fwd_h` 有限。
 
-一张 4×4 表（行 R1–R4；列 `negative / neutral / high-only / extreme`），给 `fwd_mean`、`y_mean`、`rv_mean` 与 n。这是互斥状态视角；主表保留 note 的嵌套列。
+**估计。** LPM：`rev ~ 16 个格 dummy + 合约 FE + 月 FE`；12 个 within-regime 对比（C1/C2/C3）；BH 12；drop5。`cont` 同表报告（`1 − rev` 的概率；hit rate 与 cont 在事件方向上一致）。
 
-校验恒等式：E1 的 `high` 格均值必须等于 `w2 × high-only + w3 × extreme`（最大绝对差 < 1e-12）。
+**note 切片。** Q2（C3(R1)）、Q4（C1/C2/C3(R3)）、R1 extreme、R2 any、R3 neutral、R3 squeeze。
 
-**输出。** `phase4_funding/tables/e5_disjoint.parquet` + `.csv`；`e5_overlap.csv`。
-
----
-
-## 9. Phase 5 闸门
-
-**锁定规则。** 只要 **12 个 `y_raw` within-regime funding 对比中至少一个在其 12 检验家族内过 BH（`p_bh < 0.05`）且扛住 drop5（`|t_drop5| > 1.96`）**，Phase 5 就开；任意期限、任意一种权重都算。不设 bp 阈值；不要求两种权重同号。
-
-闸门不适用于波动率。波动对比照常报告；选定收益规则后，用作风险 overlay（仓位/止损宽度）。
-
-报告里的闸门句：
-
-> Phase 5 由 `<regime> × <funding>` 解锁，h = `<h>`，weighting = `<event|contract-day>`：`y_raw` 对比 = `<bp>`（t = `<t>`，p_bh = `<p>`，t_drop5 = `<t5>`）。
-
-如果没有对比通过，Phase 5 不启动；这也是一个有效的 Phase 4 结论。
-
-多重性说明：闸门是按家族做的。`y_raw` 有 8 个家族（4 个期限 × 2 种权重），每个家族各自 BH 12；8 个家族之间不做校正。这是与项目负责人一起锁定的、刻意偏宽松的选择，必须在闸门句里披露：家族、检验数，以及闸门不做跨期限/跨权重的 family-wise 校正。
+**输出。** `phase4_funding/tables/p4_3_reversal.parquet` + `.csv`。
 
 ---
 
-## 10. Out of scope
+## 9. P4-4 — 条件路径
 
-- Baseline：price alone、OI alone、funding alone、random timing——Phase 3 实验 5–9 与实验 8。
-- IC：note 的 IC 是「若信号转成 ranked score」的条件句；本信号是阈值标签。
-- 绝对 bp/day funding 尺度：note 没有。
-- β 附录（regime vs 同向 benchmark within funding）：note 没有。
-- 16-γ 交互 ANOVA：需要把 high/extreme 拆成互斥格，并把主效应从报告对象里扣掉；已拒绝。
-- 阈值优化（p60/p70 网格）：Phase 2 已做阈值网格；p70 冻结。
-- 跨交易所、Phase 5 回测、R4 stress（Phase 3 实验 14b）、4h/8h 标签（先做 1h，后续再说）。
+**目的。** Q3 的「faster mean-revert」的路径证据；§11 R4 stress 行。
+
+**样本。** P4 样本（`events` 表的 `mfe_h`/`mae_h`/`mdd_h`）。
+
+**面。** 4×4；每格 `mfe_mean`、`mae_mean`、`mdd_mean`、`mdd_p10/p50/p90`、n。MFE/MAE 已按方向翻正（Phase 3 build 的口径）；MDD ≤ 0。
+
+**推断。** 描述性，不做检验。
+
+**「faster」的读法。** 用 1/4/8/24h 的收益/路径梯度 + MDD 的 p50 作为「回归速度」的代理；没有 survival/time-to-recovery 的正式检验；表注写明。
+
+**note。** 🟡（Q3 / R4 stress）。
+
+**输出。** `phase4_funding/tables/p4_4_path.parquet` + `.csv`。
 
 ---
 
-## 11. 输出
+## 10. P4-5 — 条件 β（vs benchmark）
+
+**目的。** note 的「perform better」按 benchmark 读：控制同向 benchmark 后，regime 在某个 funding 档里还有没有信息。
+
+**样本。** 对每个 `(regime r, funding 列 f)`：该 regime 的行 + 同方向、同 `f`、非该 regime 的 benchmark 行（cell 0 + 另一个 OI 状态）。
+
+**估计。** dummy=1 为该 regime，0 为 benchmark；合约/月 FE；CGM。16 个 β（4 regime × 4 funding 列）。
+
+**两个 outcome。**
+
+- **P4-5a**：`y_raw`（主）与 `fwd`（描述）；β 是收益差（bp）。
+- **P4-5b**：`rev`（LPM）；β 是反转概率差（pp）。
+
+**家族。** 每个 `(weighting, h, outcome)` 16 个 β，BH 16；drop5。
+
+**note 切片。** Q1 的 `β(R1, neu)`、Q2 的 `β(R1, ext)`、Q4 的 `β(R3, neu)`；§11 R1/R3 行。
+
+**输出。** `phase4_funding/tables/p4_5_beta.parquet` + `.csv`。
+
+---
+
+## 11. P4-6 — 条件 stress
+
+**目的。** Q3 的 stress 维度；§11 的 R4 行。
+
+**两层。**
+
+1. **R4 × market-vol state**：`mkt_vol_state ∈ {low, mid, high}`（unknown 排除）；每格报收益、`rev`、路径；描述性。
+2. **R4 × funding stress**：`extreme` / `negative` vs `neutral`（R4 内部）；报收益、`rev`；描述性/小家族。
+
+**代理口径。** 没有 liquidation 数据；market-vol 是唯一有数据的市场状态代理；funding stress 是第二层。表注写明。
+
+**note。** 🟡（Q3 / R4 stress）。
+
+**输出。** `phase4_funding/tables/p4_6_stress.parquet` + `.csv`。
+
+---
+
+## 12. P4-7 — 稳健性
+
+- **Nested vs disjoint**：主表 `high` 是并集；附录给 `negative / neutral / high-only / extreme` 的互斥 4×4（P4-1/2/3 的均值、n）。
+- **权重**：event 与合约-日并排；`high` 并集权重按当前权重的计数。
+- **drop5**：对 P4-1a/P4-2/P4-3/P4-5 的每个对比/β。
+- **薄格**：400 合约-月标记；h=1 最薄互斥格 584（R3 × extreme）；高 funding 尾部 R1 × extreme 752。
+- **退化**：p75==p90 占比 56.96%（事件行）/ 48.9%（合约-月）；`high` 与 `extreme` 在退化行上是同一批。
+- **无 funding 状态**：219 行排除。
+- **raw vs y_raw**：P4-1/P4-2/P4-5a 报两列；判定用 `y_raw`，`fwd` 描述。
+- **旧产物**：旧的 `l1_cellmeans` / `l2_interactions` 不在任何块使用。
+
+**输出。** `phase4_funding/tables/p4_7_diagnostics.csv`、`p4_7_disjoint.parquet`。
+
+---
+
+## 13. 推断与多重性
+
+| 块 | 家族 | 检验数 | 判定口径 | drop5 |
+|---|---|---|---:|---|
+| P4-1a | 每个 `(weighting, h)` | 12 | `y_raw` | 是 |
+| P4-1b | 每个 `(weighting, h)` | 12 | `y_raw`，探索性 | 可选 |
+| P4-2 | 每个 `(weighting, h)` | 12 | `lrv` | 是 |
+| P4-3 | 每个 `(weighting, h)` | 12 | `rev` | 是 |
+| P4-5a | 每个 `(weighting, h, outcome)` | 16 | `y_raw`（`fwd` 描述） | 是 |
+| P4-5b | 每个 `(weighting, h)` | 16 | `rev` | 是 |
+| P4-4 / P4-6 | 无 | — | 描述 | — |
+
+- note 的四个问题 + 六行是各自块家族内的**预声明子集**；不另开小家族，避免「特例化」。
+- 探索性格（P4-1b、P4-5 的非 note β、P4-6 的第二层）在同一家族内，会稀释 note 切片的 power；这是 comprehensiveness 的代价，报告时说明。
+- `p_bh` 是家族内 BH；`t_drop5` 是逐对比/β 的条件稳健性；`|t| > 1.96` 不等于过闸，必须看 `p_bh` 与 `t_drop5`。
+
+---
+
+## 14. Phase 5 闸门
+
+**锁定规则。** Phase 5 开，当且仅当 **P4-1a 或 P4-3 的 note 切片中至少一个**在其家族内过 BH（`p_bh < 0.05`）且扛住 drop5（`|t_drop5| > 1.96`）；任意期限、任意一种权重都算。不设 bp 阈值；不要求两种权重同号。
+
+- **P4-2**（波动）不 gate；作 risk overlay（仓位/止损宽度）。
+- **P4-5**（β）不单独 gate；作「regime 是否还有信息」的旁证。
+- **P4-4/P4-6** 描述性，不 gate。
+
+闸门句：
+
+> Phase 5 由 `<regime> × <funding>` 解锁，h = `<h>`，weighting = `<event|contract-day>`，outcome = `<y_raw|rev>`：估计 = `<...>`（t = `<t>`，p_bh = `<p>`，t_drop5 = `<t5>`）。
+
+如果没有 note 切片通过，Phase 5 不启动；这是有效的 Phase 4 结论。
+
+多重性说明：闸门按家族做；P4-1a 与 P4-3 各自 8 个家族（4 期限 × 2 权重），家族之间不做校正；这一点必须与闸门句一起披露。
+
+---
+
+## 15. Out of scope
+
+- Baseline：price alone、OI alone、funding alone、random timing——Phase 3 实验 5–9 / 8。
+- IC：note 的条件句；信号是阈值标签，不是 ranked score。
+- 绝对 bp/day funding 尺度、β 的绝对尺度版本、阈值优化（p60/p70）——Phase 2/3 已处理或 note 没有。
+- 跨交易所、Phase 5 回测、by-symbol（Phase 3 保留）、4h/8h 标签（后续）。
+- liquidation 数据（没有）；用 market-vol / funding stress 代理。
+
+---
+
+## 16. 输出
 
 ```
 phase4_funding/
-  GUIDANCE.md                     本文件
+  GUIDANCE.md                       本文件
   tables/
-    e1_surface.parquet/.csv
-    e2_contrasts.parquet/.csv
-    e3_column_profile.parquet/.csv
-    e4_hypothesis_map.csv
-    e5_disjoint.parquet/.csv
-    e5_overlap.csv
+    p4_1_surface.parquet/.csv
+    p4_1_contrasts.parquet/.csv     含 1a/1b
+    p4_2_vol.parquet/.csv
+    p4_3_reversal.parquet/.csv
+    p4_4_path.parquet/.csv
+    p4_5_beta.parquet/.csv
+    p4_6_stress.parquet/.csv
+    p4_7_diagnostics.csv
+    p4_7_disjoint.parquet/.csv
+    p4_note_map.csv                 每个 note 切片一行，含 marker
   figures/
-    f01_return_heatmap.png        raw fwd 与 y_raw，4 horizons × 4 regimes × 4 funding
-    f02_vol_heatmap.png           rv 均值，同样布局
-    f03_contrast_forest.png       12 个对比 × DV/horizon/weighting，带 95% CI
+    f01_return_heatmap.png          raw fwd 与 y_raw，4 h × 4 regime × 4 funding
+    f02_vol_heatmap.png             rv 均值，同布局
+    f03_contrast_forest.png         P4-1a/P4-2/P4-3 的 12 对比，95% CI
+    f04_beta_forest.png             P4-5 的 16 β
+    f05_stress.png                  P4-6 的 R4 × market-vol
 ```
 
-图规则：热力图画估计值，并标记 `y_raw` 对比过 BH 12 + drop5 的格；forest plot 画 12 个对比与 95% CI，过 BH 的点用实心。不要画水平柱状图。
+图规则：热力图画估计值；forest plot 画被检验的量 + 95% CI；过 BH 的点用实心；note 切片在图例里标注。
 
 ---
 
-## 12. 校验闸门
+## 17. 校验闸门
 
-写报告前必须跑：
-
-1. **n 对账。** h=1 的 E1 n 与样本量审计一致：255,857 行；互斥合计 93,489 / 123,907 / 18,834 / 19,627；合约-月合计 9,499 / 9,461 / 3,377 / 2,777；R1 × neutral 2,384；R1 × extreme 752；最薄互斥格 584（R3 × extreme）。
-2. **原始收益关联。** 每个小时内，`fwd_h − y_raw` 在所有事件上恒定（等于市场均值）；小时内标准差最大值 < 1e-12。同时检查关联覆盖全部 E1/E2 行（无缺失 `fwd_h`）。
-3. **High 并集恒等式。** E1 的 `high` 均值 = `w2 × high-only + w3 × extreme`，在每个 `(h, weighting, regime)` 上最大绝对差 < 1e-12。
-4. **互斥格合计。** 16 个互斥格的 n 在每个 `(h, weighting)` 上等于 E1/E2 样本量。
-5. **对比恒等式。** C2(r) = `w2 × (high-only − neutral) + w3 × (extreme − neutral)`；最大绝对差 < 1e-12。
-6. **BH 家族。** `y_raw` 与 `lrv` 每个 `(dv, h, weighting)` 恰好 12 个检验；`p_bh` 单调；`fwd` 没有 `p_bh`。
-7. **权重。** event 与合约-日两张表的格与定义一致；合约-日的高并集权重用合约-日-格数，不用事件数。
-8. **退化标记。** 在 E1/E2 样本上复算 p75==p90 的占比，匹配 56.96%（行）与 48.9%（合约-月）；high 并集的 n 用唯一计数，不用求和。
-9. **样本闸。** h=1 没有格低于 400 合约-月；任何期限/权重出现低于 400 的格都要打标。
-10. **无残留 16-γ 产物。** 旧的 `l1_cellmeans` / `l2_interactions` 不在 E1–E5 的任何地方使用。
+1. **n 对账。** h=1：255,857 行；互斥合计 93,489 / 123,907 / 18,834 / 19,627；合约-月 9,499 / 9,461 / 3,377 / 2,777；R1 × neutral 2,384；R1 × extreme 752；R3 × extreme 584；R1 × high 13,184 / 1,183。
+2. **关联。** P4-1/2 的 panel 行与 P4-3/4/5/6 的 events 行按 `(symbol, ts_end)` 一一对应；`fwd_h` 无缺失；`y_raw = fwd_h − 市场均值` 的小时内恒等式（标准差 < 1e-12）。
+3. **High 并集。** `high` 均值 = `w2 × high-only + w3 × extreme`（< 1e-12），每个 `(h, weighting, regime)`。
+4. **互斥合计。** 16 个互斥格的 n 等于 P4 样本量（每个 `(h, weighting)`）。
+5. **对比恒等式。** C2 = `w2 × (high-only − neutral) + w3 × (extreme − neutral)`（< 1e-12）。
+6. **rev/cont。** `rev + cont = 1`；`rev` 与 events 的 `rev_h` 在 R1–R4 上逐行一致；`cont` 与 `hit_h` 在事件方向上一致。
+7. **β benchmark。** 每个 `(regime, funding)` 的 benchmark 行 = 同方向、同 funding、非该 regime 的行；样本量 > 0；dummy=1 的行数与 regime 行数一致。
+8. **家族。** P4-1a/P4-2/P4-3 每个 `(weighting, h)` 12 个；P4-5a/b 16 个；`p_bh` 单调；note 切片在 `p4_note_map.csv` 里都有 marker。
+9. **权重。** event 与合约-日两张表格与定义一致；`high` 并集权重用当前权重的计数。
+10. **退化。** p75==p90 占比 56.96%（行）/ 48.9%（合约-月）；`high` 并集 n 用唯一计数。
+11. **样本闸。** 任何格 < 400 合约-月打标；h=1 最薄 584。
+12. **无旧产物。** 旧的 `l1_cellmeans` / `l2_interactions` 不在 P4-1…P4-7 使用。
 
 ---
 
-## 13. Checklist
+## 18. Checklist
 
-- [ ] 从 `forward/freq=1h` 关联 `fwd_h`；校验小时内恒等式。
-- [ ] 建 E1 面：4 个期限 × 2 种权重 × {raw fwd、y_raw、rv}，含 mean/median/CI/n。
-- [ ] 建 E5 互斥格与 overlap 统计；校验 high 并集恒等式。
-- [ ] 建 E2 对比：每个 (dv, h, weighting) 12 个；`y_raw` 与 `lrv` BH 12；`fwd` 描述性；drop5。
-- [ ] 建 E3 column profile。
-- [ ] 建 E4 假设映射（六个锚点 + exploratory 格）。
-- [ ] 出三张图。
-- [ ] 跑校验闸门。
+- [ ] 关联 `fwd_h` / `y_raw` / `rv` / `rev` / MFE-MAE-MDD / `mkt_vol_state` / funding 状态；校验 `(symbol, ts_end)` 与小时内恒等式。
+- [ ] 建 P4-1：4×4 面 + P4-1a（12，BH 12）+ P4-1b（12，探索）+ n 表。
+- [ ] 建 P4-2：4×4 面 + 12 个 `lrv` 对比。
+- [ ] 建 P4-3：`rev/cont` 4×4 + 12 个 LPM 对比 + benchmark 水平。
+- [ ] 建 P4-4：MFE/MAE/MDD 4×4（描述）。
+- [ ] 建 P4-5：16 β × 2 outcome（mean、rev），BH 16、drop5。
+- [ ] 建 P4-6：R4 × market-vol + R4 × funding stress。
+- [ ] 建 P4-7：nested/disjoint、权重、drop5、薄格、退化。
+- [ ] 出 `p4_note_map.csv`：每个 note 切片一行，含 🔵/🟡/🟣 marker。
+- [ ] 出五张图。
+- [ ] 跑 §17 的 12 条校验。
 - [ ] 写 Phase 5 闸门句（或明确的「闸门未开」）。
-- [ ] 在表注里更新退化披露。
+- [ ] 在表注里更新退化、proxy、weighting 披露。
