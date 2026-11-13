@@ -4,7 +4,8 @@ P4-1: forward return (raw fwd and market-neutral y_raw), mean/median + clustered
 P4-2: realized volatility (rv level and log lrv), mean/median + clustered CI.
 Both: n = n_obs / n_rows_raw / n_cdays / n_cmonths, event and contract-day weighting.
 
-No contrasts here (P4-1a/P4-2 contrasts are the next item).
+P4-1a/P4-2 contrasts: 12 within-regime funding contrasts (BH 12, drop5),
+built in the same script by `contrast_block`.
 """
 from __future__ import annotations
 
@@ -20,7 +21,9 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "phase3_event"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import fe  # noqa: E402
 import infer as I  # noqa: E402
 
 T0 = pd.Timestamp("2021-12-01", tz="UTC")
@@ -102,9 +105,118 @@ def surface(o: pd.DataFrame) -> list[dict]:
     return rows
 
 
+KIND = {"negative - neutral": "neg",
+        "high(incl ext) - neutral": "high",
+        "extreme - neutral": "ext"}
+STATES = {"neg": {0}, "high": {2, 3}, "ext": {3}}
+LABELS = {"neg": "negative - neutral",
+          "high": "high(incl ext) - neutral",
+          "ext": "extreme - neutral"}
+
+
+def cvec(r: int, kind: str, w2: float) -> np.ndarray:
+    """Contrast on the 15 coefficients; cell 15 (R4 x extreme) is the reference."""
+    c = np.zeros(16)
+    i0 = (r - 1) * 4
+    i1, i2, i3 = i0 + 1, i0 + 2, i0 + 3
+    if kind == "neg":
+        c[i0] += 1.0
+        c[i1] -= 1.0
+    elif kind == "high":
+        c[i2] += w2
+        c[i3] += 1.0 - w2
+        c[i1] -= 1.0
+    elif kind == "ext":
+        c[i3] += 1.0
+        c[i1] -= 1.0
+    return c[:15]
+
+
+def contrast_block(o: pd.DataFrame, h: int, weighting: str,
+                   rows: list, checks: list) -> None:
+    o = o.copy()
+    o["cellidx"] = ((o["cell"].astype("int64") - 1) * 4
+                    + o["state"].astype("int64"))
+    sym = pd.factorize(o["sym"])[0].astype("int64")
+    mon = pd.factorize(o["month"])[0].astype("int64")
+
+    for dv, in_bh in (("y_raw", True), ("fwd", False), ("lrv", True)):
+        y_all = o[dv].to_numpy("float64")
+        ok = np.isfinite(y_all)
+        y = y_all[ok]
+        cell = o["cellidx"].to_numpy("int64")[ok]
+        s = sym[ok]
+        m = mon[ok]
+        beta, V, u, psi = fe.fit(y, cell, s, m)
+        n_c = int(s.max()) + 1
+        cnt = np.bincount(cell, minlength=16)
+
+        fam = []
+        for r in REGIMES:
+            i0 = (r - 1) * 4
+            n2, n3 = int(cnt[i0 + 2]), int(cnt[i0 + 3])
+            w2 = n2 / (n2 + n3) if (n2 + n3) else 0.5
+            for kind in ("neg", "high", "ext"):
+                c = cvec(r, kind, w2)
+                est, se, t = fe.contrast(beta, V, c)
+                fam.append(dict(
+                    weighting=weighting, h=h, dv=dv, regime=f"R{r}",
+                    contrast=LABELS[kind], estimate=est, se=se, t=t,
+                    p=I.p_two(t) if in_bh else np.nan, in_bh=in_bh,
+                    note_marker=("🔵🟡" if r in (1, 3)
+                                 else ("🟡" if r == 2 else "—")),
+                ))
+
+        if in_bh:
+            pbh = I.bh(np.array([x["p"] for x in fam]))
+            for x, pb in zip(fam, pbh):
+                x["p_bh"] = float(pb)
+        else:
+            for x in fam:
+                x["p_bh"] = np.nan
+
+        if in_bh:
+            for x in fam:
+                r = int(x["regime"][1])
+                i0 = (r - 1) * 4
+                n2, n3 = int(cnt[i0 + 2]), int(cnt[i0 + 3])
+                w2 = n2 / (n2 + n3) if (n2 + n3) else 0.5
+                x["t_drop5"] = fe.t_drop5(
+                    y, cell, s, m, psi, cvec(r, KIND[x["contrast"]], w2), n_c)
+        else:
+            for x in fam:
+                x["t_drop5"] = np.nan
+
+        for x in fam:
+            r = int(x["regime"][1])
+            states = STATES[KIND[x["contrast"]]]
+            sub = o[(o["cell"] == r) & o["state"].isin(states)]
+            sub = sub[np.isfinite(sub[dv])]
+            x["n_obs"] = int(len(sub))
+            x["n_cmonths"] = int(sub[["sym", "month"]].drop_duplicates().shape[0])
+        rows.extend(fam)
+
+        if dv == "y_raw":
+            for r in REGIMES:
+                i0 = (r - 1) * 4
+                n2, n3 = int(cnt[i0 + 2]), int(cnt[i0 + 3])
+                w2 = n2 / (n2 + n3) if (n2 + n3) else 0.5
+                c_ho = np.zeros(16)
+                c_ho[i0 + 2] += 1.0
+                c_ho[i0 + 1] -= 1.0
+                est_ho = fe.contrast(beta, V, c_ho[:15])[0]
+                est2 = fe.contrast(beta, V, cvec(r, "high", w2))[0]
+                est3 = fe.contrast(beta, V, cvec(r, "ext", w2))[0]
+                exp = w2 * est_ho + (1 - w2) * est3
+                checks.append(dict(
+                    check=f"y_raw h={h} {weighting} R{r} C2 identity",
+                    expected=f"{exp:.12g}", actual=f"{est2:.12g}",
+                    pass_=bool(abs(exp - est2) < 1e-10)))
+
+
 def main() -> int:
     t0 = time.time()
-    rows1, rows2, checks = [], [], []
+    rows1, rows2, checks, crows = [], [], [], []
 
     def check(name, expected, got, ok):
         checks.append(dict(check=name, expected=expected, actual=got, pass_=bool(ok)))
@@ -145,6 +257,28 @@ def main() -> int:
                         check(f"h=1 R{r} high-union mean {m}",
                               f"{exp:.12g}", f"{got:.12g}", abs(exp - got) < 1e-10)
 
+    # P4-1a / P4-2 contrasts (12 within-regime per dv, h, weighting)
+    for h in HORIZONS:
+        b = load(h)
+        for weighting, obs_fn in (("event", obs_event),
+                                  ("contract_day", obs_contract_day)):
+            contrast_block(obs_fn(b), h, weighting, crows, checks)
+
+    cdf = pd.DataFrame(crows)
+    for (dv, h, w), g in cdf.groupby(["dv", "h", "weighting"], sort=False):
+        check(f"{dv} h={h} {w} n contrasts", 12, len(g), len(g) == 12)
+        if dv in ("y_raw", "lrv"):
+            check(f"{dv} h={h} {w} p_bh finite", 12,
+                  int(g["p_bh"].notna().sum()),
+                  int(g["p_bh"].notna().sum()) == 12)
+            check(f"{dv} h={h} {w} t_drop5 finite", 12,
+                  int(g["t_drop5"].notna().sum()),
+                  int(g["t_drop5"].notna().sum()) == 12)
+        else:
+            check(f"{dv} h={h} {w} no BH", 0,
+                  int(g["p_bh"].notna().sum()),
+                  int(g["p_bh"].notna().sum()) == 0)
+
     c1 = pd.DataFrame(checks)
     c1.to_csv(TBL / "exp1_2_validation.csv", index=False)
     print(c1.to_string(index=False))
@@ -163,6 +297,14 @@ def main() -> int:
     s2[keep2].to_parquet(TBL / "p4_2_vol.parquet", index=False)
     s1[keep1].to_csv(TBL / "p4_1_surface.csv", index=False)
     s2[keep2].to_csv(TBL / "p4_2_vol.csv", index=False)
+
+    d1 = cdf[cdf["dv"].isin(["y_raw", "fwd"])].copy()
+    d2 = cdf[cdf["dv"] == "lrv"].copy()
+    d2["estimate_pct"] = (np.exp(d2["estimate"]) - 1) * 100
+    d1.to_parquet(TBL / "p4_1_contrasts.parquet", index=False)
+    d2.to_parquet(TBL / "p4_2_contrasts.parquet", index=False)
+    d1.to_csv(TBL / "p4_1_contrasts.csv", index=False)
+    d2.to_csv(TBL / "p4_2_contrasts.csv", index=False)
 
     print(f"\nPASS {int(c1['pass_'].sum())} / {len(c1)}; elapsed {time.time()-t0:.1f}s")
     return 0 if int(c1["pass_"].sum()) == len(c1) else 1
