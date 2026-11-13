@@ -72,7 +72,7 @@ note 对 Phase 4 的唯一直接定义在 §10：
 | 权重 | event 等权为主；合约-日等权（one vote per contract-day）为稳健性。 |
 | 推断 | 合约 + 月份双向固定效应；CGM 双向聚类 SE；每个（块 × 期限 × 权重）一个 BH 家族；逐对比/β 做 drop5。 |
 | note 切片 | 四个问题 + 六行是各自块家族内的**预声明子集**；不另开小家族。 |
-| Phase 5 闸门 | **P4-1a + P4-3 的 note 切片**过 BH + drop5 即开；P4-2 作 risk overlay；P4-5 作旁证。 |
+| Phase 5 闸门 | 任意 **P4-1a/P4-3 对比**（不限 note）在一种权重下过 BH 12 + drop5，且另一种权重**同号**即开；exploratory screening；P4-2 作 risk overlay；P4-5 作旁证。 |
 | Out of scope | IC、绝对 bp/day、阈值优化、跨交易所、Phase 5 回测、by-symbol（Phase 3 保留）、4h/8h（后续）。 |
 
 ---
@@ -417,19 +417,33 @@ cont = 1 − rev
 
 ## 14. Phase 5 闸门
 
-**锁定规则。** Phase 5 开，当且仅当 **P4-1a 或 P4-3 的 note 切片中至少一个**在其家族内过 BH（`p_bh < 0.05`）且扛住 drop5（`|t_drop5| > 1.96`）；任意期限、任意一种权重都算。不设 bp 阈值；不要求两种权重同号。
+**锁定规则（single, exploratory screening）。** Phase 5 开，当且仅当 **P4-1a 或 P4-3 的任意一个对比**（不限 note 切片）满足：
+
+1. 在**至少一种权重**下，在其 12 检验家族内过 BH（`p_bh < 0.05`）且扛住 drop5（`|t_drop5| > 1.96`）；
+2. 在**另一种权重**下，估计**同号**（不要求显著）。
+
+任意期限都算；不设 bp 阈值；**不做 BH96**。非 note 切片的通过项是 discovery（note 没假设到的问题），照常报告，不另设闸门。
 
 - **P4-2**（波动）不 gate；作 risk overlay（仓位/止损宽度）。
 - **P4-5**（β）不单独 gate；作「regime 是否还有信息」的旁证。
 - **P4-4/P4-6** 描述性，不 gate。
 
+**当前结果（P4-1a，h=1）：**
+
+- **R3×negative**：event +2.64bp / contract +5.29bp，同号；contract `p_bh` 0.033、`t_drop5` 3.15 → 开。
+- **R4×negative**：event +2.41bp（`p_bh` 0.062）/ contract +2.47bp（`p_bh` 0.024、`t_drop5` 2.90），同号 → 开；R4 不是 note 切片，属 discovery。
+
 闸门句：
 
-> Phase 5 由 `<regime> × <funding>` 解锁，h = `<h>`，weighting = `<event|contract-day>`，outcome = `<y_raw|rev>`：估计 = `<...>`（t = `<t>`，p_bh = `<p>`，t_drop5 = `<t5>`）。
+> Phase 5 由 `<regime> × <funding>` 解锁，h = `<h>`，weighting = `<event|contract-day>`，outcome = `<y_raw|rev>`：估计 = `<...>`（t = `<t>`，p_bh = `<p>`，t_drop5 = `<t5>`）；另一权重同号（估计 = `<...>`，t = `<...>`）。
 
-如果没有 note 切片通过，Phase 5 不启动；这是有效的 Phase 4 结论。
+性质说明：这是 **exploratory screening**，不是 confirmatory。BH 是家族内（每个块 × 期限 × 权重 12 个），**不控制 12×4×2 的全搜索**；因此：
 
-多重性说明：闸门按家族做；P4-1a 与 P4-3 各自 8 个家族（4 期限 × 2 权重），家族之间不做校正；这一点必须与闸门句一起披露。
+- 通过项是 Phase 5 的**探索性候选**，不能写成 confirmatory；
+- Phase 5 的回测必须 **out-of-sample**；
+- 报告里同时给出未通过的 note 切片，避免只报通过项。
+
+如果没有对比通过，Phase 5 不启动；这是有效的 Phase 4 结论。
 
 ---
 
