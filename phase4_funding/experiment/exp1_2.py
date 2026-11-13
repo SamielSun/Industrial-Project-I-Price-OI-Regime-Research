@@ -146,7 +146,7 @@ def main() -> int:
                               f"{exp:.12g}", f"{got:.12g}", abs(exp - got) < 1e-10)
 
     c1 = pd.DataFrame(checks)
-    c1.to_csv(TBL / "p4_1_2_validation.csv", index=False)
+    c1.to_csv(TBL / "exp1_2_validation.csv", index=False)
     print(c1.to_string(index=False))
 
     s1 = pd.DataFrame(rows1)
