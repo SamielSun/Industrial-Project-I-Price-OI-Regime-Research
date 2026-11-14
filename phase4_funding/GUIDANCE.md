@@ -185,7 +185,7 @@ SE(c) = sqrt(c' V c)
 
 | ID | 实验块 | 主 outcome | 样本 | 主要对比 | 推断 | note |
 |---|---|---|---|---|---|---|
-| **P4-1** | 条件收益 | `fwd_h`、`y_raw` 均值/中位数 | headline | **P4-1a**：12 个 within-regime（各 funding 档 vs neutral）；**P4-1b**：12 个 within-funding（各 regime vs R4） | FE + CGM；BH 12；drop5 | 🔵🟡🟣 |
+| **P4-1** | 条件收益 | `fwd_h`、`y_raw` 均值/中位数 | headline | **P4-1a**：12 个 within-regime（各 funding 档 vs neutral）；**P4-1b**：out of scope（未做） | FE + CGM；BH 12；drop5 | 🔵🟡 |
 | **P4-2** | 条件波动 | `rv` 水平、`lrv` 对比 | headline | 12 个 within-regime | FE + CGM；BH 12；drop5 | 🟣 |
 | **P4-3** | 条件反转/延续 | `rev`、`cont` | headline | 12 个 within-regime；另报 benchmark 水平 | LPM + FE；BH 12；drop5 | 🔵🟡 |
 | **P4-4** | 条件路径 | MFE / MAE / MDD | headline | 按 cell | 描述（均值/中位数/p10/p90） | 🟡 |
@@ -264,22 +264,12 @@ C3(r) = μ(r, extreme)  − μ(r, neutral)    # high 的子集
 
 12 个对比；`y_raw` 进 BH 家族；`fwd` 只报描述性 CI（不进 BH，不报 p_bh）。派生尾部增量 `C4(r) = μ(r, extreme) − μ(r, high) = w2·(m_{r,s3} − m_{r,s2})` 只作解读，不进家族。
 
-**P4-1b：within-funding（探索性，—）**
-
-对每个 funding 列 `f`，三个 regime vs R4：
-
-```
-D1(f) = μ(R1, f) − μ(R4, f)
-D2(f) = μ(R2, f) − μ(R4, f)
-D3(f) = μ(R3, f) − μ(R4, f)
-```
-
-12 个；单独 BH 12；不对应 note 的具体问题，标 —。
+**P4-1b：out of scope（未做；note 不依赖）**
 
 ### 6.3 家族与表
 
 - P4-1a：每个 `(weighting, h)` 12 个对比，BH 12；`y_raw` 是判定口径；`fwd` 描述性。
-- P4-1b：每个 `(weighting, h)` 12 个，BH 12，探索性。
+- P4-1b：out of scope（未做）。
 - drop5：对 P4-1a 的每个对比做（剔影响最大的 5 个合约后重估）。
 - 表列：`estimate`、`se`、`t`、`p`、`p_bh`、`t_drop5`、`n_obs`、`n_cmonths`、`in_bh`、`note_marker`。
 
@@ -378,7 +368,7 @@ cont = 1 − rev
 - `mdd_p50`（bp）；
 - n / 合约-月；`unknown`（mkt_vol 未定义）单列。
 
-**不做。** 不做 R4 × funding stress 第二层、不做小家族、不做图、不做 survival/time-to-recovery；Q3 在 note map 里标 **descriptive only**。
+**不做。** 不做 R4 × funding stress 第二层、不做小家族、不做图、不做 survival/time-to-recovery；Q3 在报告里标 **descriptive only**。
 
 **note。** 🟡（Q3 / R4 stress）。
 
@@ -405,7 +395,7 @@ cont = 1 − rev
 | 块 | 家族 | 检验数 | 判定口径 | drop5 |
 |---|---|---|---:|---|
 | P4-1a | 每个 `(weighting, h)` | 12 | `y_raw` | 是 |
-| P4-1b | 每个 `(weighting, h)` | 12 | `y_raw`，探索性 | 可选 |
+| P4-1b | — | — | out of scope（未做） | — |
 | P4-2 | 每个 `(weighting, h)` | 12 | `lrv` | 是 |
 | P4-3 | 每个 `(weighting, h)` | 12 | `rev` | 是 |
 | P4-5a | 每个 `(weighting, h, outcome)` | 16 | `y_raw`（`fwd` 描述） | 是 |
@@ -413,7 +403,7 @@ cont = 1 − rev
 | P4-4 / P4-6 | 无 | — | 描述 | — |
 
 - note 的四个问题 + 六行是各自块家族内的**预声明子集**；不另开小家族，避免「特例化」。
-- 探索性格（P4-1b、P4-5 的非 note β）在同一家族内，会稀释 note 切片的 power；这是 comprehensiveness 的代价，报告时说明。
+- 探索性格（P4-5 的非 note β）在同一家族内，会稀释 note 切片的 power；这是 comprehensiveness 的代价，报告时说明。（P4-1b 未做。）
 - `p_bh` 是家族内 BH；`t_drop5` 是逐对比/β 的条件稳健性；`|t| > 1.96` 不等于过闸，必须看 `p_bh` 与 `t_drop5`。
 
 ---
@@ -507,7 +497,7 @@ phase4_funding/
 5. **对比恒等式。** C2 = `w2 × (high-only − neutral) + w3 × (extreme − neutral)`（< 1e-12）。
 6. **rev/cont。** `rev + cont = 1`；`rev` 与 events 的 `rev_h` 在 R1–R4 上逐行一致；`cont` 与 `hit_h` 在事件方向上一致。
 7. **β benchmark。** 每个 `(regime, funding)` 的 benchmark 行 = 同方向、同 funding、非该 regime 的行；样本量 > 0；dummy=1 的行数与 regime 行数一致。
-8. **家族。** P4-1a/P4-2/P4-3 每个 `(weighting, h)` 12 个；P4-5a/b 16 个；`p_bh` 单调；note 切片在 `p4_note_map.csv` 里都有 marker。
+8. **家族。** P4-1a/P4-2/P4-3 每个 `(weighting, h)` 12 个；P4-5a/b 16 个；`p_bh` 单调；note 切片在 §5 的切片表里都有 marker。
 9. **权重。** event 与合约-日两张表格与定义一致；`high` 并集权重用当前权重的计数。
 10. **退化。** p75==p90 占比 56.96%（行）/ 48.9%（合约-月）；`high` 并集 n 用唯一计数。
 11. **样本闸。** 任何格 < 400 合约-月打标；h=1 最薄 584。
@@ -518,14 +508,13 @@ phase4_funding/
 ## 18. Checklist
 
 - [ ] 关联 `fwd_h` / `y_raw` / `rv` / `rev` / MFE-MAE-MDD / `mkt_vol_state` / funding 状态；校验 `(symbol, ts_end)` 与小时内恒等式。
-- [ ] 建 P4-1：4×4 面 + P4-1a（12，BH 12）+ P4-1b（12，探索）+ n 表。
+- [ ] 建 P4-1：4×4 面 + P4-1a（12，BH 12）+ n 表；P4-1b out of scope。
 - [ ] 建 P4-2：4×4 面 + 12 个 `lrv` 对比。
 - [ ] 建 P4-3：`rev/cont` 4×4 + 12 个 LPM 对比 + benchmark 水平。
 - [ ] 建 P4-4：MFE/MAE/MDD 4×4（描述）。
 - [ ] 建 P4-5：16 β × 2 outcome（mean、rev），BH 16、drop5。
 - [ ] 建 P4-6：R4 × market-vol 描述表（不检验 faster）。
 - [ ] 建 P4-7：nested/disjoint、权重、drop5、薄格、退化。
-- [ ] 出 `p4_note_map.csv`：每个 note 切片一行，含 🔵/🟡/🟣 marker。
 - [ ] 出五张图。
 - [ ] 跑 §17 的 12 条校验。
 - [ ] 写 Phase 5 闸门句（或明确的「闸门未开」）。
