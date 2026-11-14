@@ -491,7 +491,7 @@ phase4_funding/
     f02_vol_level.png               2×4 heatmap：lrv 均值，同布局
     f03_difference_forest.png       3 面板：P4-1a(h=1)/P4-2(h=24)/P4-3(h=1) 的 12 对比
     f04_beta_forest.png             P4-5 的显著点 forest（2 面板，y = cell × horizon）
-    f_p4_4_path.png                 P4-4 路径：MFE vs MAE，4 regime 面板
+    f_p4_4_path.png                 两行：上 = MFE vs MAE（Phase 3 Fig 11 样式）；下 = MDD p50 vs horizon；4 regime 面板
 ```
 
 图规则：热力图画估计值；forest plot 画被检验的量 + 95% CI；P4-5 用 forest（y = cell × horizon），只画显著点，h 写在 y 标签。

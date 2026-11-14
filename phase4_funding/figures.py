@@ -32,34 +32,74 @@ MARKERS = {1: "o", 4: "s", 8: "^", 24: "D"}
 def f_p4_4() -> None:
     d = pd.read_parquet(TBL / "p4_4_path.parquet")
     d = d[d["weighting"] == "event"]
-    fig, axes = plt.subplots(2, 2, figsize=(9.8, 7.4), sharex=True, sharey=True)
-    for ax, r in zip(axes.ravel(), ["R1", "R2", "R3", "R4"]):
+    rows = []
+    for h in HORIZONS:
+        for f in FUNDS:
+            s = d[(d["h"] == h) & (d["funding"] == f)]
+            rows.append(s["mfe_median"].to_numpy() * 1e4)
+            rows.append(s["mae_median"].to_numpy() * 1e4)
+    lim = float(np.nanmax(np.abs(np.concatenate(rows)))) * 1.08
+
+    fig, axes = plt.subplots(2, 4, figsize=(15.4, 7.8))
+    for j, r in enumerate(["R1", "R2", "R3", "R4"]):
+        ax = axes[0, j]
+        for f in FUNDS:
+            s = (d[(d["regime"] == r) & (d["funding"] == f)]
+                 .set_index("h").reindex(HORIZONS))
+            x = s["mfe_median"].to_numpy() * 1e4
+            y = s["mae_median"].to_numpy() * 1e4
+            ax.plot(x, y, color=COLORS[f], lw=0.8, alpha=0.65, zorder=2)
+            for i, h in enumerate(HORIZONS):
+                ax.scatter(x[i], y[i], marker=MARKERS[h], s=22,
+                           color=COLORS[f], edgecolor="white", lw=0.4,
+                           zorder=3)
+        ax.plot([0, lim], [0, -lim], ls="--", lw=0.8, color="0.5")
+        ax.set_title(r, fontsize=10)
+        ax.set_xlim(0, lim)
+        ax.set_ylim(-lim, 0)
+        ax.grid(lw=0.3, alpha=0.4)
+        ax.tick_params(labelsize=7)
+        ax.set_xlabel("MFE — p50, bp", fontsize=7.5)
+        if j == 0:
+            ax.set_ylabel("MAE — p50, bp", fontsize=8)
+
+    for j, r in enumerate(["R1", "R2", "R3", "R4"]):
+        ax = axes[1, j]
         for f in FUNDS:
             s = (d[(d["regime"] == r) & (d["funding"] == f)]
                  .set_index("h").reindex(HORIZONS))
             y = s["mdd_p50"].to_numpy() * 1e4
-            ax.plot(HORIZONS, y, color=COLORS[f], lw=1.2, marker="o", ms=4,
+            ax.plot(HORIZONS, y, color=COLORS[f], lw=1.1, marker="o", ms=3.5,
                     label=f, zorder=3)
         ax.axhline(0, color="0.5", lw=0.7, ls="--", zorder=1)
-        ax.set_title(r, fontsize=10)
         ax.set_xticks(HORIZONS)
-        ax.set_xticklabels([f"{h}h" for h in HORIZONS], fontsize=7.5)
+        ax.set_xticklabels([f"{h}h" for h in HORIZONS], fontsize=7)
+        ax.set_xlabel("horizon", fontsize=7.5)
         ax.grid(lw=0.3, alpha=0.4)
-        ax.tick_params(labelsize=7.5)
-    for ax in axes[-1]:
-        ax.set_xlabel("horizon", fontsize=8.5)
-    for ax in axes[:, 0]:
-        ax.set_ylabel("MDD — median (p50), bp", fontsize=8.5)
-    axes[0, 0].legend(fontsize=7, frameon=False, title="funding",
-                      title_fontsize=7)
-    fig.suptitle("P4-4 · MDD p50 by horizon and funding "
-                 "(event; descriptive — no test)", fontsize=10.5)
-    fig.text(0.5, 0.01,
-             "h=1 MDD = min(0, dir·fwd): no intrabar path, so the h=1 point is "
-             "the forward excursion, not a path drawdown; use h ≥ 4 for path "
-             "MDD.  Means/medians/percentiles in p4_4_path.csv.",
-             ha="center", fontsize=6.8, color="#4a5568")
-    fig.tight_layout(rect=(0, 0.03, 1, 0.93))
+        ax.tick_params(labelsize=7)
+        if j == 0:
+            ax.set_ylabel("MDD — p50, bp", fontsize=8)
+
+    fund_handles = [Line2D([0], [0], color=COLORS[f], lw=1.4, label=f)
+                    for f in FUNDS]
+    axes[0, 0].legend(handles=fund_handles, fontsize=6.8, frameon=False,
+                      title="funding", title_fontsize=6.8, loc="upper left")
+    axes[1, 0].legend(handles=fund_handles, fontsize=6.8, frameon=False,
+                      title="funding", title_fontsize=6.8, loc="lower left")
+    h_handles = [Line2D([0], [0], marker=MARKERS[h], color="0.25", ls="",
+                        ms=5, label=f"{h}h") for h in HORIZONS]
+    axes[0, 3].legend(handles=h_handles, fontsize=6.8, frameon=False,
+                      title="horizon", title_fontsize=6.8, loc="lower right")
+
+    fig.suptitle("P4-4 · path and drawdown (event; descriptive — no test)",
+                 fontsize=11)
+    fig.text(0.5, 0.005,
+             "Top: Phase 3 Fig 11 style, MFE vs MAE p50 (45° = symmetric).  "
+             "Bottom: MDD p50 by horizon.  h=1 MDD = min(0, dir·fwd), no "
+             "intrabar path; use h ≥ 4 for path MDD.  Means/medians/"
+             "percentiles in p4_4_path.csv.",
+             ha="center", fontsize=6.7, color="#4a5568")
+    fig.tight_layout(rect=(0, 0.02, 1, 0.94))
     OUT.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT / "f_p4_4_path.png", dpi=200, bbox_inches="tight")
     plt.close(fig)
