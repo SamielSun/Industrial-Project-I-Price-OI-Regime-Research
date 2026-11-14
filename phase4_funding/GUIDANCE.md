@@ -363,7 +363,7 @@ cont = 1 − rev
 
 **note 切片。** Q1 的 `β(R1, neu)`、Q2 的 `β(R1, ext)`、Q4 的 `β(R3, neu)`；§11 R1/R3 行。
 
-**输出。** `phase4_funding/tables/p4_5_beta.parquet` + `.csv`（全 384 行）；`phase4_funding/figures/f04_beta_significant.png`：16 行 dot plot（regime × funding），return / reversal 两个面板，**只画 BH16 + drop5 通过的格子**；event / contract-day 颜色，1/4/8/24h marker，CI + 零线，空白 = 不显著。
+**输出。** `phase4_funding/tables/p4_5_beta.parquet` + `.csv`（全 384 行）；`phase4_funding/figures/f04a_beta_sig_yraw.png`（return）+ `f04b_beta_sig_rev.png`（reversal）：4×4 lane（regime × funding），x = 1/4/8/24h，**只保留至少一个 BH16 + drop5 显著点的 cell**，无显著点的 cell 标 `null`；event / contract-day 两条线，CI + 零线，过 BH 实心。
 
 ---
 
@@ -479,11 +479,12 @@ phase4_funding/
     f01_return_heatmap.png          raw fwd 与 y_raw，4 h × 4 regime × 4 funding
     f02_vol_heatmap.png             rv 均值，同布局
     f03_contrast_forest.png         P4-1a/P4-2/P4-3 的 12 对比，95% CI
-    f04_beta_significant.png        P4-5 的显著格子（16 行 dot plot，return/reversal；只画 BH16+drop5）
+    f04a_beta_sig_yraw.png           P4-5a 显著 cell 的 lane（return，x = horizon）
+    f04b_beta_sig_rev.png            P4-5b 显著 cell 的 lane（reversal，x = horizon）
     f05_stress.png                  P4-6 的 R4 × market-vol
 ```
 
-图规则：热力图画估计值；forest plot 画被检验的量 + 95% CI；P4-5 用 16 行 dot plot，只画显著格子（BH16+drop5），空白 = 不显著；note 切片用底色 + 图例标注。
+图规则：热力图画估计值；forest plot 画被检验的量 + 95% CI；P4-5 用 4×4 lane（x = horizon），只保留至少一个显著点的 cell，`null` = 无显著；note 切片用底色 + 图例标注。
 
 ---
 
