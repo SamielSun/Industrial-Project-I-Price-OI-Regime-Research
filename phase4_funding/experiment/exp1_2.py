@@ -168,8 +168,9 @@ def contrast_block(o: pd.DataFrame, h: int, weighting: str,
                     weighting=weighting, h=h, dv=dv, regime=f"R{r}",
                     contrast=LABELS[kind], estimate=est, se=se, t=t,
                     p=I.p_two(t) if in_bh else np.nan, in_bh=in_bh,
-                    note_marker=("🔵🟡" if r in (1, 3)
-                                 else ("🟡" if r == 2 else "—")),
+                    note_marker=("🟣" if dv == "lrv" else
+                                 ("🔵🟡" if r in (1, 3)
+                                  else ("🟡" if r == 2 else "—"))),
                 ))
 
         if in_bh:

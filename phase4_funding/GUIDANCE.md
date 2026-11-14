@@ -87,7 +87,7 @@ note 对 Phase 4 的唯一直接定义在 §10：
 |---|---|
 | Universe | 月度 top-50（过去 30 天报价成交额），四道闸；249 个合约；54 个月（2022-03 … 2026-08）。 |
 | 事件 | 1h bar，|Δprice| 与 |ΔOI| 同时超过该合约过去 90 天 p70（≥30 天历史）。 |
-| Headline | `in_universe` 且 `excl_reason == "ok"`；`cell ∈ {1,2,3,4}`；h=1 有 256,076 个有有效前向收益的事件行。 |
+| Headline | `in_universe` 且 `excl_reason == "ok"`；`cell ∈ {1,2,3,4}`；events 共 256,079 行；其中 h=1 有有效前向收益 256,076 行（3 行无 h=1 forward），再减 219 个无 funding 状态 = 255,857。 |
 | 无 funding 状态 | 219 个事件（0.09%）四个 funding bool 全 False（p25 缺失）；从 P4 全部块排除并报告。 |
 | P4 样本（h=1） | 255,857 行。h=4/8/24 只差 `ok_{h}h` 的损失。 |
 | 合约-月 | 2,700 = 50 × 54。 |
@@ -306,7 +306,7 @@ cont = 1 − rev
 
 `dir ∈ {+1, −1}` 是事件方向（panel 的 `dir`；cell 0 的行也有方向）。用 raw `fwd_h` 的符号，这是 note §8 C 的定义；不要用 `y_raw` 的符号（市场中性会改符号）。校验：与 events 表的 `rev_h` 在 R1–R4 上逐行一致。
 
-**样本。** P4 样本 + 同方向、同 funding 的 benchmark（cell 0）行；`fwd_h` 有限。
+**样本。** P4 样本（cell 1–4）；`fwd_h` 有限。Benchmark（cell 0）只用于 P4-5；P4-3 不输出 benchmark 水平。
 
 **估计。** LPM：`rev ~ 16 个格 dummy + 合约 FE + 月 FE`；12 个 within-regime 对比（C1/C2/C3）；BH 12；drop5。`cont` 同表报告（`1 − rev` 的概率；hit rate 与 cont 在事件方向上一致）。
 
@@ -507,15 +507,15 @@ phase4_funding/
 
 ## 18. Checklist
 
-- [ ] 关联 `fwd_h` / `y_raw` / `rv` / `rev` / MFE-MAE-MDD / `mkt_vol_state` / funding 状态；校验 `(symbol, ts_end)` 与小时内恒等式。
-- [ ] 建 P4-1：4×4 面 + P4-1a（12，BH 12）+ n 表；P4-1b out of scope。
-- [ ] 建 P4-2：4×4 面 + 12 个 `lrv` 对比。
-- [ ] 建 P4-3：`rev/cont` 4×4 + 12 个 LPM 对比 + benchmark 水平。
-- [ ] 建 P4-4：MFE/MAE/MDD 4×4（描述）。
-- [ ] 建 P4-5：16 β × 2 outcome（mean、rev），BH 16、drop5。
-- [ ] 建 P4-6：R4 × market-vol 描述表（不检验 faster）。
-- [ ] 建 P4-7：nested/disjoint、权重、drop5、薄格、退化。
-- [ ] 出五张图。
-- [ ] 跑 §17 的 12 条校验。
-- [ ] 写 Phase 5 闸门句（或明确的「闸门未开」）。
-- [ ] 在表注里更新退化、proxy、weighting 披露。
+- [x] 关联 `fwd_h` / `y_raw` / `rv` / `rev` / MFE-MAE-MDD / `mkt_vol_state` / funding 状态；校验 `(symbol, ts_end)` 与小时内恒等式。
+- [x] 建 P4-1：4×4 面 + P4-1a（12，BH 12）+ n 表；P4-1b out of scope。
+- [x] 建 P4-2：4×4 面 + 12 个 `lrv` 对比。
+- [x] 建 P4-3：`rev/cont` 4×4 + 12 个 LPM 对比（不输出 benchmark 水平）。
+- [x] 建 P4-4：MFE/MAE/MDD 4×4（描述）。
+- [x] 建 P4-5：16 β × 2 outcome（mean、rev），BH 16、drop5。
+- [x] 建 P4-6：R4 × market-vol 描述表（不检验 faster）。
+- [x] 建 P4-7：nested/disjoint、权重、drop5、薄格、退化。
+- [x] 出五张图。
+- [x] 跑 §17 的 12 条校验。
+- [x] 写 Phase 5 闸门句（9 个通过项、192 次搜索）。
+- [x] 在表注里更新退化、proxy、weighting 披露。

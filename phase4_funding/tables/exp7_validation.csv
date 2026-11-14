@@ -145,5 +145,5 @@ P4-1a drop5 finite,all,96,True
 P4-2 drop5 finite,all,96,True
 P4-3 drop5 finite,all,96,True
 P4-5 drop5 finite,all,128,True
-P4-1a raw/y_raw corr finite,finite,0.24292177749933994,True
-P4-5a raw/y_raw corr finite,finite,0.8492085721869918,True
+P4-1a raw/y_raw corr finite,finite,0.24292177749934007,True
+P4-5a raw/y_raw corr finite,finite,0.7842895358597451,True

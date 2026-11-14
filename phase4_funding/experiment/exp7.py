@@ -159,9 +159,19 @@ def main() -> int:
     diag.append(dict(block="degeneracy",
                      metric="p75==p90 contract-months (event sample)",
                      value=f"{cm_share:.4%}", note=f"n={b1[['sym','month']].drop_duplicates().shape[0]:,}"))
+    lab_files = sorted((ROOT / "data/05_regime/regime_labels/freq=1h")
+                       .rglob("*.parquet"))
+    lab = pd.concat([pd.read_parquet(
+        p, columns=["symbol", "ts_end", "funding_p75", "funding_p90"])
+        for p in lab_files], ignore_index=True)
+    lab["month"] = lab["ts_end"].dt.to_period("M").astype(str)
+    lab["deg"] = lab["funding_p75"] == lab["funding_p90"]
+    full_cm = lab[["symbol", "month"]].drop_duplicates()
+    full_share = float(lab.groupby(["symbol", "month"])["deg"].max().mean())
     diag.append(dict(block="degeneracy",
                      metric="p75==p90 contract-months (full label)",
-                     value="48.9%", note="audit; 2,700 contract-months"))
+                     value=f"{full_share:.4%}",
+                     note=f"n={len(full_cm):,} contract-months"))
     check("p75==p90 event share", "0.5696", f"{ev_share:.4f}",
           abs(ev_share - 0.5696) < 0.01)
     check("p75==p90 cm share (event sample)", "0.654", f"{cm_share:.4f}",

@@ -30,6 +30,15 @@ six individual commands: **[`phase1/REPRODUCE.md`](phase1/REPRODUCE.md)**.
 | `data/` | All outputs. **Not in version control** — rebuild it from `phase1/REPRODUCE.md` |
 | `research_archive/` | Course materials, literature, submission drafts (not part of the pipeline) |
 
+## Phase 4 — funding × regime
+
+Conditional event study on the Phase 3 events: the 4×4 forward return and
+volatility tables, the within-regime contrasts (BH12 + drop5), the path and
+stress blocks, and the exploratory Phase 5 gate. See
+[`phase4_funding/GUIDANCE.md`](phase4_funding/GUIDANCE.md),
+[`phase4_funding/REPRODUCE.md`](phase4_funding/REPRODUCE.md) and
+[`phase4_funding/TABLES.md`](phase4_funding/TABLES.md).
+
 ## D1 deliverables
 
 Generated into `data/04_qa/` by the last pipeline step:
