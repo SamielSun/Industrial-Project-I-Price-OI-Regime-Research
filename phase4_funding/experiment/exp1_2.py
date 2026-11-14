@@ -28,8 +28,8 @@ import infer as I  # noqa: E402
 
 T0 = pd.Timestamp("2021-12-01", tz="UTC")
 HORIZONS = [1, 4, 8, 24]
-BASE = ROOT / "phase4_funding/data"
-TBL = ROOT / "phase4_funding/tables"
+BASE = ROOT / "data/07_funding/base"
+TBL = ROOT / "data/07_funding/tables/freq=1h"
 
 FUNDS = ["negative", "neutral", "high", "extreme"]
 MASKS = {"negative": {0}, "neutral": {1}, "high": {2, 3}, "extreme": {3}}

@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 HORIZONS = [1, 4, 8, 24]
-BASE = ROOT / "phase4_funding/data"
-TBL = ROOT / "phase4_funding/tables"
+BASE = ROOT / "data/07_funding/base"
+TBL = ROOT / "data/07_funding/tables/freq=1h"
 VSTATES = ["low", "mid", "high"]
 
 

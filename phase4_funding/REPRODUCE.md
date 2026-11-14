@@ -1,4 +1,4 @@
-# Phase 4 — reproduction
+﻿# Phase 4 — reproduction
 
 Phase 4 = funding × regime conditional event study. All commands run from the
 repo root. Python: the project env (`C:\miniconda\python.exe`); packages:
@@ -23,7 +23,7 @@ python phase4_funding/experiment/exp4.py            # P4-4
 python phase4_funding/experiment/exp5.py            # P4-5
 python phase4_funding/experiment/exp6.py            # P4-6
 python phase4_funding/experiment/exp7.py            # P4-7
-python phase4_funding/figures.py                    # 5 figures
+python data/07_funding/figures.py                    # 5 figures
 ```
 
 Approximate runtimes on the project machine: build ~1–2 min; exp1_2 ~45 s;
@@ -31,16 +31,16 @@ exp3 ~30 s; exp4 ~10 s; exp5 ~63 s; exp6 ~5 s; exp7 ~4 s; figures ~10 s.
 
 ## Outputs
 
-- `phase4_funding/data/p4_base_h={1,4,8,24}.parquet` — intermediate; **gitignored**.
-- `phase4_funding/tables/p4_1_surface.csv`, `p4_1_contrasts.csv`,
+- `data/07_funding/base/p4_base_h={1,4,8,24}.parquet` — intermediate; **gitignored**.
+- `data/07_funding/tables/freq=1h/p4_1_surface.csv`, `p4_1_contrasts.csv`,
   `p4_2_vol.csv`, `p4_2_contrasts.csv`, `p4_3_reversal.csv`, `p4_4_path.csv`,
   `p4_5_beta.csv`, `p4_6_stress.csv`, `p4_7_disjoint.csv`,
   `p4_7_diagnostics.csv` — the deliverables (CSV tracked; parquet ignored).
-- `phase4_funding/tables/p4_0_validation.csv`, `exp1_2_validation.csv`,
+- `data/07_funding/tables/freq=1h/p4_0_validation.csv`, `exp1_2_validation.csv`,
   `exp3_validation.csv`, `exp4_validation.csv`, `exp5_validation.csv`,
   `exp6_validation.csv`, `exp7_validation.csv` — 109 + 120 + 66 + 131 + 89 +
   28 + 148 = **691 checks**.
-- `phase4_funding/figures/f01_return_level.png`, `f02_vol_level.png`,
+- `data/07_funding/figures/f01_return_level.png`, `f02_vol_level.png`,
   `f03_difference_forest.png`, `f04_beta_forest.png`, `f_p4_4_path.png`.
 
 `figures.py` reads the parquet files, which are gitignored; a fresh clone must

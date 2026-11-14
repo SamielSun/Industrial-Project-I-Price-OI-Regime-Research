@@ -1,6 +1,6 @@
-# Phase 4 — table notes
+﻿# Phase 4 — table notes
 
-All tables live in `phase4_funding/tables/`. Returns are in **bp** (`y_raw`,
+All tables live in `data/07_funding/tables/freq=1h/`. Returns are in **bp** (`y_raw`,
 `fwd`, `mdd`, `mfe`, `mae`, β); `lrv` is log(rv); `rev`/`cont` are in **pp**
 (LPM coefficients); `rv` is a variance.
 

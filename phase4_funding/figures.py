@@ -19,8 +19,8 @@ from matplotlib.patches import Patch
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parents[1]
-TBL = ROOT / "phase4_funding/tables"
-OUT = ROOT / "phase4_funding/figures"
+TBL = ROOT / "data/07_funding/tables/freq=1h"
+OUT = ROOT / "data/07_funding/figures"
 
 FUNDS = ["negative", "neutral", "high", "extreme"]
 COLORS = {"negative": "#b2182b", "neutral": "#2166ac",

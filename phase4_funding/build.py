@@ -38,8 +38,8 @@ PANEL = ROOT / "data/06_event_study/panel/freq=1h"
 FWD = ROOT / "data/06_event_study/forward/freq=1h"
 EVENTS = ROOT / "data/06_event_study/events/events_1h.parquet"
 LABELS = ROOT / "data/05_regime/regime_labels/freq=1h"
-OUT = ROOT / "phase4_funding/data"
-TBL = ROOT / "phase4_funding/tables"
+OUT = ROOT / "data/07_funding/base"
+TBL = ROOT / "data/07_funding/tables/freq=1h"
 
 PANEL_COLS = ["symbol", "hour", "dir", "oi3", "cell", "fund", "y_raw", "lrv"]
 EV_COLS = (["symbol", "ts_end", "regime", "mkt_vol_state"]

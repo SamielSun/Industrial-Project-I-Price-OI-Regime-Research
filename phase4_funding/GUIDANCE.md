@@ -273,7 +273,7 @@ C3(r) = μ(r, extreme)  − μ(r, neutral)    # high 的子集
 - drop5：对 P4-1a 的每个对比做（剔影响最大的 5 个合约后重估）。
 - 表列：`estimate`、`se`、`t`、`p`、`p_bh`、`t_drop5`、`n_obs`、`n_cmonths`、`in_bh`、`note_marker`。
 
-**输出。** `phase4_funding/tables/p4_1_surface.parquet`、`p4_1_contrasts.parquet`（含 1a/1b）+ `.csv`。
+**输出。** `data/07_funding/tables/freq=1h/p4_1_surface.parquet`、`p4_1_contrasts.parquet`（含 1a/1b）+ `.csv`。
 
 ---
 
@@ -289,7 +289,7 @@ C3(r) = μ(r, extreme)  − μ(r, neutral)    # high 的子集
 
 **note。** 🟣（§10 output）；不对应 §7 的具体问题。
 
-**输出。** `phase4_funding/tables/p4_2_vol.parquet` + `.csv`。
+**输出。** `data/07_funding/tables/freq=1h/p4_2_vol.parquet` + `.csv`。
 
 ---
 
@@ -312,7 +312,7 @@ cont = 1 − rev
 
 **note 切片。** Q2（C3(R1)）、Q4（C1/C2/C3(R3)）、R1 extreme、R2 any、R3 neutral、R3 squeeze。
 
-**输出。** `phase4_funding/tables/p4_3_reversal.parquet` + `.csv`。
+**输出。** `data/07_funding/tables/freq=1h/p4_3_reversal.parquet` + `.csv`。
 
 ---
 
@@ -332,7 +332,7 @@ cont = 1 − rev
 
 **note。** 🟡（Q3 / R4 stress）。
 
-**输出。** `phase4_funding/tables/p4_4_path.parquet` + `.csv`；`phase4_funding/figures/f_p4_4_path.png`（4 regime 面板，MFE vs |MAE|，颜色 = funding，标记 = 期限，p50）。
+**输出。** `data/07_funding/tables/freq=1h/p4_4_path.parquet` + `.csv`；`data/07_funding/figures/f_p4_4_path.png`（4 regime 面板，MFE vs |MAE|，颜色 = funding，标记 = 期限，p50）。
 
 ---
 
@@ -353,7 +353,7 @@ cont = 1 − rev
 
 **note 切片。** Q1 的 `β(R1, neu)`、Q2 的 `β(R1, ext)`、Q4 的 `β(R3, neu)`；§11 R1/R3 行。
 
-**输出。** `phase4_funding/tables/p4_5_beta.parquet` + `.csv`（全 384 行）；`phase4_funding/figures/f04_beta_forest.png`：2 个面板（return / reversal），**y = cell × horizon（64 行）**，**只画 BH16 + drop5 显著点**；颜色 = event / contract-day，h 写在 y 标签；不标 note 底色。
+**输出。** `data/07_funding/tables/freq=1h/p4_5_beta.parquet` + `.csv`（全 384 行）；`data/07_funding/figures/f04_beta_forest.png`：2 个面板（return / reversal），**y = cell × horizon（64 行）**，**只画 BH16 + drop5 显著点**；颜色 = event / contract-day，h 写在 y 标签；不标 note 底色。
 
 ---
 
@@ -372,7 +372,7 @@ cont = 1 − rev
 
 **note。** 🟡（Q3 / R4 stress）。
 
-**输出。** `phase4_funding/tables/p4_6_stress.parquet` + `.csv`。
+**输出。** `data/07_funding/tables/freq=1h/p4_6_stress.parquet` + `.csv`。
 
 ---
 
@@ -386,7 +386,7 @@ cont = 1 − rev
 - **无 funding 状态**：219 行排除。
 - **raw vs y_raw**：P4-1/P4-2/P4-5a 报两列；判定用 `y_raw`，`fwd` 描述。
 
-**输出。** `phase4_funding/tables/p4_7_disjoint.parquet` + `.csv`（192 行：6 个 label = 5 类 + high，× 4 h × 2 weight × 4 regime）、`p4_7_diagnostics.csv`、`exp7_validation.csv`。
+**输出。** `data/07_funding/tables/freq=1h/p4_7_disjoint.parquet` + `.csv`（192 行：6 个 label = 5 类 + high，× 4 h × 2 weight × 4 regime）、`p4_7_diagnostics.csv`、`exp7_validation.csv`。
 
 ---
 
@@ -458,7 +458,13 @@ phase4_funding/
   GUIDANCE.md                       本文件
   REPRODUCE.md                      命令顺序、依赖、耗时、caveat
   TABLES.md                         每张表的定义与 caveat
-  tables/
+  build.py
+  experiment/
+  figures.py
+
+data/07_funding/
+  base/                             p4_base_h=*.parquet（中间；gitignored）
+  tables/freq=1h/
     p4_0_validation.csv
     p4_1_surface.parquet/.csv
     p4_1_contrasts.parquet/.csv     P4-1a（y_raw/fwd）
@@ -476,7 +482,7 @@ phase4_funding/
     exp5_validation.csv
     exp6_validation.csv
     exp7_validation.csv
-  figures/
+  figures/                          data/07_funding/figures/
     f01_return_level.png            2×4 heatmap：y_raw 均值，event/contract × 4 h
     f02_vol_level.png               2×4 heatmap：lrv 均值，同布局
     f03_difference_forest.png       3 面板：P4-1a(h=1)/P4-2(h=24)/P4-3(h=1) 的 12 对比
