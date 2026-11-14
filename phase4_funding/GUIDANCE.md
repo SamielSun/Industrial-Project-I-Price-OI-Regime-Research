@@ -388,17 +388,15 @@ cont = 1 − rev
 
 ## 12. P4-7 — 稳健性
 
-- **Nested vs disjoint（A+B）**：
-  - **A**：非退化 4×4（p75 < p90）的 `negative / neutral / high_only / extreme`；high-only vs extreme 只在这里比（干净、互斥）。
-  - **B**：退化桶（p75 == p90 且 state=3，high=extreme）单列；`high` 并集 = high_only + extreme + degenerate；均值/rv/rev 可加回主表，`mdd_p50` 是分位数、不可加权，表注说明。
-- **权重**：event 与合约-日并排；三桶的计数按当前权重。
+- **5 类拆分（一次做完）**：`negative / neutral`（full）、`high_only / extreme`（non-degenerate，p75 < p90）、`degenerate`（p75 == p90，high=extreme）；5 类互斥且穷尽；`high` = high_only + extreme + degenerate（三桶相加）；`mdd_p50` 是分位数、不可加权。
+- **权重**：event 与合约-日并排；5 类的计数按当前权重。
 - **drop5**：对 P4-1a/P4-2/P4-3/P4-5 的每个对比/β。
 - **薄格**：非退化 extreme 的 n_cmonths 全部 >400；退化桶在 h=1 只有 217–316 合约-月（R1 292、R2 236、R3 217、R4 316），必须标；h=1 的 full R3×extreme 仍是 584，R1×extreme 752。
 - **退化**：p75==p90 占 56.96% 事件行 / 65.4% 事件样本合约-月 / 48.9% 全 label；`high` 与 `extreme` 在退化行上是同一批。
 - **无 funding 状态**：219 行排除。
 - **raw vs y_raw**：P4-1/P4-2/P4-5a 报两列；判定用 `y_raw`，`fwd` 描述。
 
-**输出。** `phase4_funding/tables/p4_7_disjoint.parquet` + `.csv`（192 行：6 个 label × 4 h × 2 weight × 4 regime）、`p4_7_diagnostics.csv`、`exp7_validation.csv`。
+**输出。** `phase4_funding/tables/p4_7_disjoint.parquet` + `.csv`（192 行：6 个 label = 5 类 + high，× 4 h × 2 weight × 4 regime）、`p4_7_diagnostics.csv`、`exp7_validation.csv`。
 
 ---
 

@@ -1,5 +1,13 @@
 check,expected,actual,pass_
 disjoint rows,192,192,True
+event h=1 5 categories sum = full,255857,255857,True
+contract_day h=1 5 categories sum = full,161403,161403,True
+event h=4 5 categories sum = full,255844,255844,True
+contract_day h=4 5 categories sum = full,161397,161397,True
+event h=8 5 categories sum = full,255810,255810,True
+contract_day h=8 5 categories sum = full,161380,161380,True
+event h=24 5 categories sum = full,255590,255590,True
+contract_day h=24 5 categories sum = full,161257,161257,True
 event h=1 R1 high n = 3 buckets,13184,13184,True
 event h=1 R1 high y_raw_mean_bp = 3 buckets,3.160257494,3.160257494,True
 event h=1 R1 high rv_mean = 3 buckets,0.01222726268,0.01222726268,True

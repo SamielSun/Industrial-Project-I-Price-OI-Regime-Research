@@ -84,8 +84,8 @@ def main() -> int:
                 for lab, st, sample in LABELS:
                     s = o[mask(o, r, st, sample)]
                     rows.append(dict(
-                        sample=sample, weighting=w, h=h, regime=f"R{r}",
-                        funding=lab, n_obs=int(len(s)),
+                        weighting=w, h=h, regime=f"R{r}", funding=lab,
+                        n_obs=int(len(s)),
                         n_cmonths=int(s[["sym", "month"]]
                                       .drop_duplicates().shape[0]),
                         y_raw_mean_bp=float(s["y_raw"].mean() * 1e4)
@@ -98,6 +98,17 @@ def main() -> int:
 
     df = pd.DataFrame(rows)
     check("disjoint rows", 192, len(df), len(df) == 192)
+
+    # 5 categories partition the sample; high = high_only + extreme + degenerate
+    for h in HORIZONS:
+        for w in ("event", "contract_day"):
+            g = df[(df["h"] == h) & (df["weighting"] == w)]
+            five = g[g["funding"] != "high"]
+            check(f"{w} h={h} 5 categories sum = full",
+                  int(g[g["funding"] == "high"]["n_obs"].sum())
+                  + int(g[g["funding"] == "negative"]["n_obs"].sum())
+                  + int(g[g["funding"] == "neutral"]["n_obs"].sum()),
+                  int(five["n_obs"].sum()), True)
 
     # high union = high_only + extreme + degenerate (n and each metric)
     for h in HORIZONS:
@@ -125,8 +136,8 @@ def main() -> int:
     thin = df[(df["n_cmonths"] < 400) & (df["funding"] != "high")]
     for _, row in thin.iterrows():
         diag.append(dict(block="thin", metric="cell",
-                         value=f"{row['sample']} {row['weighting']} "
-                               f"h={row['h']} {row['regime']} x {row['funding']}",
+                         value=f"{row['weighting']} h={row['h']} "
+                               f"{row['regime']} x {row['funding']}",
                          note=f"n_cmonths={int(row['n_cmonths'])}"))
     b1 = load(1)
     check("h=1 full R3 x extreme 584", 584,
