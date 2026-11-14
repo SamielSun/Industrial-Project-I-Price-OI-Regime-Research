@@ -53,10 +53,10 @@ def obs_event(b: pd.DataFrame) -> pd.DataFrame:
 
 
 def obs_contract_day(b: pd.DataFrame) -> pd.DataFrame:
-    return (b.groupby(["sym", "day", "cell", "state"], as_index=False)
+    return (b.groupby(["sym", "day", "cell", "state", "dir"], as_index=False)
               .agg(y_raw=("y_raw", "mean"), fwd=("fwd", "mean"),
                    rev=("rev", "mean"), size=("y_raw", "size"),
-                   dir=("dir", "first"), month=("month", "first")))
+                   month=("month", "first")))
 
 
 def _drop5(y, treat, sym, mon, psi, n1):
