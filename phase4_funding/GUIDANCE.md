@@ -67,7 +67,7 @@ note 对 Phase 4 的唯一直接定义在 §10：
 | Reversal/Continuation | `rev = 1{fwd_h · dir < 0}`（raw 符号，note §8 C 的定义）；`cont = 1 − rev`；LPM + FE。 |
 | Path | MFE / MAE / MDD（events 表已有），按 cell 描述。 |
 | Benchmark | 同方向、同 funding 档、价格超阈但**不是该 regime** 的行（cell 0 + 另一个 OI 状态）；用于 P4-5 的 β。 |
-| Stress | R4 × market-vol state（low/mid/high）为主；R4 × funding stress（ext/neg）为第二层。 |
+| Stress | R4 × market-vol state（low/mid/high）；**描述，不检验 "faster"**。 |
 | 期限 | 1、4、8、24 小时。 |
 | 权重 | event 等权为主；合约-日等权（one vote per contract-day）为稳健性。 |
 | 推断 | 合约 + 月份双向固定效应；CGM 双向聚类 SE；每个（块 × 期限 × 权重）一个 BH 家族；逐对比/β 做 drop5。 |
@@ -190,7 +190,7 @@ SE(c) = sqrt(c' V c)
 | **P4-3** | 条件反转/延续 | `rev`、`cont` | headline | 12 个 within-regime；另报 benchmark 水平 | LPM + FE；BH 12；drop5 | 🔵🟡 |
 | **P4-4** | 条件路径 | MFE / MAE / MDD | headline | 按 cell | 描述（均值/中位数/p10/p90） | 🟡 |
 | **P4-5** | 条件 β | `y_raw`/`fwd` 与 `rev` vs benchmark | regime + benchmark | 16 β × 2 outcome | FE/LPM + CGM；BH 16；drop5 | 🔵🟡 |
-| **P4-6** | 条件 stress | R4 × market-vol；R4 × funding stress | R4 + benchmark | 按 state | 描述 + 小家族 | 🟡 |
+| **P4-6** | 条件 stress（最小） | R4 × market-vol | R4 | 按 state | 描述（不检验 faster） | 🟡 |
 | **P4-7** | 稳健性 | all | all | nested vs disjoint、event vs 合约-日、drop5、薄格 | 诊断 | — |
 
 **图例**：🔵 = §7 问题；🟡 = §11 六行；🟣 = §10 output；— = 探索性。
@@ -205,7 +205,7 @@ SE(c) = sqrt(c' V c)
 |---|---|---|---|
 | Q1 R1 在 neutral 时更好？ | P4-1a `C1/C2/C3(R1)`（neutral vs 其他档，符号反读）+ P4-5a `β(R1, neu)` | 均值/β | 🔵 |
 | Q2 R1 在 extreme 时 reversal？ | P4-3 `C3(R1)`（ext vs neu 的反转概率）+ P4-1a `C3(R1)`（均值符号）+ P4-5b `β(R1, ext)` | 概率/均值/β | 🔵 |
-| Q3 R4 在 stress 后更快 mean-revert？ | P4-6 `R4 × stress` + P4-4 `R4` 路径 + P4-1a `R4` 的 1/4/8/24h 梯度 | 描述/路径 | 🔵 |
+| Q3 R4 在 stress 后更快 mean-revert？ | P4-6 `R4 × market-vol`（**描述，不检验 faster**）+ P4-4 `R4` 路径 + P4-1a `R4` 的 1/4/8/24h 梯度 | 描述/路径 | 🔵 |
 | Q4 R3 在 neutral 时 continuation？ | P4-3 `C1/C2/C3(R3)`（neutral vs 其他档；cont = 1−rev）+ P4-1a `C1/C2/C3(R3)` + P4-5b `β(R3, neu)` | 概率/均值/β | 🔵 |
 
 ### 5.2 §11 的六行
@@ -217,7 +217,7 @@ SE(c) = sqrt(c' V c)
 | R2 + any → short-covering exhaustion | P4-1a R2 四档 profile + P4-3 R2 四档 `rev/cont` | 🟡 |
 | R3 + neutral → downside continuation | P4-1a `(R3, neu)` 均值 + P4-3 `(R3, neu)` 的 `cont` | 🟡 |
 | R3 + extreme negative → short-squeeze | P4-1a `C1(R3)`（negative vs neutral）+ P4-3 `C1(R3)` | 🟡 |
-| R4 + stress / high vol → mean reversion | P4-6 + P4-4 | 🟡 |
+| R4 + stress / high vol → mean reversion | P4-6（描述，不检验 faster）+ P4-4 | 🟡 |
 
 ### 5.3 §10 的 4×4 output
 
@@ -228,7 +228,7 @@ SE(c) = sqrt(c' V c)
 ### 5.4 代理口径
 
 - **extreme negative**：标签没有单边 extreme-negative 档；note 的 "extreme negative" 在 R3 short-squeeze 上用 `negative`（f ≤ p25）代理。表注写明。
-- **liquidation / stress**：没有 liquidation 数据；P4-6 用 market-vol state（low/mid/high）代理，funding stress（ext/neg）作第二层。表注写明。
+- **liquidation / stress**：没有 liquidation 数据；P4-6 用 market-vol state（low/mid/high）代理；只做描述，不检验 "faster"。表注写明。
 
 ---
 
@@ -367,16 +367,18 @@ cont = 1 − rev
 
 ---
 
-## 11. P4-6 — 条件 stress
+## 11. P4-6 — R4 × market-vol（最小描述）
 
-**目的。** Q3 的 stress 维度；§11 的 R4 行。
+**Q3 的定位。** note 的 Q3 是唯一问「mean-revert faster」的问题；没有 liquidation 数据、没有 first-touch/survival，**不能正式检验「faster」**。本块只做一张描述表，标 **descriptive — not a test of faster**。
 
-**两层。**
+**表。** R4 × `mkt_vol_state ∈ {low, mid, high}` × 1/4/8/24h：
 
-1. **R4 × market-vol state**：`mkt_vol_state ∈ {low, mid, high}`（unknown 排除）；每格报收益、`rev`、路径；描述性。
-2. **R4 × funding stress**：`extreme` / `negative` vs `neutral`（R4 内部）；报收益、`rev`；描述性/小家族。
+- `y_raw` 均值（bp）；
+- `rev` 比例（%）；
+- `mdd_p50`（bp）；
+- n / 合约-月；`unknown`（mkt_vol 未定义）单列。
 
-**代理口径。** 没有 liquidation 数据；market-vol 是唯一有数据的市场状态代理；funding stress 是第二层。表注写明。
+**不做。** 不做 R4 × funding stress 第二层、不做小家族、不做图、不做 survival/time-to-recovery；Q3 在 note map 里标 **descriptive only**。
 
 **note。** 🟡（Q3 / R4 stress）。
 
@@ -412,7 +414,7 @@ cont = 1 − rev
 | P4-4 / P4-6 | 无 | — | 描述 | — |
 
 - note 的四个问题 + 六行是各自块家族内的**预声明子集**；不另开小家族，避免「特例化」。
-- 探索性格（P4-1b、P4-5 的非 note β、P4-6 的第二层）在同一家族内，会稀释 note 切片的 power；这是 comprehensiveness 的代价，报告时说明。
+- 探索性格（P4-1b、P4-5 的非 note β）在同一家族内，会稀释 note 切片的 power；这是 comprehensiveness 的代价，报告时说明。
 - `p_bh` 是家族内 BH；`t_drop5` 是逐对比/β 的条件稳健性；`|t| > 1.96` 不等于过闸，必须看 `p_bh` 与 `t_drop5`。
 
 ---
@@ -455,7 +457,7 @@ cont = 1 − rev
 - IC：note 的条件句；信号是阈值标签，不是 ranked score。
 - 绝对 bp/day funding 尺度、β 的绝对尺度版本、阈值优化（p60/p70）——Phase 2/3 已处理或 note 没有。
 - 跨交易所、Phase 5 回测、by-symbol（Phase 3 保留）、4h/8h 标签（后续）。
-- liquidation 数据（没有）；用 market-vol / funding stress 代理。
+- liquidation 数据（没有）；P4-6 用 market-vol 代理（描述，不检验）。
 
 ---
 
@@ -480,7 +482,6 @@ phase4_funding/
     f02_vol_heatmap.png             rv 均值，同布局
     f03_contrast_forest.png         P4-1a/P4-2/P4-3 的 12 对比，95% CI
     f04_beta_forest.png             P4-5 的显著点 forest（2 面板，y = cell × horizon）
-    f05_stress.png                  P4-6 的 R4 × market-vol
 ```
 
 图规则：热力图画估计值；forest plot 画被检验的量 + 95% CI；P4-5 用 forest（y = cell × horizon），只画显著点，h 写在 y 标签。
@@ -512,7 +513,7 @@ phase4_funding/
 - [ ] 建 P4-3：`rev/cont` 4×4 + 12 个 LPM 对比 + benchmark 水平。
 - [ ] 建 P4-4：MFE/MAE/MDD 4×4（描述）。
 - [ ] 建 P4-5：16 β × 2 outcome（mean、rev），BH 16、drop5。
-- [ ] 建 P4-6：R4 × market-vol + R4 × funding stress。
+- [ ] 建 P4-6：R4 × market-vol 描述表（不检验 faster）。
 - [ ] 建 P4-7：nested/disjoint、权重、drop5、薄格、退化。
 - [ ] 出 `p4_note_map.csv`：每个 note 切片一行，含 🔵/🟡/🟣 marker。
 - [ ] 出五张图。

@@ -1,0 +1,29 @@
+check,expected,actual,pass_
+h=1 R4 total n,85851,85851,True
+h=1 R4 unknown rows (info),1258,1258,True
+h=4 R4 total n,85845,85845,True
+h=4 R4 unknown rows (info),1258,1258,True
+h=8 R4 total n,85829,85829,True
+h=8 R4 unknown rows (info),1258,1258,True
+h=24 R4 total n,85749,85749,True
+h=24 R4 unknown rows (info),1258,1258,True
+h=1 4 vol rows,4,4,True
+"h=1 rev in [0,100]",4,4,True
+h=1 mdd_p50 <= 0,4,4,True
+h=1 y_raw finite,4,4,True
+h=4 4 vol rows,4,4,True
+"h=4 rev in [0,100]",4,4,True
+h=4 mdd_p50 <= 0,4,4,True
+h=4 y_raw finite,4,4,True
+h=8 4 vol rows,4,4,True
+"h=8 rev in [0,100]",4,4,True
+h=8 mdd_p50 <= 0,4,4,True
+h=8 y_raw finite,4,4,True
+h=24 4 vol rows,4,4,True
+"h=24 rev in [0,100]",4,4,True
+h=24 mdd_p50 <= 0,4,4,True
+h=24 y_raw finite,4,4,True
+h=1 n matches P4-4 R4 distinct,85851,85851,True
+h=4 n matches P4-4 R4 distinct,85845,85845,True
+h=8 n matches P4-4 R4 distinct,85829,85829,True
+h=24 n matches P4-4 R4 distinct,85749,85749,True
