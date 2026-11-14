@@ -425,20 +425,21 @@ cont = 1 − rev
 1. 在**至少一种权重**下，在其 12 检验家族内过 BH（`p_bh < 0.05`）且扛住 drop5（`|t_drop5| > 1.96`）；
 2. 在**另一种权重**下，估计**同号**（不要求显著）。
 
-任意期限都算；不设 bp 阈值；**不做 BH96**。非 note 切片的通过项是 discovery（note 没假设到的问题），照常报告，不另设闸门。
+任意期限都算；不设 bp 阈值；**不做跨家族 BH 校正；实际搜索数 192（P4-1a 96 + P4-3 96）**。非 note 切片的通过项是 discovery（note 没假设到的问题），照常报告，不另设闸门。
 
 - **P4-2**（波动）不 gate；作 risk overlay（仓位/止损宽度）。
 - **P4-5**（β）不单独 gate；作「regime 是否还有信息」的旁证。
 - **P4-4/P4-6** 描述性，不 gate。
 
-**当前结果（P4-1a，h=1）：**
+**当前结果（P4-1a + P4-3，全部 h；共 9 个通过项）：**
 
-- **R3×negative**：event +2.64bp / contract +5.29bp，同号；contract `p_bh` 0.033、`t_drop5` 3.15 → 开。
-- **R4×negative**：event +2.41bp（`p_bh` 0.062）/ contract +2.47bp（`p_bh` 0.024、`t_drop5` 2.90），同号 → 开；R4 不是 note 切片，属 discovery。
+- **P4-1a（`y_raw`）**：R3×negative、R4×negative（h=1）；contract-day 过 BH12 + drop5，event 同号。
+- **P4-3（`rev`）**：R4×negative（h=1，两权重都过）、R1×negative（h=1/4）、R2×negative（h=8）、R3×negative（h=8/24）。
+- 搜索数：P4-1a 96 + P4-3 96 = 192；9 个通过项都集中在 negative 列，high/extreme 无。
 
 闸门句：
 
-> Phase 5 由 `<regime> × <funding>` 解锁，h = `<h>`，weighting = `<event|contract-day>`，outcome = `<y_raw|rev>`：估计 = `<...>`（t = `<t>`，p_bh = `<p>`，t_drop5 = `<t5>`）；另一权重同号（估计 = `<...>`，t = `<...>`）。
+> Phase 5 由 R3/R4×negative（`y_raw` + `rev`）和 R1/R2×negative（`rev`）解锁；Phase 5 只跑 M1（down-regime negative → long）和 M2（up-regime negative → long）+ vol overlay；exploratory，不是 confirmatory；必须 out-of-sample。
 
 性质说明：这是 **exploratory screening**，不是 confirmatory。BH 是家族内（每个块 × 期限 × 权重 12 个），**不控制 12×4×2 的全搜索**；因此：
 
