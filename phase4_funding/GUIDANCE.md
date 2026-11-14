@@ -397,7 +397,6 @@ cont = 1 − rev
 - **退化**：p75==p90 占 56.96% 事件行 / 65.4% 事件样本合约-月 / 48.9% 全 label；`high` 与 `extreme` 在退化行上是同一批。
 - **无 funding 状态**：219 行排除。
 - **raw vs y_raw**：P4-1/P4-2/P4-5a 报两列；判定用 `y_raw`，`fwd` 描述。
-- **旧产物**：旧的 `l1_cellmeans` / `l2_interactions` 不在任何块使用。
 
 **输出。** `phase4_funding/tables/p4_7_disjoint.parquet` + `.csv`（192 行：6 个 label × 4 h × 2 weight × 4 regime）、`p4_7_diagnostics.csv`、`exp7_validation.csv`。
 

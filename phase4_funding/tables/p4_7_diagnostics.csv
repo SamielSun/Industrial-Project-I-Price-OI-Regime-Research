@@ -42,4 +42,3 @@ drop5,P4-3,sign flips 7/96,max |t-t_drop5|=0.98
 drop5,P4-5,sign flips 6/128,max |t-t_drop5|=3.82
 raw_vs_yraw,"P4-1a corr(fwd,y_raw)",0.243,sign flips 37/96
 raw_vs_yraw,"P4-5a corr(fwd,y_raw)",0.849,sign flips 31/128
-old_artefacts,l1/l2 files,0,not used by P4 blocks

@@ -197,15 +197,6 @@ def main() -> int:
                      note=f"sign flips {flips5}/{len(piv5)}"))
     check("P4-5a raw/y_raw corr finite", "finite", corr5, np.isfinite(corr5))
 
-    # old artefacts
-    old = []
-    for pat in ("l1_cellmeans.*", "l2_interactions.*"):
-        old += [p.name for p in (ROOT / "data/06_event_study/tables/freq=1h")
-                .glob(pat)]
-    diag.append(dict(block="old_artefacts", metric="l1/l2 files",
-                     value=str(len(old)), note="not used by P4 blocks"))
-    check("old artefacts absent", 0, len(old), len(old) == 0)
-
     cdf = pd.DataFrame(checks)
     cdf.to_csv(TBL / "exp7_validation.csv", index=False)
     print(cdf.to_string(index=False))
