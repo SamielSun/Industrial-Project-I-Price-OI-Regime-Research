@@ -93,90 +93,48 @@ def f_p4_5() -> None:
     d = pd.read_parquet(TBL / "p4_5_beta.parquet")
     d = d[d["outcome"].isin(["y_raw", "rev"])].copy()
     d["sig"] = (d["p_bh"] < 0.05) & (d["t_drop5"].abs() > 1.96)
+    d = d[d["sig"]].copy()
+    d["row"] = (d["regime"] + " × " + d["funding"] + "  "
+                + d["h"].astype(str) + "h")
+    order = [f"{r} × {f}  {h}h" for r in ["R1", "R2", "R3", "R4"]
+             for f in FUNDS for h in HORIZONS]
+    ypos = {k: i for i, k in enumerate(order)}
     ev_col, ct_col = "#2b6cb0", "#c05621"
-    specs = (
-        ("y_raw", "beta, bp", "P4-5a · return gap vs matched benchmark (bp)",
-         "f04a_beta_sig_yraw.png"),
-        ("rev", "beta, pp", "P4-5b · reversal gap vs matched benchmark (pp)",
-         "f04b_beta_sig_rev.png"),
-    )
-    for dv, ylab, ttl, fname in specs:
-        s_all = d[d["outcome"] == dv]
-        rows_sig = [i for i, r in enumerate(["R1", "R2", "R3", "R4"])
-                    if bool(s_all[s_all["regime"] == r]["sig"].any())]
-        last_row = max(rows_sig)
-        lo = float((s_all["beta"] - 1.96 * s_all["se"]).min())
-        hi = float((s_all["beta"] + 1.96 * s_all["se"]).max())
-        pad = (hi - lo) * 0.08
-        fig, axes = plt.subplots(4, 4, figsize=(13.6, 9.8),
-                                 sharex=True, sharey=True)
-        for i, r in enumerate(["R1", "R2", "R3", "R4"]):
-            for j, f in enumerate(FUNDS):
-                ax = axes[i, j]
-                s = s_all[(s_all["regime"] == r) & (s_all["funding"] == f)]
-                if not bool(s["sig"].any()):
-                    ax.axis("off")
-                    ax.text(0.5, 0.5, f"{r} × {f}\nnull", ha="center",
-                            va="center", fontsize=7, color="0.55",
-                            transform=ax.transAxes)
-                    continue
-                xs = np.arange(len(HORIZONS))
-                for w, color, ls in (("event", ev_col, "-"),
-                                     ("contract_day", ct_col, "--")):
-                    q = (s[s["weighting"] == w].set_index("h")
-                         .reindex(HORIZONS))
-                    beta = q["beta"].to_numpy("float64")
-                    se = q["se"].to_numpy("float64")
-                    sg = q["sig"].to_numpy("bool")
-                    ax.plot(xs, beta, color=color, ls=ls, lw=0.9, zorder=2)
-                    ax.errorbar(xs, beta, yerr=1.96 * se, fmt="none",
-                                ecolor=color, elinewidth=0.8, capsize=1.8,
-                                zorder=2)
-                    ax.scatter(xs[sg], beta[sg], marker="o", s=13,
-                               color=color, edgecolor=color, lw=0.4, zorder=4)
-                    ax.scatter(xs[~sg], beta[~sg], marker="o", s=13,
-                               facecolor="white", edgecolor=color, lw=0.7,
-                               zorder=4)
-                ax.axhline(0, color="0.35", lw=0.8, zorder=1)
-                ax.set_ylim(lo - pad, hi + pad)
-                ax.set_xlim(-0.25, len(HORIZONS) - 0.75)
-                ax.set_title(f"{r} × {f}", fontsize=7.2)
-                ax.set_facecolor("#f5f9ff" if r in ("R1", "R2", "R3")
-                                 else "white")
-                ax.grid(lw=0.3, alpha=0.35)
-                ax.tick_params(labelsize=6.2)
-                if j == 0:
-                    ax.set_ylabel(ylab, fontsize=7)
-                if i == last_row:
-                    ax.set_xticks(xs)
-                    ax.set_xticklabels([f"{h}h" for h in HORIZONS],
-                                       fontsize=6.4)
-                    ax.tick_params(labelbottom=True)
-        handles = [
-            Line2D([0], [0], color=ev_col, ls="-", lw=1.1, marker="o", ms=4,
-                   label="event"),
-            Line2D([0], [0], color=ct_col, ls="--", lw=1.1, marker="o", ms=4,
-                   label="contract-day"),
-            Line2D([0], [0], color="0.25", ls="", marker="o", ms=4,
-                   markerfacecolor="0.25", label="BH16 + drop5"),
-            Line2D([0], [0], color="0.25", ls="", marker="o", ms=4,
-                   markerfacecolor="white", label="not significant"),
-            Patch(facecolor="#f5f9ff", edgecolor="0.7",
-                  label="note slice (R1-R3)"),
-        ]
-        fig.legend(handles=handles, loc="lower center", ncol=5, fontsize=7,
-                   frameon=False, bbox_to_anchor=(0.5, 0.004))
-        fig.suptitle(ttl + " · significant cells only", fontsize=11)
-        fig.text(0.5, 0.045,
-                 "Only cells with at least one BH16 + drop5 point are shown; "
-                 "null = no significant point.  Full table: p4_5_beta.csv.  "
-                 "Positive = regime beats the same-direction, same-funding "
-                 "benchmark.", ha="center", fontsize=6.6, color="#4a5568")
-        fig.tight_layout(rect=(0, 0.09, 1, 0.94))
-        OUT.mkdir(parents=True, exist_ok=True)
-        fig.savefig(OUT / fname, dpi=200, bbox_inches="tight")
-        plt.close(fig)
-        print(f"wrote {OUT / fname}")
+    fig, axes = plt.subplots(1, 2, figsize=(13.2, 10.5))
+    for ax, dv, xlab, ttl in (
+            (axes[0], "y_raw", "beta, bp (y_raw)",
+             "P4-5a · return gap vs matched benchmark (bp)"),
+            (axes[1], "rev", "beta, pp (rev)",
+             "P4-5b · reversal gap vs matched benchmark (pp)")):
+        s = d[d["outcome"] == dv]
+        for w, color, lab in (("event", ev_col, "event"),
+                              ("contract_day", ct_col, "contract-day")):
+            q = s[s["weighting"] == w]
+            ax.errorbar(q["beta"], [ypos[c] for c in q["row"]],
+                        xerr=1.96 * q["se"], fmt="o", color=color,
+                        ms=4.2, lw=0.9, capsize=2, mec="white", mew=0.3,
+                        label=lab, zorder=3)
+        ax.axvline(0, color="0.35", lw=0.8, zorder=1)
+        ax.set_yticks(range(len(order)))
+        ax.set_yticklabels(order, fontsize=5.9)
+        ax.set_ylim(-0.6, len(order) - 0.4)
+        ax.set_xlabel(xlab, fontsize=8.5)
+        ax.set_title(ttl, fontsize=9.5)
+        ax.grid(axis="x", lw=0.3, alpha=0.4)
+        ax.tick_params(labelsize=7)
+        ax.legend(fontsize=7.5, frameon=False, loc="lower right")
+    fig.suptitle("P4-5 · significant cells only (BH16 + drop5): forest",
+                 fontsize=11)
+    fig.text(0.5, 0.005,
+             "Only cells with at least one BH16 + drop5 point are drawn; blank "
+             "row = not significant.  Full table: p4_5_beta.csv.  Positive = "
+             "regime beats the same-direction, same-funding benchmark.",
+             ha="center", fontsize=6.8, color="#4a5568")
+    fig.tight_layout(rect=(0, 0.02, 1, 0.95))
+    OUT.mkdir(parents=True, exist_ok=True)
+    fig.savefig(OUT / "f04_beta_forest.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {OUT / 'f04_beta_forest.png'}")
 
 
 if __name__ == "__main__":
