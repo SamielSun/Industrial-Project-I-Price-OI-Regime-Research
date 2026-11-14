@@ -101,6 +101,8 @@ def run(o: pd.DataFrame, h: int, weighting: str,
                         cvec(r, KIND[x["contrast"]], w2), n_c)
         x["rev_t_drop5"] = t5
         x["cont_t_drop5"] = -t5
+        x["flip_drop5"] = (bool(np.sign(x["rev_t"]) != np.sign(t5))
+                           if np.isfinite(t5) else np.nan)
     for x in fam:
         r = int(x["regime"][1])
         states = STATES[KIND[x["contrast"]]]

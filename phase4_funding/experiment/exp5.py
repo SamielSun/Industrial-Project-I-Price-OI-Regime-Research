@@ -131,6 +131,8 @@ def main() -> int:
                             weighting=weighting, h=h, outcome=dv, regime=f"R{r}",
                             funding=f, beta=beta_d, se=se_d, t=st["t"],
                             p=st["p"], in_bh=in_bh, t_drop5=st["t_drop5"],
+                            flip_drop5=(bool(np.sign(st["t"]) != np.sign(st["t_drop5"]))
+                                        if np.isfinite(st["t_drop5"]) else np.nan),
                             n_treat=st["n_treat"], n_bench=st["n_bench"],
                             n_cmonths=st["n_cmonths"], unit=unit,
                             note_marker=("🔵🟡" if r in (1, 3)

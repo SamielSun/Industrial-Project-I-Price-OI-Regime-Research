@@ -193,6 +193,10 @@ def contrast_block(o: pd.DataFrame, h: int, weighting: str,
                 x["t_drop5"] = np.nan
 
         for x in fam:
+            x["flip_drop5"] = (bool(np.sign(x["t"]) != np.sign(x["t_drop5"]))
+                               if np.isfinite(x["t_drop5"]) else np.nan)
+
+        for x in fam:
             r = int(x["regime"][1])
             states = STATES[KIND[x["contrast"]]]
             sub = o[(o["cell"] == r) & o["state"].isin(states)]
