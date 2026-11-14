@@ -100,6 +100,9 @@ def surface(o: pd.DataFrame) -> list[dict]:
             for metric in ("fwd", "y_raw", "rv", "lrv"):
                 st = mean_stats(sub[metric].to_numpy(), sym, mon, day, size)
                 for k, v in st.items():
+                    if metric in ("fwd", "y_raw") and k in (
+                            "mean", "median", "ci_lo", "ci_hi", "se"):
+                        v = v * 1e4
                     row[f"{metric}_{k}"] = v
             rows.append(row)
     return rows
@@ -159,6 +162,8 @@ def contrast_block(o: pd.DataFrame, h: int, weighting: str,
             for kind in ("neg", "high", "ext"):
                 c = cvec(r, kind, w2)
                 est, se, t = fe.contrast(beta, V, c)
+                if dv in ("y_raw", "fwd"):
+                    est, se = est * 1e4, se * 1e4
                 fam.append(dict(
                     weighting=weighting, h=h, dv=dv, regime=f"R{r}",
                     contrast=LABELS[kind], estimate=est, se=se, t=t,
@@ -249,13 +254,15 @@ def main() -> int:
                     ho = o[(o.cell == r) & (o.state == 2)]
                     exo = o[(o.cell == r) & (o.state == 3)]
                     for m in ("fwd", "y_raw", "rv", "lrv"):
-                        ho_m = ho[m].dropna()
-                        exo_m = exo[m].dropna()
+                        ho_m = ho[m].dropna().astype("float64")
+                        exo_m = exo[m].dropna().astype("float64")
                         w = len(ho_m) / (len(ho_m) + len(exo_m))
                         exp = w * float(ho_m.mean()) + (1 - w) * float(exo_m.mean())
+                        if m in ("fwd", "y_raw"):
+                            exp *= 1e4
                         got = float(hi[f"{m}_mean"])
                         check(f"h=1 R{r} high-union mean {m}",
-                              f"{exp:.12g}", f"{got:.12g}", abs(exp - got) < 1e-10)
+                              f"{exp:.12g}", f"{got:.12g}", abs(exp - got) < 1e-8)
 
     # P4-1a / P4-2 contrasts (12 within-regime per dv, h, weighting)
     for h in HORIZONS:

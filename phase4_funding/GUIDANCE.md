@@ -244,8 +244,8 @@ SE(c) = sqrt(c' V c)
 
 | 字段 | 定义 |
 |---|---|
-| `fwd_mean`、`fwd_median` | raw 前向收益，bp。 |
-| `y_mean`、`y_median` | 市场中性 `y_raw`，bp。 |
+| `fwd_mean`、`fwd_median` | raw 前向收益，bp（输出已 ×1e4）。 |
+| `y_raw_mean`、`y_raw_median` | 市场中性 `y_raw`，bp（输出已 ×1e4）。 |
 | CI | 均值的 95% CI，CGM 双向聚类。描述性。 |
 
 n 另表：`n_obs`（事件行或合约-日-格）、`n_cdays`、`n_cmonths`。对嵌套 `high`：`n_obs` 是 `s2+s3` 之和；`n_cdays`/`n_cmonths` 是并集唯一数（不要加 `s2` 与 `s3` 的计数）。

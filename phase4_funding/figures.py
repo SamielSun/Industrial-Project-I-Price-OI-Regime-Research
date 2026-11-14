@@ -185,8 +185,7 @@ def _level(df, value_col, n_col, title, cbar_label, cmap, fname, fmt, div):
 
 def f_p4_1_level() -> None:
     d = pd.read_parquet(TBL / "p4_1_surface.parquet").copy()
-    d["y_raw_mean_bp"] = d["y_raw_mean"] * 1e4
-    _level(d, "y_raw_mean_bp", "y_raw_n_obs",
+    _level(d, "y_raw_mean", "y_raw_n_obs",
            "P4-1 · return level (y_raw, bp): R1-R4 × funding, "
            "event/contract × 1/4/8/24h",
            "y_raw, bp", "RdBu_r", "f01_return_level.png", ".1f", True)
@@ -203,8 +202,8 @@ def f_p4_2_level() -> None:
 def f_p4_3_difference() -> None:
     a = pd.read_parquet(TBL / "p4_1_contrasts.parquet")
     a = a[(a["dv"] == "y_raw") & (a["h"] == 1)].copy()
-    a["est"] = a["estimate"] * 1e4
-    a["se"] = a["se"] * 1e4
+    a["est"] = a["estimate"]
+    a["se"] = a["se"]
     a["td"] = a["t_drop5"]
     b = pd.read_parquet(TBL / "p4_2_contrasts.parquet")
     b = b[b["h"] == 24].copy()
