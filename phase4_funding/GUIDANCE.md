@@ -466,17 +466,26 @@ cont = 1 − rev
 ```
 phase4_funding/
   GUIDANCE.md                       本文件
+  REPRODUCE.md                      命令顺序、依赖、耗时、caveat
+  TABLES.md                         每张表的定义与 caveat
   tables/
+    p4_0_validation.csv
     p4_1_surface.parquet/.csv
-    p4_1_contrasts.parquet/.csv     含 1a/1b
+    p4_1_contrasts.parquet/.csv     P4-1a（y_raw/fwd）
     p4_2_vol.parquet/.csv
+    p4_2_contrasts.parquet/.csv
     p4_3_reversal.parquet/.csv
     p4_4_path.parquet/.csv
     p4_5_beta.parquet/.csv
     p4_6_stress.parquet/.csv
     p4_7_diagnostics.csv
     p4_7_disjoint.parquet/.csv
-    p4_note_map.csv                 每个 note 切片一行，含 marker
+    exp1_2_validation.csv
+    exp3_validation.csv
+    exp4_validation.csv
+    exp5_validation.csv
+    exp6_validation.csv
+    exp7_validation.csv
   figures/
     f01_return_level.png            2×4 heatmap：y_raw 均值，event/contract × 4 h
     f02_vol_level.png               2×4 heatmap：lrv 均值，同布局
