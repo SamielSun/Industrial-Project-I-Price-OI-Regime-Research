@@ -71,6 +71,7 @@ def mask(o: pd.DataFrame, r: int, st: int, sample: str) -> np.ndarray:
 def main() -> int:
     t0 = time.time()
     rows, checks, diag = [], [], []
+    full_n: dict[int, int] = {}
 
     def check(name, expected, got, ok):
         checks.append(dict(check=name, expected=expected, actual=got,
@@ -78,6 +79,7 @@ def main() -> int:
 
     for h in HORIZONS:
         b = load(h)
+        full_n[h] = int(len(b))
         for w, fn in (("event", obs_event), ("contract_day", obs_contract_day)):
             o = fn(b)
             for r in (1, 2, 3, 4):
@@ -104,11 +106,12 @@ def main() -> int:
         for w in ("event", "contract_day"):
             g = df[(df["h"] == h) & (df["weighting"] == w)]
             five = g[g["funding"] != "high"]
-            check(f"{w} h={h} 5 categories sum = full",
-                  int(g[g["funding"] == "high"]["n_obs"].sum())
-                  + int(g[g["funding"] == "negative"]["n_obs"].sum())
-                  + int(g[g["funding"] == "neutral"]["n_obs"].sum()),
-                  int(five["n_obs"].sum()), True)
+            exp = (int(g[g["funding"] == "high"]["n_obs"].sum())
+                   + int(g[g["funding"] == "negative"]["n_obs"].sum())
+                   + int(g[g["funding"] == "neutral"]["n_obs"].sum()))
+            got = int(five["n_obs"].sum())
+            ok = (exp == got) and (w != "event" or got == full_n[h])
+            check(f"{w} h={h} 5 categories sum = full", exp, got, ok)
 
     # high union = high_only + extreme + degenerate (n and each metric)
     for h in HORIZONS:
@@ -140,12 +143,12 @@ def main() -> int:
                                f"{row['regime']} x {row['funding']}",
                          note=f"n_cmonths={int(row['n_cmonths'])}"))
     b1 = load(1)
-    check("h=1 full R3 x extreme 584", 584,
-          int(b1[(b1["cell"] == 3) & (b1["state"] == 3)]
-              [["sym", "month"]].drop_duplicates().shape[0]), True)
-    check("R1 x extreme 752", 752,
-          int(b1[(b1["cell"] == 1) & (b1["state"] == 3)]
-              [["sym", "month"]].drop_duplicates().shape[0]), True)
+    n_r3e = int(b1[(b1["cell"] == 3) & (b1["state"] == 3)]
+                [["sym", "month"]].drop_duplicates().shape[0])
+    n_r1e = int(b1[(b1["cell"] == 1) & (b1["state"] == 3)]
+                [["sym", "month"]].drop_duplicates().shape[0])
+    check("h=1 full R3 x extreme 584", 584, n_r3e, n_r3e == 584)
+    check("R1 x extreme 752", 752, n_r1e, n_r1e == 752)
 
     # degeneracy
     eq = b1["deg"]
