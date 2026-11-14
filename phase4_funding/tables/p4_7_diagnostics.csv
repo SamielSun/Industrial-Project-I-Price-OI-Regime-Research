@@ -34,11 +34,11 @@ thin,cell,contract_day h=24 R3 x degenerate,n_cmonths=217
 thin,cell,contract_day h=24 R4 x degenerate,n_cmonths=313
 degeneracy,p75==p90 event rows,56.9611%,"n=255,857"
 degeneracy,p75==p90 contract-months (event sample),65.4060%,"n=2,697"
-degeneracy,p75==p90 contract-months (full label),48.9%,"audit; 2,700 contract-months"
+degeneracy,p75==p90 contract-months (full label),70.7141%,"n=10,278 contract-months"
 degeneracy,no-funding rows excluded,219,"state = -1, cell 1-4"
 drop5,P4-1a,sign flips 19/96,max |t-t_drop5|=2.17
 drop5,P4-2,sign flips 0/96,max |t-t_drop5|=1.11
 drop5,P4-3,sign flips 7/96,max |t-t_drop5|=0.98
-drop5,P4-5,sign flips 6/128,max |t-t_drop5|=3.82
+drop5,P4-5,sign flips 9/128,max |t-t_drop5|=3.38
 raw_vs_yraw,"P4-1a corr(fwd,y_raw)",0.243,sign flips 37/96
-raw_vs_yraw,"P4-5a corr(fwd,y_raw)",0.849,sign flips 31/128
+raw_vs_yraw,"P4-5a corr(fwd,y_raw)",0.784,sign flips 39/128
