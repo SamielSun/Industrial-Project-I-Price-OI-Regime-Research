@@ -477,10 +477,11 @@ phase4_funding/
     p4_7_disjoint.parquet/.csv
     p4_note_map.csv                 每个 note 切片一行，含 marker
   figures/
-    f01_return_heatmap.png          raw fwd 与 y_raw，4 h × 4 regime × 4 funding
-    f02_vol_heatmap.png             rv 均值，同布局
-    f03_contrast_forest.png         P4-1a/P4-2/P4-3 的 12 对比，95% CI
+    f01_return_level.png            2×4 heatmap：y_raw 均值，event/contract × 4 h
+    f02_vol_level.png               2×4 heatmap：lrv 均值，同布局
+    f03_difference_forest.png       3 面板：P4-1a(h=1)/P4-2(h=24)/P4-3(h=1) 的 12 对比
     f04_beta_forest.png             P4-5 的显著点 forest（2 面板，y = cell × horizon）
+    f_p4_4_path.png                 P4-4 路径：MFE vs MAE，4 regime 面板
 ```
 
 图规则：热力图画估计值；forest plot 画被检验的量 + 95% CI；P4-5 用 forest（y = cell × horizon），只画显著点，h 写在 y 标签。

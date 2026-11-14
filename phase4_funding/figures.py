@@ -137,6 +137,147 @@ def f_p4_5() -> None:
     print(f"wrote {OUT / 'f04_beta_forest.png'}")
 
 
+def _level(df, value_col, n_col, title, cbar_label, cmap, fname, fmt, div):
+    fig, axes = plt.subplots(2, 4, figsize=(15.2, 7.6),
+                             sharex=True, sharey=True)
+    if div:
+        mx = float(np.nanmax(np.abs(df[value_col])))
+        vmin, vmax = -mx, mx
+    else:
+        vmin, vmax = float(df[value_col].min()), float(df[value_col].max())
+    im = None
+    for i, w in enumerate(["event", "contract_day"]):
+        for j, h in enumerate(HORIZONS):
+            ax = axes[i, j]
+            s = df[(df["weighting"] == w) & (df["h"] == h)]
+            p = (s.pivot(index="regime", columns="funding", values=value_col)
+                 .reindex(index=["R1", "R2", "R3", "R4"], columns=FUNDS))
+            n = (s.pivot(index="regime", columns="funding", values=n_col)
+                 .reindex(index=["R1", "R2", "R3", "R4"], columns=FUNDS))
+            im = ax.imshow(p.values, cmap=cmap, aspect="auto",
+                           vmin=vmin, vmax=vmax)
+            for a in range(4):
+                for b in range(4):
+                    ax.text(b, a,
+                            f"{p.values[a, b]:{fmt}}\n{int(n.values[a, b]):,}",
+                            ha="center", va="center", fontsize=6.2)
+            ax.set_xticks(range(4))
+            ax.set_xticklabels(FUNDS, fontsize=6.4, rotation=25)
+            ax.set_yticks(range(4))
+            ax.set_yticklabels(["R1", "R2", "R3", "R4"], fontsize=7)
+            ax.set_title(f"{w} · {h}h", fontsize=8)
+            ax.tick_params(length=0)
+    fig.subplots_adjust(left=0.06, right=0.9, top=0.88, bottom=0.1,
+                        wspace=0.08, hspace=0.18)
+    cax = fig.add_axes([0.925, 0.15, 0.015, 0.65])
+    cb = fig.colorbar(im, cax=cax)
+    cb.set_label(cbar_label)
+    fig.suptitle(title, fontsize=11, y=0.97)
+    fig.text(0.5, 0.02,
+             "Cell = mean; second line = n events.  high = union (incl extreme); "
+             "extreme = subset.  Descriptive; no test.", ha="center",
+             fontsize=6.8, color="#4a5568")
+    OUT.mkdir(parents=True, exist_ok=True)
+    fig.savefig(OUT / fname, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {OUT / fname}")
+
+
+def f_p4_1_level() -> None:
+    d = pd.read_parquet(TBL / "p4_1_surface.parquet").copy()
+    d["y_raw_mean_bp"] = d["y_raw_mean"] * 1e4
+    _level(d, "y_raw_mean_bp", "y_raw_n_obs",
+           "P4-1 · return level (y_raw, bp): R1-R4 × funding, "
+           "event/contract × 1/4/8/24h",
+           "y_raw, bp", "RdBu_r", "f01_return_level.png", ".1f", True)
+
+
+def f_p4_2_level() -> None:
+    d = pd.read_parquet(TBL / "p4_2_vol.parquet").copy()
+    _level(d, "lrv_mean", "lrv_n_obs",
+           "P4-2 · volatility level (lrv = log rv): R1-R4 × funding, "
+           "event/contract × 1/4/8/24h",
+           "lrv", "viridis", "f02_vol_level.png", ".2f", False)
+
+
+def f_p4_3_difference() -> None:
+    a = pd.read_parquet(TBL / "p4_1_contrasts.parquet")
+    a = a[(a["dv"] == "y_raw") & (a["h"] == 1)].copy()
+    a["est"] = a["estimate"] * 1e4
+    a["se"] = a["se"] * 1e4
+    a["td"] = a["t_drop5"]
+    b = pd.read_parquet(TBL / "p4_2_contrasts.parquet")
+    b = b[b["h"] == 24].copy()
+    b["est"] = b["estimate"] * 100
+    b["se"] = b["se"] * 100
+    b["td"] = b["t_drop5"]
+    c = pd.read_parquet(TBL / "p4_3_reversal.parquet")
+    c = c[c["h"] == 1].copy()
+    c["est"] = c["rev_estimate_pp"]
+    c["se"] = c["rev_se_pp"]
+    c["td"] = c["rev_t_drop5"]
+
+    kinds = ["negative - neutral", "high(incl ext) - neutral",
+             "extreme - neutral"]
+    short = ["neg-neu", "high-neu", "ext-neu"]
+    order = [(r, k) for r in ["R1", "R2", "R3", "R4"] for k in kinds]
+    labels = [f"{r} {s}" for r in ["R1", "R2", "R3", "R4"] for s in short]
+    ypos = {k: i for i, k in enumerate(order)}
+
+    fig, axes = plt.subplots(1, 3, figsize=(14.2, 6.4), sharey=True)
+    panels = [
+        (axes[0], a, "P4-1a · return difference (h=1, bp)", "bp"),
+        (axes[1], b, "P4-2 · volatility difference (h=24, % of lrv)", "%"),
+        (axes[2], c, "P4-3 · reversal difference (h=1, pp)", "pp"),
+    ]
+    for ax, d, ttl, unit in panels:
+        for w, color in (("event", "#2b6cb0"),
+                         ("contract_day", "#c05621")):
+            q = d[d["weighting"] == w]
+            for _, row in q.iterrows():
+                y = ypos[(row["regime"], row["contrast"])]
+                sig = (row["p_bh"] < 0.05) and (abs(row["td"]) > 1.96)
+                ax.errorbar(float(row["est"]), y,
+                            xerr=1.96 * float(row["se"]), fmt="o",
+                            color=color, ms=3.6, lw=0.9, capsize=2,
+                            mfc=color if sig else "white", mec=color,
+                            mew=0.6, zorder=3)
+        ax.axvline(0, color="0.35", lw=0.8, zorder=1)
+        ax.set_yticks(range(len(order)))
+        ax.set_yticklabels(labels, fontsize=5.8)
+        ax.set_ylim(-0.6, len(order) - 0.4)
+        ax.set_xlabel(unit, fontsize=8)
+        ax.set_title(ttl, fontsize=9)
+        ax.grid(axis="x", lw=0.3, alpha=0.4)
+        ax.tick_params(labelsize=6.5)
+    handles = [
+        Line2D([0], [0], color="#2b6cb0", lw=1.2, label="event"),
+        Line2D([0], [0], color="#c05621", lw=1.2, label="contract-day"),
+        Line2D([0], [0], color="0.25", ls="", marker="o", ms=4,
+               markerfacecolor="0.25", label="BH16 + drop5"),
+        Line2D([0], [0], color="0.25", ls="", marker="o", ms=4,
+               markerfacecolor="white", label="not significant"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=7,
+               frameon=False, bbox_to_anchor=(0.5, 0.005))
+    fig.suptitle("P4 · within-regime funding differences (vs neutral): "
+                 "12 contrasts × event/contract", fontsize=11)
+    fig.text(0.5, 0.04,
+             "Difference = FE-adjusted (contract + month) minus neutral; "
+             "positive = higher than neutral.  Bars = 95% CI.  Only one h per "
+             "panel (return/rev h=1; vol h=24); full 4-h table in the CSVs.",
+             ha="center", fontsize=6.6, color="#4a5568")
+    fig.tight_layout(rect=(0, 0.08, 1, 0.94))
+    OUT.mkdir(parents=True, exist_ok=True)
+    fig.savefig(OUT / "f03_difference_forest.png", dpi=200,
+                bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {OUT / 'f03_difference_forest.png'}")
+
+
 if __name__ == "__main__":
     f_p4_4()
     f_p4_5()
+    f_p4_1_level()
+    f_p4_2_level()
+    f_p4_3_difference()
