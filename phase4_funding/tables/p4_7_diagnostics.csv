@@ -1,4 +1,37 @@
 block,metric,value,note
+high_union,mdd_p50 not additive,median,high mdd_p50 is not the weighted avg of bucket medians
+thin,cell,deg event h=1 R1 x degenerate,n_cmonths=292
+thin,cell,deg event h=1 R2 x degenerate,n_cmonths=236
+thin,cell,deg event h=1 R3 x degenerate,n_cmonths=217
+thin,cell,deg event h=1 R4 x degenerate,n_cmonths=316
+thin,cell,deg contract_day h=1 R1 x degenerate,n_cmonths=292
+thin,cell,deg contract_day h=1 R2 x degenerate,n_cmonths=236
+thin,cell,deg contract_day h=1 R3 x degenerate,n_cmonths=217
+thin,cell,deg contract_day h=1 R4 x degenerate,n_cmonths=316
+thin,cell,deg event h=4 R1 x degenerate,n_cmonths=292
+thin,cell,deg event h=4 R2 x degenerate,n_cmonths=236
+thin,cell,deg event h=4 R3 x degenerate,n_cmonths=217
+thin,cell,deg event h=4 R4 x degenerate,n_cmonths=316
+thin,cell,deg contract_day h=4 R1 x degenerate,n_cmonths=292
+thin,cell,deg contract_day h=4 R2 x degenerate,n_cmonths=236
+thin,cell,deg contract_day h=4 R3 x degenerate,n_cmonths=217
+thin,cell,deg contract_day h=4 R4 x degenerate,n_cmonths=316
+thin,cell,deg event h=8 R1 x degenerate,n_cmonths=292
+thin,cell,deg event h=8 R2 x degenerate,n_cmonths=236
+thin,cell,deg event h=8 R3 x degenerate,n_cmonths=217
+thin,cell,deg event h=8 R4 x degenerate,n_cmonths=316
+thin,cell,deg contract_day h=8 R1 x degenerate,n_cmonths=292
+thin,cell,deg contract_day h=8 R2 x degenerate,n_cmonths=236
+thin,cell,deg contract_day h=8 R3 x degenerate,n_cmonths=217
+thin,cell,deg contract_day h=8 R4 x degenerate,n_cmonths=316
+thin,cell,deg event h=24 R1 x degenerate,n_cmonths=292
+thin,cell,deg event h=24 R2 x degenerate,n_cmonths=235
+thin,cell,deg event h=24 R3 x degenerate,n_cmonths=217
+thin,cell,deg event h=24 R4 x degenerate,n_cmonths=313
+thin,cell,deg contract_day h=24 R1 x degenerate,n_cmonths=292
+thin,cell,deg contract_day h=24 R2 x degenerate,n_cmonths=235
+thin,cell,deg contract_day h=24 R3 x degenerate,n_cmonths=217
+thin,cell,deg contract_day h=24 R4 x degenerate,n_cmonths=313
 degeneracy,p75==p90 event rows,56.9611%,"n=255,857"
 degeneracy,p75==p90 contract-months (event sample),65.4060%,"n=2,697"
 degeneracy,p75==p90 contract-months (full label),48.9%,"audit; 2,700 contract-months"

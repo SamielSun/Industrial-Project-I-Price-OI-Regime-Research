@@ -1,13 +1,9 @@
-"""Phase 4 · P4-7 — robustness / diagnostics (appendix).
+"""Phase 4 · P4-7 — robustness / diagnostics (appendix), A+B.
 
-1. Disjoint 4x4: negative / neutral / high-only / extreme; y_raw, rv, rev,
-   mdd p50, n; event and contract-day. The main `high` is the union.
-2. Thin cells: contract-month counts < 400; h=1 thinnest 584 (R3 x extreme).
-3. Degeneracy: p75 == p90 share (event rows and contract-months); the
-   high-only cell collapses into extreme on those rows; 219 no-funding rows.
-4. drop5: sign flips and max |t - t_drop5| per block.
-5. raw vs y_raw: correlation and sign flips (P4-1a, P4-5a).
-6. Old artefacts: l1_cellmeans / l2_interactions not used.
+A. non-degenerate 4x4 (p75 < p90): negative / neutral / high-only / extreme.
+B. degenerate bucket (p75 == p90 and state=3): high-only empty, high=extreme.
+   full high = high-only + extreme + degenerate; reconciles with the main high.
+Diagnostics: thin cells, p75==p90 degeneracy, drop5, raw vs y_raw, old artefacts.
 """
 from __future__ import annotations
 
@@ -26,29 +22,50 @@ sys.path.insert(0, str(ROOT))
 HORIZONS = [1, 4, 8, 24]
 BASE = ROOT / "phase4_funding/data"
 TBL = ROOT / "phase4_funding/tables"
-STATES = [("negative", 0), ("neutral", 1), ("high_only", 2), ("extreme", 3)]
+# (funding label, state code or -1 for the high union, sample)
+LABELS = [
+    ("negative", 0, "full"),
+    ("neutral", 1, "full"),
+    ("high_only", 2, "nondeg"),
+    ("extreme", 3, "nondeg"),
+    ("degenerate", 3, "deg"),
+    ("high", -1, "full"),
+]
 
 
 def load(h: int) -> pd.DataFrame:
     b = pd.read_parquet(BASE / f"p4_base_h={h}.parquet")
     b = b[b["cell"].between(1, 4) & b["state"].between(0, 3)].copy()
     b["day"] = b["hour"].astype("int64") // 24
+    b["deg"] = (b["funding_p75"] == b["funding_p90"])
     for c in ("y_raw", "rv", "rev", "mdd"):
         b[c] = b[c].astype("float64")
     return b.reset_index(drop=True)
 
 
 def obs_event(b: pd.DataFrame) -> pd.DataFrame:
-    o = b[["sym", "month", "cell", "state", "y_raw", "rv", "rev", "mdd"]].copy()
-    o["size"] = 1
-    return o
+    return b[["sym", "month", "cell", "state", "deg",
+              "y_raw", "rv", "rev", "mdd"]].copy().assign(size=1)
 
 
 def obs_contract_day(b: pd.DataFrame) -> pd.DataFrame:
-    return (b.groupby(["sym", "day", "cell", "state"], as_index=False)
+    return (b.groupby(["sym", "day", "cell", "state", "deg"], as_index=False)
               .agg(y_raw=("y_raw", "mean"), rv=("rv", "mean"),
                    rev=("rev", "mean"), mdd=("mdd", "median"),
                    size=("y_raw", "size"), month=("month", "first")))
+
+
+def mask(o: pd.DataFrame, r: int, st: int, sample: str) -> np.ndarray:
+    m = (o["cell"].to_numpy() == r)
+    if st >= 0:
+        m &= (o["state"].to_numpy() == st)
+    else:
+        m &= o["state"].isin([2, 3]).to_numpy()
+    if sample == "nondeg":
+        m &= ~o["deg"].to_numpy()
+    elif sample == "deg":
+        m &= o["deg"].to_numpy()
+    return m
 
 
 def main() -> int:
@@ -64,11 +81,11 @@ def main() -> int:
         for w, fn in (("event", obs_event), ("contract_day", obs_contract_day)):
             o = fn(b)
             for r in (1, 2, 3, 4):
-                for lab, st in STATES:
-                    s = o[(o["cell"] == r) & (o["state"] == st)]
+                for lab, st, sample in LABELS:
+                    s = o[mask(o, r, st, sample)]
                     rows.append(dict(
-                        weighting=w, h=h, regime=f"R{r}", funding=lab,
-                        n_obs=int(len(s)),
+                        sample=sample, weighting=w, h=h, regime=f"R{r}",
+                        funding=lab, n_obs=int(len(s)),
                         n_cmonths=int(s[["sym", "month"]]
                                       .drop_duplicates().shape[0]),
                         y_raw_mean_bp=float(s["y_raw"].mean() * 1e4)
@@ -78,51 +95,56 @@ def main() -> int:
                         mdd_p50_bp=float(s["mdd"].median() * 1e4)
                         if len(s) else np.nan,
                     ))
-                # high union = weighted high-only / extreme
-                ho = o[(o["cell"] == r) & (o["state"] == 2)]
-                ex = o[(o["cell"] == r) & (o["state"] == 3)]
-                uni = o[(o["cell"] == r) & o["state"].isin([2, 3])]
-                wgt = len(ho) / (len(ho) + len(ex)) if len(ho) + len(ex) else 0.5
-                for m in ("y_raw", "rv", "rev", "mdd"):
-                    exp = (wgt * float(ho[m].mean())
-                           + (1 - wgt) * float(ex[m].mean()))
-                    got = float(uni[m].mean())
-                    check(f"{w} h={h} R{r} high-union {m}",
-                          f"{exp:.10g}", f"{got:.10g}",
-                          abs(exp - got) < 1e-8)
 
     df = pd.DataFrame(rows)
-    check("disjoint rows", 128, len(df), len(df) == 128)
+    check("disjoint rows", 192, len(df), len(df) == 192)
 
-    # thin cells
-    thin = df[df["n_cmonths"] < 400]
-    check("thin cells <400 cm", "list", len(thin), True)
+    # high union = high_only + extreme + degenerate (n and each metric)
+    for h in HORIZONS:
+        for w in ("event", "contract_day"):
+            for r in (1, 2, 3, 4):
+                g = df[(df["h"] == h) & (df["weighting"] == w)
+                       & (df["regime"] == f"R{r}")]
+                hi = g[g["funding"] == "high"].iloc[0]
+                parts = g[g["funding"].isin(
+                    ["high_only", "extreme", "degenerate"])]
+                n = int(parts["n_obs"].sum())
+                check(f"{w} h={h} R{r} high n = 3 buckets",
+                      int(hi["n_obs"]), n, n == int(hi["n_obs"]))
+                for m in ("y_raw_mean_bp", "rv_mean", "rev_pct"):
+                    exp = float((parts["n_obs"] * parts[m]).sum() / n)
+                    got = float(hi[m])
+                    check(f"{w} h={h} R{r} high {m} = 3 buckets",
+                          f"{exp:.10g}", f"{got:.10g}",
+                          abs(exp - got) < 1e-8)
+    diag.append(dict(block="high_union", metric="mdd_p50 not additive",
+                     value="median",
+                     note="high mdd_p50 is not the weighted avg of bucket medians"))
+
+    # thin cells (A's nondeg 4x4 + B's degenerate; exclude the full high)
+    thin = df[(df["n_cmonths"] < 400) & (df["funding"] != "high")]
     for _, row in thin.iterrows():
         diag.append(dict(block="thin", metric="cell",
-                         value=f"{row['weighting']} h={row['h']} "
-                               f"{row['regime']} x {row['funding']}",
+                         value=f"{row['sample']} {row['weighting']} "
+                               f"h={row['h']} {row['regime']} x {row['funding']}",
                          note=f"n_cmonths={int(row['n_cmonths'])}"))
-    h1 = df[(df["h"] == 1) & (df["weighting"] == "event")]
-    check("h=1 thinnest 584 (R3 x extreme)", 584,
-          int(h1[(h1["regime"] == "R3") & (h1["funding"] == "extreme")]
-              ["n_cmonths"].iloc[0]), True)
+    b1 = load(1)
+    check("h=1 full R3 x extreme 584", 584,
+          int(b1[(b1["cell"] == 3) & (b1["state"] == 3)]
+              [["sym", "month"]].drop_duplicates().shape[0]), True)
     check("R1 x extreme 752", 752,
-          int(h1[(h1["regime"] == "R1") & (h1["funding"] == "extreme")]
-              ["n_cmonths"].iloc[0]), True)
+          int(b1[(b1["cell"] == 1) & (b1["state"] == 3)]
+              [["sym", "month"]].drop_duplicates().shape[0]), True)
 
     # degeneracy
-    b1 = load(1)
-    raw = pd.read_parquet(BASE / "p4_base_h=1.parquet")
-    eq = (b1["funding_p75"] == b1["funding_p90"])
+    eq = b1["deg"]
     ev_share = float(eq.mean())
-    cm = b1[["sym", "month"]].drop_duplicates()
-    cm_eq = b1.assign(eq=eq).groupby(["sym", "month"])["eq"].max()
-    cm_share = float(cm_eq.mean())
+    cm_share = float(b1.assign(eq=eq).groupby(["sym", "month"])["eq"].max().mean())
     diag.append(dict(block="degeneracy", metric="p75==p90 event rows",
                      value=f"{ev_share:.4%}", note=f"n={len(b1):,}"))
     diag.append(dict(block="degeneracy",
                      metric="p75==p90 contract-months (event sample)",
-                     value=f"{cm_share:.4%}", note=f"n={len(cm):,}"))
+                     value=f"{cm_share:.4%}", note=f"n={b1[['sym','month']].drop_duplicates().shape[0]:,}"))
     diag.append(dict(block="degeneracy",
                      metric="p75==p90 contract-months (full label)",
                      value="48.9%", note="audit; 2,700 contract-months"))
@@ -130,8 +152,8 @@ def main() -> int:
           abs(ev_share - 0.5696) < 0.01)
     check("p75==p90 cm share (event sample)", "0.654", f"{cm_share:.4f}",
           abs(cm_share - 0.654) < 0.02)
-    nofund = int((raw["cell"].between(1, 4)
-                  & ~raw["state"].between(0, 3)).sum())
+    raw = pd.read_parquet(BASE / "p4_base_h=1.parquet")
+    nofund = int((raw["cell"].between(1, 4) & ~raw["state"].between(0, 3)).sum())
     diag.append(dict(block="degeneracy", metric="no-funding rows excluded",
                      value=str(nofund), note="state = -1, cell 1-4"))
     check("no-funding rows 219", 219, nofund, nofund == 219)
@@ -144,10 +166,10 @@ def main() -> int:
          "rev_t_drop5"),
         ("P4-5", TBL / "p4_5_beta.parquet", "outcome", "rev", "t", "t_drop5"),
     ]
-    for name, path, filt_col, filt_val, tc, td in blocks:
+    for name, path, fc, fv, tc, td in blocks:
         x = pd.read_parquet(path)
-        if filt_col:
-            x = x[x[filt_col] == filt_val]
+        if fc:
+            x = x[x[fc] == fv]
         x = x[np.isfinite(x[td])]
         flips = int((np.sign(x[tc]) != np.sign(x[td])).sum())
         mx = float((x[tc] - x[td]).abs().max())
