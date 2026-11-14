@@ -92,81 +92,59 @@ def f_p4_4() -> None:
 def f_p4_5() -> None:
     d = pd.read_parquet(TBL / "p4_5_beta.parquet")
     d = d[d["outcome"].isin(["y_raw", "rev"])].copy()
+    d["sig"] = (d["p_bh"] < 0.05) & (d["t_drop5"].abs() > 1.96)
+    cells = [(r, f) for r in ["R1", "R2", "R3", "R4"] for f in FUNDS]
+    ypos = {c: i for i, c in enumerate(cells)}
     ev_col, ct_col = "#2b6cb0", "#c05621"
-    specs = (
-        ("y_raw", "beta, bp", "P4-5a · return gap vs matched benchmark (bp)",
-         "f04a_beta_cells_yraw.png"),
-        ("rev", "beta, pp", "P4-5b · reversal gap vs matched benchmark (pp)",
-         "f04b_beta_cells_rev.png"),
-    )
-    for dv, ylab, ttl, fname in specs:
-        s_all = d[d["outcome"] == dv]
-        lo = float((s_all["beta"] - 1.96 * s_all["se"]).min())
-        hi = float((s_all["beta"] + 1.96 * s_all["se"]).max())
-        pad = (hi - lo) * 0.08
-        fig, axes = plt.subplots(4, 4, figsize=(13.6, 9.8),
-                                 sharex=True, sharey=True)
-        for i, r in enumerate(["R1", "R2", "R3", "R4"]):
-            for j, f in enumerate(FUNDS):
-                ax = axes[i, j]
-                s = s_all[(s_all["regime"] == r) & (s_all["funding"] == f)]
-                xs = np.arange(len(HORIZONS))
-                for w, color, ls in (("event", ev_col, "-"),
-                                     ("contract_day", ct_col, "--")):
-                    q = (s[s["weighting"] == w].set_index("h")
-                         .reindex(HORIZONS))
-                    beta = q["beta"].to_numpy("float64")
-                    se = q["se"].to_numpy("float64")
-                    sig = ((q["p_bh"].to_numpy("float64") < 0.05)
-                           & (np.abs(q["t_drop5"].to_numpy("float64")) > 1.96))
-                    ax.plot(xs, beta, color=color, ls=ls, lw=0.9, zorder=2)
-                    ax.errorbar(xs, beta, yerr=1.96 * se, fmt="none",
-                                ecolor=color, elinewidth=0.8, capsize=1.8,
-                                zorder=2)
-                    ax.scatter(xs[sig], beta[sig], marker="o", s=13,
-                               color=color, edgecolor=color, lw=0.4, zorder=4)
-                    ax.scatter(xs[~sig], beta[~sig], marker="o", s=13,
-                               facecolor="white", edgecolor=color, lw=0.7,
-                               zorder=4)
-                ax.axhline(0, color="0.35", lw=0.8, zorder=1)
-                ax.set_ylim(lo - pad, hi + pad)
-                ax.set_xlim(-0.25, len(HORIZONS) - 0.75)
-                ax.set_title(f"{r} × {f}", fontsize=7.2)
-                ax.set_facecolor("#f5f9ff" if r in ("R1", "R2", "R3")
-                                 else "white")
-                ax.grid(lw=0.3, alpha=0.35)
-                ax.tick_params(labelsize=6.2)
-                if j == 0:
-                    ax.set_ylabel(ylab, fontsize=7)
-                if i == 3:
-                    ax.set_xticks(xs)
-                    ax.set_xticklabels([f"{h}h" for h in HORIZONS],
-                                       fontsize=6.4)
-        handles = [
-            Line2D([0], [0], color=ev_col, ls="-", lw=1.1, marker="o", ms=4,
-                   label="event"),
-            Line2D([0], [0], color=ct_col, ls="--", lw=1.1, marker="o", ms=4,
-                   label="contract-day"),
-            Line2D([0], [0], color="0.25", ls="", marker="o", ms=4,
-                   markerfacecolor="0.25", label="BH16 + drop5"),
-            Line2D([0], [0], color="0.25", ls="", marker="o", ms=4,
-                   markerfacecolor="white", label="not significant"),
-            Patch(facecolor="#f5f9ff", edgecolor="0.7",
-                  label="note slice (R1-R3)"),
-        ]
-        fig.legend(handles=handles, loc="lower center", ncol=5, fontsize=7,
-                   frameon=False, bbox_to_anchor=(0.5, 0.004))
-        fig.suptitle(ttl, fontsize=11)
-        fig.text(0.5, 0.045,
-                 "β vs the same-direction, same-funding benchmark (cell 0 + the "
-                 "other OI state); positive = regime beats the benchmark.  "
-                 "Bars = 95% CI.  BH 16 + drop5; fwd descriptive (not shown).",
-                 ha="center", fontsize=6.6, color="#4a5568")
-        fig.tight_layout(rect=(0, 0.09, 1, 0.95))
-        OUT.mkdir(parents=True, exist_ok=True)
-        fig.savefig(OUT / fname, dpi=200, bbox_inches="tight")
-        plt.close(fig)
-        print(f"wrote {OUT / fname}")
+    fig, axes = plt.subplots(1, 2, figsize=(12.6, 7.2), sharey=True)
+    for ax, dv, xlab, ttl in (
+            (axes[0], "y_raw", "beta, bp (y_raw)", "P4-5a · return gap (bp)"),
+            (axes[1], "rev", "beta, pp (rev)", "P4-5b · reversal gap (pp)")):
+        for i, (r, f) in enumerate(cells):
+            ax.axhspan(i - 0.5, i + 0.5,
+                       color="#f5f9ff" if r in ("R1", "R2", "R3") else "white",
+                       zorder=0)
+        s = d[(d["outcome"] == dv) & d["sig"]]
+        for w, color, dy in (("event", ev_col, -0.16),
+                             ("contract_day", ct_col, 0.16)):
+            q = s[s["weighting"] == w]
+            for h, mk in MARKERS.items():
+                z = q[q["h"] == h]
+                yv = [ypos[(r, f)] + dy
+                      for r, f in zip(z["regime"], z["funding"])]
+                ax.errorbar(z["beta"], yv, xerr=1.96 * z["se"], fmt=mk,
+                            color=color, ms=4.4, lw=0.9, capsize=2,
+                            mec="white", mew=0.3, zorder=3)
+        ax.axvline(0, color="0.35", lw=0.8, zorder=1)
+        ax.set_yticks(range(len(cells)))
+        ax.set_yticklabels([f"{r} × {f}" for r, f in cells], fontsize=6.8)
+        ax.set_xlabel(xlab, fontsize=8.5)
+        ax.set_title(ttl, fontsize=9.5)
+        ax.grid(axis="x", lw=0.3, alpha=0.4)
+        ax.tick_params(labelsize=7)
+        ax.set_ylim(-0.6, len(cells) - 0.4)
+    handles = [
+        Line2D([0], [0], color=ev_col, lw=1.2, label="event"),
+        Line2D([0], [0], color=ct_col, lw=1.2, label="contract-day"),
+    ]
+    handles += [Line2D([0], [0], color="0.25", ls="", marker=mk, ms=4.5,
+                       label=f"{h}h") for h, mk in MARKERS.items()]
+    handles.append(Patch(facecolor="#f5f9ff", edgecolor="0.7",
+                         label="note slice (R1-R3)"))
+    fig.legend(handles=handles, loc="lower center", ncol=7, fontsize=7,
+               frameon=False, bbox_to_anchor=(0.5, 0.004))
+    fig.suptitle("P4-5 · significant cells only (BH16 + drop5)", fontsize=11)
+    fig.text(0.5, 0.045,
+             "Only cell × h × weighting points passing BH16 + drop5 are drawn; "
+             "blank = not significant.  Full table: p4_5_beta.csv.  Positive = "
+             "regime beats the same-direction, same-funding benchmark; rev "
+             "positive = more reversal.", ha="center", fontsize=6.6,
+             color="#4a5568")
+    fig.tight_layout(rect=(0, 0.09, 1, 0.94))
+    OUT.mkdir(parents=True, exist_ok=True)
+    fig.savefig(OUT / "f04_beta_significant.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {OUT / 'f04_beta_significant.png'}")
 
 
 if __name__ == "__main__":

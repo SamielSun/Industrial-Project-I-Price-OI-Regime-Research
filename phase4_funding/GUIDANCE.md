@@ -363,7 +363,7 @@ cont = 1 − rev
 
 **note 切片。** Q1 的 `β(R1, neu)`、Q2 的 `β(R1, ext)`、Q4 的 `β(R3, neu)`；§11 R1/R3 行。
 
-**输出。** `phase4_funding/tables/p4_5_beta.parquet` + `.csv`；`phase4_funding/figures/f04a_beta_cells_yraw.png`（y_raw）+ `f04b_beta_cells_rev.png`（rev）：4×4 小面板（regime × funding），x = 1/4/8/24h，event / contract-day 两条线，CI + 零线，过 BH 的点实心。
+**输出。** `phase4_funding/tables/p4_5_beta.parquet` + `.csv`（全 384 行）；`phase4_funding/figures/f04_beta_significant.png`：16 行 dot plot（regime × funding），return / reversal 两个面板，**只画 BH16 + drop5 通过的格子**；event / contract-day 颜色，1/4/8/24h marker，CI + 零线，空白 = 不显著。
 
 ---
 
@@ -479,12 +479,11 @@ phase4_funding/
     f01_return_heatmap.png          raw fwd 与 y_raw，4 h × 4 regime × 4 funding
     f02_vol_heatmap.png             rv 均值，同布局
     f03_contrast_forest.png         P4-1a/P4-2/P4-3 的 12 对比，95% CI
-    f04a_beta_cells_yraw.png        P4-5a 的 16 β × 4 h × 2 weighting（4×4 小面板）
-    f04b_beta_cells_rev.png         P4-5b 的 16 β × 4 h × 2 weighting（4×4 小面板）
+    f04_beta_significant.png        P4-5 的显著格子（16 行 dot plot，return/reversal；只画 BH16+drop5）
     f05_stress.png                  P4-6 的 R4 × market-vol
 ```
 
-图规则：热力图画估计值；forest plot 画被检验的量 + 95% CI；P4-5 用 4×4 小面板（x = horizon，estimate + 95% CI）；过 BH 的点用实心；note 切片用底色 + 图例标注。
+图规则：热力图画估计值；forest plot 画被检验的量 + 95% CI；P4-5 用 16 行 dot plot，只画显著格子（BH16+drop5），空白 = 不显著；note 切片用底色 + 图例标注。
 
 ---
 
