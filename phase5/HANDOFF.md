@@ -175,15 +175,17 @@ data/08_strategy/
 - by-regime、by-asset
 - n 笔数、跳过数（按原因）、缺失结算点数
 
-### Baseline（4 条）
+### Baseline（6 条）
 1. **price-alone**：同方向、同持有期，不看 OI/funding。
 2. **random timing**：同频率、同持有期，随机入场（固定 seed）。
 3. **buy-and-hold perp**：等权持有 universe。
-4. **Phase 3 的 28 个 baseline** 中可复用的（按同持有期对齐）。
+4. **OI-alone**：同方向、同持有期，只看 OI。
+5. **funding-alone**：同方向、同持有期，只看 funding。
+6. **price+OI（不含 funding）**：同方向、同持有期，用 price+OI 的 2×2 信号，用来回答 funding 是否有增量。
 
 ### 报告表格（至少 4 张）
 1. 主结果：M1a/M1b/M2/M3 × 收益/Sharpe/MDD/换手/成本。
-2. baseline 对比（4 条）。
+2. baseline 对比（6 条）。
 3. by-regime / by-asset。
 4. 价格 vs funding vs 成本拆分。
 
@@ -208,7 +210,7 @@ data/08_strategy/
 
 ### 验收（三条全满足才算完成）
 - 一条命令从 `data/` 重建全部结果，无手工步骤；
-- 报告含 4 张表、4 条 baseline、M1a/M1b/M2/M3 分列、跳过/缺失计数；
+- 报告含 4 张表、6 条 baseline、M1a/M1b/M2/M3 分列、跳过/缺失计数；
 - OOS 判定明确写“通过/未通过”，且规则未在测试期改动。
 
 ### 不要求
@@ -227,7 +229,7 @@ data/08_strategy/
 | Q5 | 组合 | 10 并发、等名义 10%、1×；20% 只在 M3 |
 | Q6 | 显著性 | **只用 OOS Sharpe**；不做 DSR |
 | Q7 | 失败标准 | M1 OOS Sharpe <0.5 或 t<1.5 失败；M2 <0 不可用；M3 无 |
-| Q8 | baseline | price-alone / random / buy-and-hold / Phase 3 的 28 |
+| Q8 | baseline | price-alone / random / buy-and-hold / OI-alone / funding-alone / price+OI |
 | Q9 | handoff 形式 | **纯文档** |
 | Q10 | D5/D6 | 显式 out of scope |
 | Q11 | 事件 | phase 4 的 `cell` + `state==0` + universe；不新增阈值 |
