@@ -54,16 +54,21 @@ def main() -> int:
     t0c = pd.Timestamp(ts.iloc[0])
     hours = ((ts - t0c).dt.total_seconds() // 3600).to_numpy("int64")
 
-    # 市场基准只在 label-ok 池内取均值（与 build.py 的 market_stats 同一个宇宙），
-    # 否则会拿"全上市合约"（每小时约 177 个）去比事件池（每小时约 47 个），两者不可比
-    _pnl = pd.read_parquet(PANEL / "h=1.parquet", columns=["symbol", "hour"])
-    _c2n = dict(zip(smap["code"].to_numpy("int64"), smap["symbol"].to_numpy()))
+    # 市场基准 = label-ok 池（与 build.py 的 market_stats 同源，每小时约 176-244 个合约）。
+    # 不是 panel 池：panel 只含价格越阈的合约（约 50 个/小时），两者的小时均值在
+    # 剧烈波动时可差 ±20-26bp，那样算出来的超额与 y_raw 不同口径。
     pool = np.zeros(close.shape, dtype=bool)
-    _col = np.array([col_of.get(_c2n.get(int(c)), -1) for c in _pnl["symbol"].to_numpy()])
-    _h = _pnl["hour"].to_numpy("int64")
-    _keep = (_col >= 0) & (_h >= 0) & (_h < n_t)
-    pool[_h[_keep], _col[_keep]] = True
-    print(f"pool 掩码 {int(pool.sum()):,} 个 (小时, 合约)", flush=True)
+    _lab_dir = ROOT / "data/05_regime/regime_labels/freq=1h"
+    _n_lab = 0
+    for _p in sorted(_lab_dir.rglob("*.parquet")):
+        _d = pd.read_parquet(_p, columns=["symbol", "ts_end", "excl_reason"])
+        _d = _d[_d["excl_reason"] == "ok"]
+        _col = _d["symbol"].map(col_of)
+        _h = ((_d["ts_end"] - t0c).dt.total_seconds() // 3600).astype("int64")
+        _m = _col.notna() & (_h >= 0) & (_h < n_t)
+        pool[_h[_m].to_numpy(), _col[_m].astype("int64").to_numpy()] = True
+        _n_lab += int(_m.sum())
+    print(f"pool 掩码 {int(pool.sum()):,} 个 (小时, 合约)，label-ok 行 {_n_lab:,}", flush=True)
 
     # 逐小时对数超额收益的累加：exc_h = ln r_h − 池内同时刻等权均值，再 cumsum
     lr = np.zeros_like(close)
