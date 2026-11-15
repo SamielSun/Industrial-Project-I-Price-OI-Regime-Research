@@ -29,7 +29,7 @@ python phase3_event/figures.py                          #   4 秒  15 张图（F
 
 **整条链从头跑一遍约 6.6 分钟**（2026-10-28 实测：57 + 48 + 29 + 86 + 39 + 23 + 25 + 2 + 45 + 36 + 4 = 394 秒），
 十一步全部 exit 0，闸门全过（forward / events 各自 PASS、面板 18/18、exp5_9 13/13、
-event_path 13/13、descriptive 101/101、robust_daily 17/17）。
+event_path 13/13、descriptive 96/96、robust_daily 17/17）。
 
 **随机性全部由 `config.EVENT` 固定**：`random_draws = 1000`（抽多少轮）、`random_seed = 20240501`（种子，实验 8 用 `random_seed + h`）。实测连跑两次 `exp8_placebo.py`，16 行数值列哈希完全一致。
 
