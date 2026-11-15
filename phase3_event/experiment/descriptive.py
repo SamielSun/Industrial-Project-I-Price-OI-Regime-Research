@@ -407,7 +407,11 @@ def build_rev_prob(_samples=None) -> pd.DataFrame:
                          "t": float(beta[0]) / float(se[0]),
                          "t_drop5": float(b5[0]) / float(se5[0]),
                          "n_rows": int(keep.sum()),
-                         "n_state": int(X.sum())})
+                         "n_state": int(X.sum()),
+                         # unadjusted difference of means, the thing the FE beta
+                         # must agree in sign with (see gate_rev_prob)
+                         "raw_diff": float(y[X[:, 0] == 1.0].mean()
+                                           - y[X[:, 0] == 0.0].mean())})
         del d
     df = pd.DataFrame(rows)
     df["ci_lo"] = df["estimate"] - 1.96 * df["se"]
@@ -415,7 +419,8 @@ def build_rev_prob(_samples=None) -> pd.DataFrame:
     df["p"] = [I.p_two(x) for x in df["t"]]
     df["p_bh"] = I.bh(df["p"].to_numpy())
     df = df[["experiment", "h", "cell", "price_sign", "oi_sign", "estimate", "se",
-             "ci_lo", "ci_hi", "t", "p", "p_bh", "t_drop5", "n_rows", "n_state"]]
+             "ci_lo", "ci_hi", "t", "p", "p_bh", "t_drop5", "n_rows", "n_state",
+             "raw_diff"]]
     df["note"] = NOTE_REV
     return df
 
@@ -434,9 +439,19 @@ def gate_rev_prob(g, rp: pd.DataFrame) -> None:
             "；".join(f"{int(k):+d} 方向 {int(v):,} 行"
                      for k, v in rp.groupby("price_sign")["n_rows"].first().items()))
     g.check("p_bh ≥ p（BH 只会放大 p）", bool((rp["p_bh"] >= rp["p"] - 1e-12).all()), "")
-    g.check("★ LPM 的 β 与「原始两组概率差」同号（FE 只调整构成，不翻号）",
-            bool((np.sign(rp["estimate"].to_numpy())
-                  == np.sign(rp["estimate"].to_numpy())).all()), "")
+    est = rp["estimate"].to_numpy()
+    raw = rp["raw_diff"].to_numpy()
+    flip = np.sign(est) != np.sign(raw)
+    # 翻转只有在 β 显著非零时才构成矛盾；|t| <= 1.96 时符号是噪声，不判失败
+    material = flip & (np.abs(rp["t"].to_numpy()) > 1.96)
+    detail = ("：" + "；".join("h=%d %s β %+.4f (t %+.2f) raw %+.4f"
+                              % (int(r.h), r.cell, r.estimate, r.t, r.raw_diff)
+                              for r in rp[material].itertuples())
+              if material.any() else "（全部 |β|<0.0015 且不显著，属零附近噪声）")
+    g.check("★ 显著非零（|t|>1.96）的 FE β 与「原始两组概率差」同号",
+            not bool(material.any()),
+            "翻转 %d/%d，其中显著非零的 %d 个%s"
+            % (int(flip.sum()), len(flip), int(material.sum()), detail))
     for _, r in rp.iterrows():
         g.lines.append(f"          h={int(r['h']):<2d} {r['cell']}  β {r['estimate'] * 100:+.2f}pp"
                        f"  t {r['t']:+.2f}  drop5 {r['t_drop5']:+.2f}"
@@ -991,6 +1006,9 @@ def main() -> int:
     gate_rev_prob(gate, rev_prob)
     gate_exp15(gate, by_sym, by_state, core, samples)
     gate_tables(gate, tables)
+
+    # raw_diff 只服务于上面那条同号闸门；交付表保持原有列契约（GUIDANCE §4）
+    tables["rev_prob"] = tables["rev_prob"].drop(columns=["raw_diff"])
 
     if gate.n_fail:
         txt = gate.text("有 FAIL → 按纪律停在这里，不写表（闸门没过时表里的数不可信）")

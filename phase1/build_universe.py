@@ -439,7 +439,10 @@ def main() -> int:
             if not g3a:
                 reasons.append("oi_coverage_low")
             if not g3b:
-                reasons.append("oi_gap_too_long")
+                # NaN = 窗口内没有任何 OI 行（未知），不是「缺口过长」。
+                # 实测 6,484 条 oi_gap_too_long 里 6,451 条属于这一类。
+                reasons.append("no_oi_data" if pd.isna(r["oi_max_gap_h"])
+                               else "oi_gap_too_long")
             if not g4:
                 reasons.append("non_crypto")
 

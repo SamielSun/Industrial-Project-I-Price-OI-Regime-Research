@@ -1,70 +1,66 @@
-# Price + Open Interest Regime Signal — FTEC5910 Industrial Programme
+# Price + Open-Interest Regime Signal — FTEC5910 Industrial Programme
 
-Phase 1 builds the data layer (deliverable **D1**): a 1-hour panel of Binance
-USDⓈ-M perpetual futures carrying price, open interest, funding and volume, plus
-the point-in-time universe the later phases trade on.
+A five-phase study of Binance USDⓈ-M perpetual futures: does a **price spike combined
+with an open-interest spike**, conditioned on the **funding state** and the
+**price/OI regime**, carry a tradable edge after costs?
 
-## Rebuild the data
+Short answer: the conditional effect exists statistically, but it does not survive
+transaction costs in a long-only book. Phase 5 formalises that negative result.
 
-```bash
-python phase1/run_phase1.py --out-root data --sample-end 2026-08-31
-```
+| Phase | What it produces | Design doc | Rebuild |
+|---|---|---|---|
+| 1 | Data layer (D1): 1h panel, point-in-time universe, QA | — (see `config.py` docstrings) | `phase1/REPRODUCE.md` |
+| 2 | Regime labels at 1h/4h/8h/1d (D2) | — | `phase2_regime/REPRODUCE.md` |
+| 3 | Event study: 4 regimes x 4 horizons (D3) | `phase3_event/GUIDANCE.md` | `phase3_event/REPRODUCE.md` |
+| 4 | Funding x regime conditional event study | `phase4_funding/GUIDANCE.md`, `TABLES.md` | `phase4_funding/REPRODUCE.md` |
+| 5 | Level-gated strategy prototype + OOS report (D4) | `phase5/GUIDANCE.md`, `OOS_REPORT.md` | `phase5/REPRODUCE.md` |
 
-Then verify it:
-
-```bash
-python phase1/build_deliverables.py --out-root data --sample-end 2026-08-31 --verify
-```
-
-Steps 0–3 need a VPN on this machine. Full instructions, prerequisites, the
-design-parameter snapshot the current output was produced with, and the
-six individual commands: **[`phase1/REPRODUCE.md`](phase1/REPRODUCE.md)**.
+Design docs are in Chinese; the REPRODUCE files are in English. Every analysis
+phase has exactly one `GUIDANCE.md` and one `REPRODUCE.md`.
 
 ## Layout
 
-| Path | What |
-|---|---|
-| `config.py` | Phase 1 design parameters. Changing these changes the research design, not just the run |
-| `lib/schema.py` | Column and type contract for every table |
-| `phase1/` | The six pipeline steps, the runner, and `REPRODUCE.md` |
-| `data/` | All outputs. **Not in version control** — rebuild it from `phase1/REPRODUCE.md` |
-| `research_archive/` | Course materials, literature, submission drafts (not part of the pipeline) |
+    config.py            Phase 1 design parameters (frozen; changing them changes the design)
+    lib/schema.py        Column and type contract for every table
+    phase1/              6 pipeline steps + runner            (builds data/)
+    phase2_regime/       regime labelling                      (builds data/05_regime/)
+    phase3_event/        event study + figures                 (builds data/06_event_study/)
+    phase4_funding/      funding x regime study                (builds data/07_funding/)
+    phase5/              strategy backtest + report            (builds data/08_strategy/)
+    data/                all outputs, NOT in version control (~4.8 GB, rebuildable)
+    research_archive/    course materials, literature, submissions (not part of the pipeline)
 
-## Phase 4 — funding × regime
+## Rebuild
 
-Conditional event study on the Phase 3 events: the 4×4 forward return and
-volatility tables, the within-regime contrasts (BH12 + drop5), the path and
-stress blocks, and the exploratory Phase 5 gate. See
-[`phase4_funding/GUIDANCE.md`](phase4_funding/GUIDANCE.md),
-[`phase4_funding/REPRODUCE.md`](phase4_funding/REPRODUCE.md) and
-[`phase4_funding/TABLES.md`](phase4_funding/TABLES.md).
+Each phase is one command from the repo root; its REPRODUCE file has the flags,
+runtimes and prerequisites:
 
-## D1 deliverables
+    python phase1/run_phase1.py --out-root data --sample-end 2026-08-31
+    python phase2_regime/regime_generator.py --out-root data --sample-end 2026-08-31
+    python phase3_event/build.py panel && python phase3_event/experiment/exp1_4.py
+    python phase4_funding/build.py data && python phase4_funding/experiment/exp1_2.py
+    python -m phase5.build all
 
-Generated into `data/04_qa/` by the last pipeline step:
+Phase 1 steps 0-3 need a VPN. Phases 3-5 read only `data/` and write only under it.
 
-| File | What |
-|---|---|
-| `data_dictionary.md` | Every column: name, type, unit, source, meaning |
-| `data_quality.md` | Sample scale, coverage, gap attribution, known limitations |
-| `figures/*.png` | Coverage distribution and monthly coverage |
-| `checksums.sha256` | SHA256 of every file under `data/` |
+## Conventions
 
-## Before starting Phase 2 or later
+- **Units.** Returns are in **bp** (`fwd`, `y_raw`, `mdd`); `lrv` is `log(rv)`;
+  `rev`/`cont` are probabilities in **pp**.
+- **`rv` is a volatility, not a variance.** `exp(lrv) == rv` holds row by row and
+  `mean(rv^2) ~ mean(fwd^2)`. It is the realised volatility of the **forward**
+  window, so it is an outcome, never an input.
+- **No winsorising, no trimming** (Phase 3 frozen convention). Means are tail-driven;
+  read the medians next to them.
+- **Point-in-time universe.** `data/03_reference/universe_membership.parquet` fixes
+  50 contracts per month at month start; `in_universe` carries that flag downstream.
 
-**[`phase3_event/GUIDANCE.md`](phase3_event/GUIDANCE.md)** — read this first. It is
-the single authority for Phase 3: the frozen conventions, the null hypothesis of the note mapped
-to the individual experiments, the 11-column result format, and the figure specification.
+## Phase 5 in one paragraph
 
-`data/05_regime/data_dictionary.md` documents every Phase 2 output column, and
-`phase2_regime/REPRODUCE.md` is the rebuild recipe.
-
-Phase 1's own output is described by [`data/04_qa/data_dictionary.md`](data/04_qa/data_dictionary.md)
-and [`phase1/REPRODUCE.md`](phase1/REPRODUCE.md).
-
-## Self-tests
-
-```bash
-python config.py        # 8 checks
-python -m lib.schema    # 65 checks
-```
+The Phase 4 gate used **contrast** significance (negative vs neutral funding within a
+regime). A long-only book earns the **level**, not the contrast, so Phase 5 re-gates
+on the level (G0-G5 in `phase5/GUIDANCE.md` §2). Two arms survive: A1 (R4 x negative
+funding, hold 8h) and B1 (R4 x high market-vol, hold 1h). At a 20bp taker round trip
+both lose: net Sharpe **-1.48** and **-0.98** on the main test window. The volatility
+overlay (V1) improves every window but does not turn either arm positive.
+**Verdict: not passed.** All Phase 5 numbers are in-sample; see `OOS_REPORT.md`.
