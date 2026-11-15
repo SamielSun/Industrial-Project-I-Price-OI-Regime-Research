@@ -153,7 +153,7 @@ def f_p4_5() -> None:
     fig.suptitle("P4-5 · all cells, BH16 + drop5 filled: forest", fontsize=11)
     fig.text(0.5, 0.035,
              "Event (gray): 0/16 significant.  Contract-day (orange): 5/16.  "
-             "R1 neutral +2.35bp (event) vs -6.23bp (contract-day); the beta is "
+             "Event and contract-day betas can carry opposite signs: the beta is "
              "weight-dependent, not one estimate.  Full table: p4_5_beta.csv.",
              ha="center", fontsize=6.8, color="#4a5568")
     fig.tight_layout(rect=(0, 0.06, 1, 0.95))

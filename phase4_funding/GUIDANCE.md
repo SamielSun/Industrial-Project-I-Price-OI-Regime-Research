@@ -1,6 +1,6 @@
 # Phase 4 — Funding × Regime 条件事件研究 · 实施指南
 
-**状态。** 设计 v2，已锁定。本文件取代旧版 E1–E5（16-γ 原型及其后续），也取代 `HANDOFF.md` §3.5–3.7 中与本文件冲突的部分；导师的 idea note 是 Phase 4 的最终依据。本文件不含实现代码。
+**状态。** 设计 v2，已锁定。本文件取代旧版 E1–E5（16-γ 原型及其后续），也取代已删除的旧交接文档中与本文件冲突的部分；导师的 idea note 是 Phase 4 的最终依据。本文件不含实现代码。
 
 **核心原则。** Phase 3 是**无条件** event study（regime R 之后发生什么）；Phase 4 是**同一套 event study 的 funding 条件版本**（在 funding 状态 F 下，regime R 之后发生什么）。note 的四个问题和六行示例，是 Phase 4 条件网格上的**特定切片**；Phase 4 不依赖 Phase 3 的结论来回答它们。
 

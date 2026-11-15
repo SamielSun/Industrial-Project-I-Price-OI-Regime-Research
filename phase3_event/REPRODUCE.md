@@ -44,7 +44,7 @@ phase3_event/
                              含市场中性化 cross_sectional_demean —— 主口径 `y_raw` 的定义）
   infer.py                 推断：demean2 / cgm_cov / fe_ols / bh / p_two
   figures.py               15 张图
-  PHASE3_GUIDANCE.md       要做什么 + 结果（16 个实验，唯一权威）
+  GUIDANCE.md       要做什么 + 结果（16 个实验，唯一权威）
   REPRODUCE.md             本文件
   experiment/              实验（读 panel/ 与冻结输入，不重算数据）
     exp1_4.py              实验 1–3 + 1b（1b 是 2×2 因子，含 BH 与 drop5）
@@ -100,7 +100,7 @@ data/06_event_study/
 最初定「每小时、每边至少 5 个合约」。四状态每小时平均只有 2.2 个 R1、2.6 个 R4，
 按这个规则筛完四条信号的交集只剩 **5 个小时**——跑不出来。
 现在改成 **时段 = 自然日（24 小时）、每边 ≥5 个不同合约**：交集 710–711 天，
-等权逐日价差，Newey-West 滞后 1。可行性对照表在 `PHASE3_GUIDANCE.md` §9。
+等权逐日价差，Newey-West 滞后 1。可行性对照表在 `GUIDANCE.md` §9。
 
 ## 四条口径陷阱（都踩过）
 

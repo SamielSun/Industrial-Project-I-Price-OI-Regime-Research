@@ -77,9 +77,9 @@ not additive**. Thin: degenerate bucket 217–316 contract-months (h=1);
 
 ### `p4_7_diagnostics.csv`
 Degeneracy shares (56.96% event rows, 65.41% event-sample contract-months,
-48.9% full label), the degenerate thin cells, drop5 sign flips (P4-1a 19/96,
-P4-2 0/96, P4-3 7/96, P4-5 6/128), and raw vs y_raw correlations (P4-1a 0.243,
-P4-5a 0.849).
+70.71% full label), the degenerate thin cells, drop5 sign flips (P4-1a 19/96,
+P4-2 0/96, P4-3 7/96, P4-5 9/128), and raw vs y_raw correlations (P4-1a 0.243,
+P4-5a 0.784).
 
 ### `*_validation.csv`
 Automated checks for each block (109/120/66/131/89/28/148). `pass_` is a real

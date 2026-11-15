@@ -15,8 +15,8 @@ from . import rules as R
 
 def main() -> int:
     code2sym, sym2code, n_sym = bt.load_symbols()
-    mkt = bt.load_market(sym2code, n_sym)
-    fund = bt.load_funding(sym2code, n_sym)
+    mkt = bt.load_market(sym2code)
+    fund = bt.load_funding(sym2code)
     arm = R.ARM_BY_NAME["A1"]
     ev = R.select(bt.load_base(arm["hold"]), arm)
     tr, sk = bt.run(ev, arm["hold"], mkt, fund)
@@ -99,7 +99,13 @@ def main() -> int:
     e_gross = abs(float(dg.price.sum()) - float(k.price_pnl.sum()))
     checks.append(("daily price leg sums to trade price PnL (err %.1e)" % e_gross,
                    e_gross < 1e-6))
-    checks.append(("gross exposure stays within 10 units", True))
+    # real capacity check: reconstruct the concurrent size path from the ledger
+    ev_t = np.concatenate([k.entry_time.to_numpy("int64"), k.exit_time.to_numpy("int64")])
+    dlt = np.concatenate([k["size"].to_numpy("float64"),
+                          -k["size"].to_numpy("float64")])
+    order = np.lexsort((dlt, ev_t))          # exits (-) before entries (+) at ties
+    peak = float(np.max(np.cumsum(dlt[order])))
+    checks.append(("peak gross exposure %.2f <= 10 units" % peak, peak <= 10 + 1e-9))
 
     print("")
     for name, ok in checks:

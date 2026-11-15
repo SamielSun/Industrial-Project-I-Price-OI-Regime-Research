@@ -138,7 +138,7 @@ CONFIG = Config()
 
 # ============================================================================
 # Phase 2 设计参数（regime 标注）—— 独立 dataclass，不与 Config 合并
-# 完整依据见 phase3_event/PHASE3_GUIDANCE.md
+# 完整依据见 phase3_event/GUIDANCE.md
 # ============================================================================
 
 @dataclass(frozen=True)
@@ -203,7 +203,7 @@ REGIME = RegimeConfig()
 
 # ============================================================================
 # Phase 3 设计参数（事件研究）—— 独立 dataclass，不与 Config / RegimeConfig 合并
-# 依据与全部实测数字见 phase3_event/PHASE3_GUIDANCE.md
+# 依据与全部实测数字见 phase3_event/GUIDANCE.md
 # ============================================================================
 
 @dataclass(frozen=True)
@@ -242,7 +242,7 @@ class EventConfig:
 
     def snapshot(self) -> dict[str, Any]:
         """设计参数快照（与 Config / RegimeConfig 同接口；Phase 3 现在不落盘快照，
-        参数直接写在 EventConfig 与 PHASE3_GUIDANCE.md 里）。"""
+        参数直接写在 EventConfig 与 GUIDANCE.md 里）。"""
         d = dataclasses.asdict(self)
         return {k: (list(v) if isinstance(v, tuple) else v) for k, v in d.items()}
 

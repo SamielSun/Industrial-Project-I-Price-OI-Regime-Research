@@ -83,7 +83,8 @@ def configure_paths(out_root: Path, l2_root: Path | None,
     DATA = out_root.resolve()
     L2 = (l2_root or (DATA / "01_layer2")).resolve()
     OUT = DATA / "02_features"
-    CANDIDATE_POOL = (pool or (ROOT / "data" / "03_reference"
+    # default must follow --out-root: step 0-2 write the pool under <out-root>/03_reference
+    CANDIDATE_POOL = (pool or (DATA / "03_reference"
                                / "candidate_pool.csv")).resolve()
 
 

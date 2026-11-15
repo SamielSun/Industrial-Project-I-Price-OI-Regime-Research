@@ -63,7 +63,7 @@ Smoke test (writes nothing into data/):
  ]
 }
 
-Every field carries its evidence in the docstrings of config.py; the full reasoning is in phase3_event/PHASE3_GUIDANCE.md.
+Every field carries its evidence in the docstrings of config.py; the full reasoning is in phase3_event/GUIDANCE.md.
 
 ## Output
 

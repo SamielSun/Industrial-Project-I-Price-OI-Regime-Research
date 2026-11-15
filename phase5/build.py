@@ -15,8 +15,8 @@ from . import rules as R
 def smoke() -> int:
     t0 = time.time()
     code2sym, sym2code, n_sym = bt.load_symbols()
-    mkt = bt.load_market(sym2code, n_sym)
-    fund = bt.load_funding(sym2code, n_sym)
+    mkt = bt.load_market(sym2code)
+    fund = bt.load_funding(sym2code)
     print("market bars %s | funding rows %s | %.1fs"
           % (f"{len(mkt.keys):,}", f"{len(fund.keys):,}", time.time() - t0))
     for arm in R.ARMS:

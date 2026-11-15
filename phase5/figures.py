@@ -1,11 +1,10 @@
-"""Phase 5 -- figures.  Reads only the CSVs written by gate/eval.
+"""Phase 5 -- figures (f01 equity/drawdown, f02 cost hurdle, f03 by year).
 
     python -m phase5.figures
 
 f01  cumulative net PnL and drawdown, both arms, main test window
 f02  cost* (gross per trade) against the 20bp taker round trip
 f03  executable per-trade PnL by year -- the decay story
-f04  gate funnel: 96 cells -> 10 -> 6 -> 2
 """
 from __future__ import annotations
 
@@ -16,10 +15,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from . import backtest as bt
+from . import rules as R
 
 TBL = bt.DATA / "08_strategy" / "tables"
 FIG = bt.DATA / "08_strategy" / "figures"
-COST = 20.0
+COST = bt.COST_BP
 C = {"A1": "#c0392b", "B1": "#2c6fbb"}
 
 
@@ -60,8 +60,7 @@ def f02_cost(rules: pd.DataFrame) -> None:
     ax.axvline(COST, color="k", ls="--", lw=1.2, label=f"taker round trip {COST:.0f}bp")
     ax.axvline(0, color="k", lw=0.8)
     ax.set_yticks(y)
-    ax.set_yticklabels([f"{a} (hold {h}h)" for a, h in
-                        zip(m["arm"], [8, 1][: len(m)])])
+    ax.set_yticklabels([f"{a} (hold {R.ARM_BY_NAME[a]['hold']}h)" for a in m["arm"]])
     for i, v in enumerate(m["cost_star_bp"].to_numpy()):
         if v >= 0:
             ax.text(v + 0.4, i, f"{v:.2f}", va="center", ha="left", fontsize=9)
@@ -83,16 +82,16 @@ def f03_year(year: pd.DataFrame) -> None:
     w = 0.38
     for i, arm in enumerate(("A1", "B1")):
         d = year[year.arm == arm].set_index("year").reindex(yrs)
-        ax.bar(np.arange(len(yrs)) + (i - 0.5) * w, d["net_bp"].to_numpy(),
-               width=w, color=C[arm], label=f"{arm} net per trade")
+        ax.bar(np.arange(len(yrs)) + (i - 0.5) * w, d["cost_star_bp"].to_numpy(),
+               width=w, color=C[arm], label=f"{arm} gross per trade")
     ax.axhline(0, color="k", lw=0.8)
     ax.axhline(COST, color="k", ls="--", lw=1.0, alpha=0.6,
                label="20bp round-trip cost")
     ax.set_xticks(range(len(yrs)))
     ax.set_xticklabels([str(y) for y in yrs])
-    ax.set_ylabel("net PnL per trade, bp")
+    ax.set_ylabel("gross PnL per trade, bp (before cost)")
     ax.set_title("Executable net PnL per trade by year (full sample)")
-    ax.text(0.01, 0.02, "only A1 in 2023 clears the 20bp round trip",
+    ax.text(0.01, 0.02, "bars above the dashed line clear the 20bp round trip",
             transform=ax.transAxes, fontsize=8, color="0.35")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3, axis="y")
@@ -101,39 +100,14 @@ def f03_year(year: pd.DataFrame) -> None:
     plt.close(fig)
 
 
-def f04_funnel(gate: pd.DataFrame) -> None:
-    n0 = len(gate)
-    n1 = int(gate["G1"].sum())
-    n2 = int((gate["G1"] & gate["G2"] & gate["G3"]).sum())
-    n3 = int(gate["gate_pass"].sum())
-    labels = ["cells tested", "G1 level significant", "G1+G2+G3", "G4 stable = arms"]
-    vals = [n0, n1, n2, n3]
-    fig, ax = plt.subplots(figsize=(8, 2.8))
-    cols = ["#95a5a6", "#7f8c8d", "#5d6d7e", "#c0392b"]
-    ax.barh(range(4)[::-1], vals, color=cols)
-    for i, v in enumerate(vals):
-        ax.text(v + 1.5, 3 - i, str(v), va="center", fontsize=10)
-    ax.set_yticks(range(4)[::-1])
-    ax.set_yticklabels(labels, fontsize=9)
-    ax.set_xlim(0, max(vals) * 1.12)
-    ax.set_xlabel("number of cells")
-    ax.set_title("Gate funnel (HANDOFF sec.2, G0-G5)")
-    ax.grid(alpha=0.3, axis="x")
-    fig.tight_layout()
-    fig.savefig(FIG / "f04_gate_funnel.png", dpi=150)
-    plt.close(fig)
-
-
 def main() -> int:
     FIG.mkdir(parents=True, exist_ok=True)
     daily = pd.read_csv(TBL / "p5_daily.csv")
     rules = pd.read_csv(TBL / "p5_rules.csv")
     year = pd.read_csv(TBL / "p5_year.csv")
-    gate = pd.read_csv(TBL / "p5_gate.csv")
     f01_equity(daily)
     f02_cost(rules)
     f03_year(year)
-    f04_funnel(gate)
     for p in sorted(FIG.glob("f0*.png")):
         print("written %s (%d bytes)" % (p.name, p.stat().st_size))
     return 0

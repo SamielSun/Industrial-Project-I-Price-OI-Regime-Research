@@ -1,4 +1,4 @@
-"""Phase 5 -- arm definitions (HANDOFF.md sec.4) and the V1 volatility layer.
+"""Phase 5 -- arm definitions (GUIDANCE.md sec.4) and the V1 volatility layer.
 
 Two arms come out of the gate (sec.3).  Nothing here is chosen by hand:
 
@@ -11,7 +11,7 @@ R4: 86 of 96 cells fail G1 (the level is not statistically above zero).
 V1 (sec.4) is a volatility layer reported next to each arm, never a rule:
     target_vol = median(sigma) over that arm's TRAINING events, fitted once
     size       = clip(sigma_at_entry / target_vol, 0.5, 1.5)
-vol = rv = exp(lrv), so the frozen ratio target_vol / vol is exp(target - lrv).
+size = sigma / target (sigma causal), the opposite of classical vol targeting.
 """
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ ARMS: tuple[dict, ...] = (
 ARM_BY_NAME = {a["name"]: a for a in ARMS}
 
 SIZE_FLOOR, SIZE_CAP = 0.5, 1.5
-TARGET_QUANTILE = 0.5
 
 
 def select(base: pd.DataFrame, arm: dict) -> pd.DataFrame:

@@ -52,7 +52,7 @@ Generated into `data/04_qa/` by the last pipeline step:
 
 ## Before starting Phase 2 or later
 
-**[`phase3_event/PHASE3_GUIDANCE.md`](phase3_event/PHASE3_GUIDANCE.md)** — read this first. It is
+**[`phase3_event/GUIDANCE.md`](phase3_event/GUIDANCE.md)** — read this first. It is
 the single authority for Phase 3: the frozen conventions, the null hypothesis of the note mapped
 to the individual experiments, the 11-column result format, and the figure specification.
 

@@ -1,6 +1,6 @@
 """Phase 5 -- costed event backtest engine.
 
-Protocol is frozen by phase5/HANDOFF.md sec.4-5:
+Protocol is frozen by phase5/GUIDANCE.md sec.4-5:
 
   entry   next bar OPEN after the event bar (event time = bar close)
   exit    close of the bar ending at entry_time + h
@@ -58,6 +58,7 @@ MAX_UNITS = 10.0            # gross size units <= 10  (1x leverage, sec.5)
 SIZE_PER_SIGNAL = 0.2
 FEE, SLIP = 0.0005, 0.0005  # per side
 COST_PER_SIDE = FEE + SLIP
+COST_BP = COST_PER_SIDE * 2 * 1e4        # 20.0 bp round trip
 
 
 # --------------------------------------------------------------------------
@@ -96,7 +97,7 @@ class Market:
         return self.keys[np.maximum(idx, 0)] % H
 
 
-def load_market(sym2code: dict, n_sym: int) -> Market:
+def load_market(sym2code: dict) -> Market:
     parts = []
     for p in _files(KLINES):
         d = pd.read_parquet(p, columns=["symbol", "ts", "open", "close"])
@@ -132,7 +133,7 @@ class Funding:
         return np.where(ok, self.interval[np.maximum(pos, 0)], default)
 
 
-def load_funding(sym2code: dict, n_sym: int) -> Funding:
+def load_funding(sym2code: dict) -> Funding:
     parts = []
     for p in _files(FUNDING):
         d = pd.read_parquet(p, columns=["symbol", "ts_funding", "funding_rate",
@@ -190,8 +191,8 @@ def sigma_at(mkt: "Market", sig: np.ndarray, hour, code) -> np.ndarray:
     return out
 
 
-BASE_COLS = ["symbol", "sym", "hour", "ts_end", "month", "cell", "state", "dir",
-             "mkt_vol_lab", "lrv", "fwd", "y_raw"]
+BASE_COLS = ["symbol", "sym", "hour", "month", "cell", "state", "dir",
+             "mkt_vol_lab", "fwd", "y_raw"]
 
 
 def load_base(h: int = 1) -> pd.DataFrame:
@@ -204,7 +205,7 @@ def load_base(h: int = 1) -> pd.DataFrame:
 def run(events: pd.DataFrame, hold: int, mkt: Market, fund: Funding,
         size: np.ndarray | None = None, max_units: float = MAX_UNITS,
         seed: int = 20240501) -> tuple[pd.DataFrame, dict]:
-    """Execute one rule x horizon.  events needs columns code, hour, lrv."""
+    """Execute one rule x horizon.  events needs columns code and hour."""
     n = len(events)
     code = events["code"].to_numpy("int64")
     hour = events["hour"].to_numpy("int64")

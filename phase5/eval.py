@@ -1,4 +1,4 @@
-"""Phase 5 -- evaluation (HANDOFF.md sec.8-9).
+"""Phase 5 -- evaluation (GUIDANCE.md sec.8-9).
 
 Splits, the six baselines, the metrics and the breakdown tables.  Everything is
 in-sample: the design was written after the full sample had been looked at
@@ -22,7 +22,7 @@ WINDOWS: dict[str, dict] = {
     "fold1":   dict(train=("2022-03", "2023-08"), test=("2023-09", "2024-05")),
     "fold2":   dict(train=("2023-03", "2024-08"), test=("2024-09", "2025-05")),
     "fold3":   dict(train=("2024-03", "2025-08"), test=("2025-09", "2026-05")),
-    "holdout": dict(train=("2022-03", "2024-05"), test=("2026-06", "2026-08")),
+    "final3m": dict(train=("2022-03", "2024-05"), test=("2026-06", "2026-08")),
 }
 MAIN = WINDOWS["main"]
 ANN = 365
@@ -76,8 +76,8 @@ def stats(tr: pd.DataFrame, sk: dict, daily: pd.DataFrame, dgross: pd.DataFrame,
     k = tr[tr.kept]
     years = (d1 - d0 + 1) / 365.0
     m = bt.metrics(daily, tr, years)
-    mg = bt.metrics(dgross, tr.assign(cost=0.0, net_pnl=tr.price_nl if False else
-                                      tr.price_pnl + tr.fund_pnl), years)
+    mg = bt.metrics(dgross, tr.assign(cost=0.0,
+                                      net_pnl=tr.price_pnl + tr.fund_pnl), years)
     lo, hi = sharpe_ci(daily.net.to_numpy("float64") / bt.EQUITY0)
     notional = float(k.notional.sum()) if len(k) else np.nan
     return dict(
@@ -85,7 +85,7 @@ def stats(tr: pd.DataFrame, sk: dict, daily: pd.DataFrame, dgross: pd.DataFrame,
         skip_gap=sk["entry_gap"], skip_overlap=sk["overlap"], skip_cap=sk["capacity"],
         price_bp=float(k.price_pnl.sum()) / notional * 1e4 if len(k) else np.nan,
         fund_bp=float(k.fund_pnl.sum()) / notional * 1e4 if len(k) else np.nan,
-        cost_bp=20.0,
+        cost_bp=bt.COST_BP,
         net_bp=float(k.net_pnl.sum()) / notional * 1e4 if len(k) else np.nan,
         cost_star_bp=(float(k.price_pnl.sum()) + float(k.fund_pnl.sum()))
         / notional * 1e4 if len(k) else np.nan,
@@ -186,8 +186,8 @@ def buy_and_hold(mkt, members: pd.DataFrame, d0: int, d1: int,
 def main() -> int:
     TBL.mkdir(parents=True, exist_ok=True)
     code2sym, sym2code, n_sym = bt.load_symbols()
-    mkt = bt.load_market(sym2code, n_sym)
-    fund = bt.load_funding(sym2code, n_sym)
+    mkt = bt.load_market(sym2code)
+    fund = bt.load_funding(sym2code)
     bases = {h: bt.load_base(h) for h in (1, 8)}
     SIG = bt.trailing_vol(mkt)
     mem = pd.read_parquet(MEMBERSHIP)
@@ -206,14 +206,10 @@ def main() -> int:
             if len(tst) == 0:
                 continue
             tgt = R.target_vol(trn["sigma"].to_numpy())
-            for variant in ("base", "V1", "V1n"):
-                if variant == "base":
-                    size = None
-                else:
-                    mult = R.overlay_size(tst["sigma"].to_numpy(), tgt)
-                    # V1 keeps the 2% base and therefore hits the 1x cap on bursts;
-                    # V1n shrinks the base to 1.3% so the up-tilt never binds.
-                    size = (bt.SIZE_PER_SIGNAL if variant == "V1" else 0.13) * mult
+            for variant in ("base", "V1"):
+                size = (None if variant == "base"
+                        else bt.SIZE_PER_SIGNAL * R.overlay_size(
+                            tst["sigma"].to_numpy(), tgt))
                 tr, sk, daily, dg = run_arm(tst, hold, mkt, fund, d0, d1, size=size)
                 row = stats(tr, sk, daily, dg, d0, d1, hold, label=arm["name"])
                 row.update(window=wname, variant=variant, role=arm["role"],
@@ -222,23 +218,6 @@ def main() -> int:
     rules_df = pd.DataFrame(rows)
     rules_df.to_csv(TBL / "p5_rules.csv", index=False)
 
-    # LUNA sensitivity (HANDOFF sec.5 "异常值"): drop the LUNA family and rerun
-    # the main test window only.  Reported as one row per arm, never as the
-    # headline.
-    lu = []
-    d0m, d1m = month_day_bounds(*MAIN["test"])
-    for arm in R.ARMS:
-        hold = arm["hold"]
-        ev = R.select(bases[hold], arm)
-        ev = _slice(ev, *MAIN["test"])
-        ev = ev[~ev["sym"].str.startswith("LUNA")].reset_index(drop=True)
-        if len(ev) == 0:
-            continue
-        tr, sk, daily, dg = run_arm(ev, hold, mkt, fund, d0m, d1m)
-        row = stats(tr, sk, daily, dg, d0m, d1m, hold, label=arm["name"])
-        row.update(window="main", variant="ex-LUNA")
-        lu.append(row)
-    pd.DataFrame(lu).to_csv(TBL / "p5_luna.csv", index=False)
 
     # baselines on the main test window
     d0, d1 = month_day_bounds(*MAIN["test"])

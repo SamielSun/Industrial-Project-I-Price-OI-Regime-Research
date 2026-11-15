@@ -89,7 +89,8 @@ def configure_paths(out_root: Path, fe_root: Path | None, pool: Path | None) -> 
     FE = ((fe_root or (DATA / "02_features")) / "features_1h").resolve()
     RAW = (DATA / "raw").resolve()
     REF = DATA / "03_reference"
-    CANDIDATE_POOL = (pool or (ROOT / "data" / "03_reference"
+    # default must follow --out-root: step 0-2 write the pool under <out-root>/03_reference
+    CANDIDATE_POOL = (pool or (DATA / "03_reference"
                                / "candidate_pool.csv")).resolve()
 
 

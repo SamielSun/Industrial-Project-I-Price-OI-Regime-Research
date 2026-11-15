@@ -1,6 +1,6 @@
-# Phase 5 — HANDOFF v2（level-gated D4）
+# Phase 5 — GUIDANCE（level-gated D4）
 
-**状态**：取代 `phase5/HANDOFF.md`（v1 保留作历史记录，不删）。本文件是 Phase 5 代码实现的唯一依据。
+**状态**：取代 `phase5/GUIDANCE.md`（v1 保留作历史记录，不删）。本文件是 Phase 5 代码实现的唯一依据。
 **读者**：实现 `phase5/` 的 agent。读完应能独立实现、回测、评估，不需要再问设计问题。
 
 ---
@@ -287,17 +287,17 @@ v2 改动四处，其余全部继承 v1：
 ### 文件
 
     phase5/
-      HANDOFF_V2.md        本文件
+      GUIDANCE.md          本文件
       gate.py              G0–G5，一条命令复现 §3 的表
       rules.py             臂定义 + V1 波动率层
       backtest.py          撮合引擎（入场/出场/缺口/重叠/容量/funding/日频 MTM）
       eval.py              切分、baseline、指标、bootstrap
-      figures.py           4 张图（净值/成本/逐年/漏斗）
+      figures.py           3 张图（净值/成本/逐年）
       report.py            4 张表 + 图表索引 + md
       selftest.py          10 条断言
       build.py             唯一入口：python -m phase5.build all
       REPRODUCE.md         命令、依赖、耗时、数据前置
-    data/08_strategy/figures/  f01..f04
+    data/08_strategy/figures/  f01..f03
     data/08_strategy/tables/
       p5_gate.csv  p5_gate_arms.csv  p5_rules.csv  p5_baselines.csv  p5_by_regime.csv  p5_by_asset.csv
 

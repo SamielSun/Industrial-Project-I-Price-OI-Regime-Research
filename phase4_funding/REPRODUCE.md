@@ -23,7 +23,7 @@ python phase4_funding/experiment/exp4.py            # P4-4
 python phase4_funding/experiment/exp5.py            # P4-5
 python phase4_funding/experiment/exp6.py            # P4-6
 python phase4_funding/experiment/exp7.py            # P4-7
-python data/07_funding/figures.py                    # 5 figures
+python phase4_funding/figures.py                     # 5 figures
 ```
 
 Approximate runtimes on the project machine: build ~1–2 min; exp1_2 ~45 s;

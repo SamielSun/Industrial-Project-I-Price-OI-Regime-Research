@@ -1,4 +1,4 @@
-"""Phase 5 -- the Phase 4 -> Phase 5 gate (HANDOFF.md sec.2, G0-G5).
+"""Phase 5 -- the Phase 4 -> Phase 5 gate (GUIDANCE.md sec.2, G0-G5).
 
     python -m phase5.gate            # write the table, print the pass set
     python -m phase5.gate --all      # print all 96 cells, not just those past G1

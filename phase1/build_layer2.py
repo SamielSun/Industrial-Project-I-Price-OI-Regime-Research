@@ -101,7 +101,8 @@ def configure_paths(out_root: Path, raw_root: Path | None, pool: Path | None) ->
     DATA = out_root.resolve()
     RAW = (raw_root or (DATA / "raw")).resolve()
     L2 = DATA / "01_layer2"
-    CANDIDATE_POOL = (pool or (ROOT / "data" / "03_reference"
+    # default must follow --out-root: step 0-2 write the pool under <out-root>/03_reference
+    CANDIDATE_POOL = (pool or (DATA / "03_reference"
                                / "candidate_pool.csv")).resolve()
 
 T_START = time.time()
@@ -387,6 +388,12 @@ def main() -> int:
     # 收尾的交叉校验是对整个目录做的，照样打印"三张网格表一致: 是"。
     # 必须显式给 --keep-existing 才保留旧产出（冒烟用）。
     if not args.keep_existing:
+        # guard: never wipe a good layer-2 tree when the raw root is wrong or empty
+        if not RAW.exists() or not any(RAW.rglob("*.parquet")):
+            raise SystemExit(
+                f"--raw-root 下没有任何 parquet：{RAW}
+"
+                f"拒绝清空 {L2}（先确认 --raw-root / --out-root）")
         for tname in LAYER2_SCHEMAS:
             d_old = L2 / tname
             if d_old.exists():

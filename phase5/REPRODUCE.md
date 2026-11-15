@@ -50,7 +50,6 @@ Phase 5 never writes outside data/08_strategy/ and phase5/.
     data/08_strategy/figures/f01_equity.png     cumulative PnL and drawdown
     data/08_strategy/figures/f02_cost_hurdle.png  cost* against the 20bp line
     data/08_strategy/figures/f03_year_decay.png   net PnL per trade by year
-    data/08_strategy/figures/f04_gate_funnel.png  gate funnel 96 -> 10 -> 6 -> 2
     phase5/OOS_REPORT.md                        the report
 
 ## Runtimes (project machine)
@@ -65,7 +64,7 @@ Phase 5 never writes outside data/08_strategy/ and phase5/.
 
 1. **In-sample.** The v2 design was written after the full sample had been
    examined. Every number is in-sample; there is no blind out-of-sample claim.
-   See HANDOFF.md sec.8.
+   See GUIDANCE.md sec.8.
 
 2. **Costs are taker-only.** 5bp fee + 5bp slippage per side = 20bp round trip.
    No maker case: limit-order fills cannot be modelled without order-book and
@@ -86,4 +85,4 @@ Phase 5 never writes outside data/08_strategy/ and phase5/.
 ## History
 
     phase5/archive/HANDOFF_v1.md   the superseded contrast-gated design
-    phase5/HANDOFF.md              the operative design (v2)
+    phase5/GUIDANCE.md              the operative design (v2)

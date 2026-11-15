@@ -25,7 +25,7 @@ regime_generator —— Phase 2 主脚本：三频率 regime 标签 + 四张表 
   3. **最短历史用时间判据（距首条 ≥30 天），不是观测数。** funding 序列不规则，
      "30 天"无法用固定观测数表达（§1.2）。
 
-设计参数见 config.py 的 RegimeConfig；完整依据见 phase3_event/PHASE3_GUIDANCE.md。
+设计参数见 config.py 的 RegimeConfig；完整依据见 phase3_event/GUIDANCE.md。
 
 用法
 ----
@@ -726,7 +726,7 @@ def write_reproduce(cfg, freqs, args, agg, n_chunks, n_ck, elapsed: float,
          "", "## Design parameters used for this run", "",
          "    " + NL.join(json.dumps(cfg.snapshot(), ensure_ascii=False, indent=1).split(NL)),
          "", "Every field carries its evidence in the docstrings of config.py; "
-         "the full reasoning is in phase3_event/PHASE3_GUIDANCE.md.", "",
+         "the full reasoning is in phase3_event/GUIDANCE.md.", "",
          "## Output", "",
          "    data/05_regime/",
          "      regime_labels/freq={1h,4h,8h,1d}/year=YYYY/chunk=YYYY-MM.parquet",
@@ -837,6 +837,11 @@ def main() -> int:
     # 所以每个 chunk 先写成 .parquet.tmp，关闭后再 os.replace 就位 —— 逐文件原子，
     # 不需要动任何目录。首次运行时这套 bug 不会暴露（目录本来就不存在）。
     d_out = OUT / "regime_labels"
+    if args.subset and d_out.exists() and any(d_out.rglob("*.parquet")):
+        raise SystemExit(
+            f"--subset 会按子集覆盖整月 chunk，而 {d_out} 已有产出。
+"
+            "请换一个 --out-root（推荐），或先手动备份再删除该目录。")
     d_out.mkdir(parents=True, exist_ok=True)
     (OUT / "tables").mkdir(parents=True, exist_ok=True)
     (OUT / "figures").mkdir(parents=True, exist_ok=True)

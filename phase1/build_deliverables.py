@@ -1274,8 +1274,15 @@ def main() -> int:
 
     # ---- 9. REPRODUCE.md ------------------------------------------------
     repro = build_reproduce(cfg, args.sample_end)
-    write_text_atomic(REPRO, repro)
-    log(f"    -> phase1/REPRODUCE.md              {len(repro):,} 字符")
+    if DATA == (ROOT / "data").resolve():
+        write_text_atomic(REPRO, repro)
+        log(f"    -> phase1/REPRODUCE.md              {len(repro):,} 字符")
+    else:
+        # 非生产 out-root（冒烟）：绝不覆盖进版本控制的生产台账
+        smoke_rep = ROOT / "phase1" / "REPRODUCE.smoke.md"
+        write_text_atomic(smoke_rep, repro)
+        log(f"    -> phase1/REPRODUCE.smoke.md        {len(repro):,} 字符"
+            "（非生产 out-root，未覆盖 REPRODUCE.md）")
 
     # ---- 10. 校验和（最后一个写盘动作）---------------------------------
     written = write_checksums()
