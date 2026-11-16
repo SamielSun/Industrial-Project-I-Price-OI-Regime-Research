@@ -2,7 +2,8 @@
 
 A single self-contained HTML page that shows, for the **top 50 contracts by
 liquidity**, which ones entered a price/OI regime in the last 24 hours, which
-are crowded on funding, and whose volatility is unusual for them.
+are crowded on funding, and whose volatility is unusual for them. A date picker
+covers every day in the dataset.
 
 It is a **state monitor, not a trading signal**. The strategy test in Phase 5
 found no first-moment edge after a 20bp taker round trip, and no return, Sharpe
@@ -10,20 +11,27 @@ or cost figure appears anywhere on the page.
 
 ## Build
 
-    python -m d5_dashboard                       # as of the last bar in the dataset
-    python -m d5_dashboard --asof 2026-07-15     # any earlier bar
+    python -m d5_dashboard                     # opens on the last day in the dataset
+    python -m d5_dashboard --asof 2026-05-12   # opens on a specific day
 
-Runtime: about 25 s. Output:
-`data/09_dashboard/dashboard_<YYYY-MM-DD>.html` (self-contained, no assets,
-no network, no JavaScript).
+Runtime: about 25 s. Output: `data/09_dashboard/dashboard.html` - one file,
+2.6 MB, no assets, no network, no server.
+
+## How the page works
+
+Every day in the dataset (1,645 of them) is pre-computed into a compact JSON
+payload, gzipped, base64-encoded, and embedded in the HTML. On load the page
+decompresses it with `DecompressionStream("gzip")` and renders client-side. That is
+why it needs no server: browsers block `fetch()` on `file://`, but an embedded
+string is not a fetch.
+
+Day = the last bar of each UTC day. The dataset ends 2026-09-01 00:00 UTC, so
+the last selectable day is 2026-08-31.
 
 ## "Current" means the frozen dataset, not live data
 
-The page shows the last bar available in `data/` - currently
-**2026-09-01 00:00 UTC**. The header states this explicitly.
-
-To move it forward you must refresh the data first; the dashboard does not
-fetch anything:
+The page shows what is in `data/`. To move it forward you must refresh the data
+first; the dashboard does not fetch anything:
 
     python phase1/run_phase1.py --out-root data --sample-end <month-end>   # needs VPN
     python phase2_regime/regime_generator.py --out-root data --sample-end <month-end>
@@ -50,10 +58,10 @@ contract's most recent state in section 1.
 
 ## Definitions
 
-- **universe** = `universe_membership.parquet` for the month of the as-of bar;
+- **universe** = `universe_membership.parquet` for the month of the day;
   ordered by its `rank` column (30-day liquidity).
-- **regime** = the label at that hour; the thresholds are rolling 90-day
-  quantiles computed by Phase 2.
+- **regime** = the label at that bar; thresholds are rolling 90-day quantiles
+  computed by Phase 2.
 - **fresh** = within 24h. The `age` column carries the exact number of hours.
 - **funding percentile** = the current rate mapped inside the band owned by its
   funding state (negative 0-0.25, neutral 0.25-0.75, high 0.75-0.90, extreme
@@ -68,10 +76,13 @@ contract's most recent state in section 1.
 
 The build runs four assertions and exits non-zero if any fails:
 
-1. panel row counts equal the master table's non-null counts
+1. every day falls inside the 50-contract universe (49 or 50 rows per day)
 2. sampled R1 rows reproduce from the raw label table
 3. funding state agrees with `p4_base_h=1` where the hours overlap
 4. every funding percentile sits inside its state's band
+
+The JSON is serialised with `allow_nan=False`: a stray NaN would produce a page
+that fails to parse, so the build refuses to write one.
 
 ## Not done on purpose
 
