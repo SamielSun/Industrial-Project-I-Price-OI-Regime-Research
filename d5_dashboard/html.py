@@ -20,65 +20,138 @@ td.l,th.l{text-align:left}
 .r3{background:#fed7d7;color:#742a2a}
 .r4{background:#e2e8f0;color:#2d3748}
 .r2{background:#fefcbf;color:#744210}
+.quiet{background:#f1f5f9;color:#94a3b8}
+.na{background:#fff;color:#cbd5e0;border:1px dashed #e2e8f0}
 .none{color:#a0aec0}
+tr.quietrow td{color:#a0aec0}
+.grid-h{display:grid;grid-template-columns:40px 1fr 54px 88px 88px 96px 74px;gap:0;padding:4px 9px;font-weight:600;background:#f7fafc;font-size:12px;border-bottom:1px solid #edf2f7}
+details.row{border-bottom:1px solid #edf2f7}
+details.row>summary{display:grid;grid-template-columns:40px 1fr 54px 88px 88px 96px 74px;padding:4px 9px;font-size:12px;cursor:pointer;list-style:none;align-items:center}
+details.row>summary::-webkit-details-marker{display:none}
+details.row>summary:hover{background:#f7fafc}
+details.row>summary span{text-align:right}
+details.row>summary span:nth-child(2){text-align:left}
+.evtab{margin:2px 0 10px 48px;width:auto;font-size:11.5px}
+.evtab td,.evtab th{padding:2px 10px}
 footer{margin-top:34px;font-size:11px;color:#718096;line-height:1.7;border-top:1px solid #e2e8f0;padding-top:12px}
 .legend{font-size:11.5px;color:#4a5568;margin:6px 0 0}
 .legend span{display:inline-block;margin-right:12px}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.banner{background:#fffbea;border:1px solid #f6e05e;color:#744210;padding:7px 12px;border-radius:6px;font-size:12.5px;margin:0 0 12px}
 """
 
 JS = r"""
-const I = {rank:0,sym:1,last:2,age:3,pc:4,oc:5,fund:6,vol:7,oi24:8,
-           a1:9,a3:10,a4:11,fp:12,pc1:13,oc1:14,pc3:15,oc3:16,pc4:17,oc4:18};
+const I = {rank:0,sym:1,fund:2,vol:3,oi24:4,fp:5,bs:6,bpc:7,boc:8};
 const RN = ["R1","R2","R3","R4"];
 const FNAME = ["negative","neutral","high","extreme"];
 const FCOL = ["#3182ce","#a0aec0","#dd6b20","#c53030"];
 let DATA = null, INDEX = {};
 
 function esc(s){ return String(s).replace(/[&<>]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c]; }); }
-function fAge(a){ return a===null ? "-" : Math.round(a)+"h"; }
-function fPc(v){ return v===null ? "-" : (v>=0?"+":"")+Math.round(v)+" bp"; }
-function fOc(v){ return v===null ? "-" : (v>=0?"+":"")+v.toFixed(1)+"%"; }
-function fPct(v){ return v===null ? "-" : Math.round(v*100)+"%"; }
-function td(cls, s){ return "<td"+(cls?" class='"+cls+"'":"")+">"+s+"</td>"; }
+function fAge(a){ return (a===null||a===undefined) ? "-" : Math.round(a)+"h"; }
+function fPc(v){ return (v===null||v===undefined) ? "-" : (v>=0?"+":"")+Math.round(v)+" bp"; }
+function fOc(v){ return (v===null||v===undefined) ? "-" : (v>=0?"+":"")+v.toFixed(1)+"%"; }
+function fPct(v){ return (v===null||v===undefined) ? "-" : Math.round(v*100)+"%"; }
 function fundName(c){ return c>=0 ? FNAME[c] : "-"; }
+function td(cls, s){ return "<td"+(cls?" class='"+cls+"'":"")+">"+s+"</td>"; }
 
-function masterTable(day, syms){
-  let h = "<table><tr><th>#</th><th class='l'>contract</th><th class='l'>last state</th>"
-        + "<th>age</th><th>price chg</th><th>OI chg</th><th>funding</th><th>vol pctile</th></tr>";
+function barBadge(bs){
+  if (bs === -2) return "<span class='tag na'>n/a</span>";
+  if (bs === -1) return "<span class='tag quiet'>no regime</span>";
+  return "<span class='tag r"+(bs+1)+"'>"+RN[bs]+"</span>";
+}
+
+function indexEvents(ev){
+  const m = new Map();
+  for (let k = 0; k < ev.length; k++){
+    const e = ev[k], si = e[0], hour = e[1], reg = e[2];
+    let rec = m.get(si);
+    if (!rec){ rec = {last: null, byReg: [null,null,null,null], all: []}; m.set(si, rec); }
+    const x = {hour: hour, reg: reg, pc: e[3], oc: e[4]};
+    rec.all.push(x);
+    if (!rec.byReg[reg] || hour > rec.byReg[reg].hour) rec.byReg[reg] = x;
+    if (!rec.last || hour > rec.last.hour) rec.last = x;
+  }
+  return m;
+}
+
+function masterTable(day, syms, idx){
+  let h = "<table><tr><th>#</th><th class='l'>contract</th><th class='l'>state @ bar</th>"
+        + "<th>dPrice (1h)</th><th>dOI (1h)</th><th class='l'>last event (24h)</th>"
+        + "<th>funding</th><th>vol pctile</th></tr>";
   for (const r of day){
-    const badge = r[I.last] < 0
-      ? "<td class='l none'>-</td>"
-      : "<td class='l'><span class='tag r"+(r[I.last]+1)+"'>"+RN[r[I.last]]+"</span></td>";
-    h += "<tr>" + td("", r[I.rank])
-       + "<td class='l'><b>" + esc(syms[r[I.sym]]) + "</b></td>" + badge
-       + td("", fAge(r[I.age])) + td("", fPc(r[I.pc])) + td("", fOc(r[I.oc]))
-       + td("", fundName(r[I.fund])) + td("", fPct(r[I.vol])) + "</tr>";
+    const m = idx.get(r[I.sym]);
+    const last = m ? m.last : null;
+    const lastCell = last
+      ? "<td class='l'><span class='tag r"+(last.reg+1)+"'>"+RN[last.reg]+"</span> "
+        + "<span style='color:#718096'>"+fAge(24-last.hour)+"</span></td>"
+      : "<td class='l none'>-</td>";
+    const cls = r[I.bs] < 0 ? " class='quietrow'" : "";
+    h += "<tr"+cls+">" + td("", r[I.rank])
+       + "<td class='l'><b>"+esc(syms[r[I.sym]])+"</b></td>"
+       + "<td class='l'>"+barBadge(r[I.bs])+"</td>"
+       + td("", fPc(r[I.bpc])) + td("", fOc(r[I.boc]))
+       + lastCell + td("", fundName(r[I.fund])) + td("", fPct(r[I.vol])) + "</tr>";
   }
   return h + "</table>";
 }
 
-function callout(day, syms, ai, pi, oi, rg){
-  const rows = day.filter(r => r[ai] !== null);
-  let h = "<table><tr><th>#</th><th class='l'>contract</th><th>age at "+rg+"</th>"
-        + "<th>price chg</th><th>OI chg</th><th>funding</th><th>vol pctile</th></tr>";
-  for (const r of rows){
-    h += "<tr>" + td("", r[I.rank])
-       + "<td class='l'><b>" + esc(syms[r[I.sym]]) + "</b></td>"
-       + td("", fAge(r[ai])) + td("", fPc(r[pi])) + td("", fOc(r[oi]))
-       + td("", fundName(r[I.fund])) + td("", fPct(r[I.vol])) + "</tr>";
+function evTable(rec){
+  let h = "<table class='evtab'><tr><th>time (UTC)</th><th>regime</th><th>dPrice (1h)</th><th>dOI (1h)</th></tr>";
+  for (const x of rec.all){
+    const hh = (x.hour === 24) ? "24:00 (+1d)" : ((x.hour < 10 ? "0" : "") + x.hour + ":00");
+    h += "<tr><td>"+hh+"</td><td><span class='tag r"+(x.reg+1)+"'>"+RN[x.reg]+"</span></td>"
+       + td("", fPc(x.pc)) + td("", fOc(x.oc)) + "</tr>";
   }
-  return {html: h + "</table>", n: rows.length};
+  return h + "</table>";
+}
+
+function sectionRows(day, syms, idx, reg){
+  const out = [];
+  for (const r of day){
+    const m = idx.get(r[I.sym]);
+    const e = m ? m.byReg[reg] : null;
+    if (!e) continue;
+    out.push({r: r, e: e, m: m});
+  }
+  out.sort(function(a,b){ return b.e.hour - a.e.hour || a.r[I.rank] - b.r[I.rank]; });
+  return out;
+}
+
+function sectionHtml(day, syms, idx, reg, topN){
+  const rows = sectionRows(day, syms, idx, reg);
+  if (!rows.length) return {html: "<div class='sub none'>none in the window</div>", n: 0};
+  const head = "<div class='grid-h'><span>#</span><span>contract</span><span>age at "+RN[reg]
+             + "</span><span>dPrice (1h)</span><span>dOI (1h)</span><span>funding</span><span>vol pctile</span></div>";
+  function row(x, i){
+    return "<details class='row'><summary><span>"+(i+1)+"</span>"
+      + "<span><b>"+esc(syms[x.r[I.sym]])+"</b> <span style='color:#a0aec0;font-weight:400'>"
+      + x.m.all.length+" ev</span></span>"
+      + "<span>"+fAge(24-x.e.hour)+"</span><span>"+fPc(x.e.pc)+"</span><span>"+fOc(x.e.oc)+"</span>"
+      + "<span>"+fundName(x.r[I.fund])+"</span><span>"+fPct(x.r[I.vol])+"</span></summary>"
+      + evTable(x.m) + "</details>";
+  }
+  let body = "";
+  const top = rows.slice(0, topN), rest = rows.slice(topN);
+  top.forEach(function(x,i){ body += row(x,i); });
+  if (rest.length){
+    body += "<details class='row'><summary style='color:#4a5568'><span></span>"
+         + "<span>show all "+rows.length+"</span><span></span><span></span><span></span>"
+         + "<span></span><span></span></summary><div style='padding:2px 0 10px'>";
+    rest.forEach(function(x,i){ body += row(x, i + topN); });
+    body += "</div></details>";
+  }
+  return {html: head + body, n: rows.length};
 }
 
 function scatter(day, syms){
   const W=720, H=400, L=52, R=18, T=16, B=38;
-  const pts = day.filter(r => r[I.fp] !== null && r[I.oi24] !== null);
+  const pts = day.filter(function(r){ return r[I.fp] !== null && r[I.oi24] !== null; });
   let ymax = 0.02;
   for (const p of pts) ymax = Math.max(ymax, Math.abs(p[I.oi24]));
   ymax = Math.min(0.2, ymax * 1.15);
-  const X = v => L + v * (W - L - R);
-  const Y = v => (H - B) - ((v + ymax) / (2 * ymax)) * (H - B - T);
+  const X = function(v){ return L + v * (W - L - R); };
+  const Y = function(v){ return (H - B) - ((v + ymax) / (2 * ymax)) * (H - B - T); };
   let s = "<svg width='"+W+"' height='"+H+"' viewBox='0 0 "+W+" "+H+"' style='border:1px solid #e2e8f0;background:#fff'>";
   for (let k = -2; k <= 2; k++){
     const y = Y(k * ymax / 2);
@@ -98,40 +171,50 @@ function scatter(day, syms){
     s += "<circle cx='"+X(p[I.fp]).toFixed(1)+"' cy='"+Y(p[I.oi24]).toFixed(1)
        + "' r='3.4' fill='"+FCOL[p[I.fund]>=0?p[I.fund]:1]+"' fill-opacity='0.85'/>";
   }
-  const byOi = pts.slice().sort((a,b)=>b[I.oi24]-a[I.oi24]).slice(0,3);
-  const byFp = pts.slice().sort((a,b)=>b[I.fp]-a[I.fp]).slice(0,3);
-  const seen = new Set();
+  const byOi = pts.slice().sort(function(a,b){ return b[I.oi24]-a[I.oi24]; }).slice(0,3);
+  const byFp = pts.slice().sort(function(a,b){ return b[I.fp]-a[I.fp]; }).slice(0,3);
+  const seen = {};
   for (const p of byOi.concat(byFp)){
-    const key = p[I.sym]; if (seen.has(key)) continue; seen.add(key);
+    if (seen[p[I.sym]]) continue; seen[p[I.sym]] = 1;
     s += "<text x='"+(X(p[I.fp])+6).toFixed(1)+"' y='"+(Y(p[I.oi24])-5).toFixed(1)
        + "' font-size='9' fill='#4a5568'>"+esc(syms[p[I.sym]])+"</text>";
   }
   s += "<text x='"+(L+(W-L-R)/2)+"' y='"+(H-4)+"' font-size='11' fill='#4a5568' text-anchor='middle'>funding percentile (contract's own 90d history)</text>";
-  s += "<text x='12' y='"+(T+(H-T-B)/2)+"' font-size='11' fill='#4a5568' transform='rotate(-90 12 "+(T+(H-T-B)/2)+")' text-anchor='middle'>24h OI change</text>";
+  const ym = T+(H-T-B)/2;
+  s += "<text x='12' y='"+ym+"' font-size='11' fill='#4a5568' transform='rotate(-90 12 "+ym+")' text-anchor='middle'>24h OI change</text>";
   return s + "</svg>";
 }
 
 function extremeTable(day, syms){
-  const rows = day.filter(r => (r[I.fund] === 2 || r[I.fund] === 3) && r[I.oi24] !== null && r[I.oi24] > 0)
-                   .sort((a,b)=> b[I.fp]-a[I.fp]).slice(0,10);
+  const rows = day.filter(function(r){ return (r[I.fund]===2 || r[I.fund]===3) && r[I.oi24] !== null && r[I.oi24] > 0; })
+                   .sort(function(a,b){ return b[I.fp]-a[I.fp]; }).slice(0,10);
   if (!rows.length) return "<div class='sub none'>none</div>";
   let h = "<table><tr><th class='l'>contract</th><th>funding pctile</th><th>24h OI chg</th><th>funding state</th></tr>";
   for (const r of rows){
-    h += "<tr><td class='l'><b>"+esc(syms[r[I.sym]])+"</b></td>" + td("", fPct2(r[I.fp]))
+    h += "<tr><td class='l'><b>"+esc(syms[r[I.sym]])+"</b></td>" + td("", r[I.fp].toFixed(2))
        + td("", fOc(r[I.oi24]*100)) + td("", fundName(r[I.fund])) + "</tr>";
   }
   return h + "</table>";
 }
-function fPct2(v){ return v===null ? "-" : v.toFixed(2); }
 
 function volTable(day, syms){
-  const rows = day.filter(r => r[I.vol] !== null).sort((a,b)=> b[I.vol]-a[I.vol]);
+  const rows = day.filter(function(r){ return r[I.vol] !== null; }).sort(function(a,b){ return b[I.vol]-a[I.vol]; });
   let h = "<table><tr><th>#</th><th class='l'>contract</th><th>vol pctile (own)</th><th>cross-sectional rank</th></tr>";
   rows.forEach(function(r, i){
     h += "<tr>" + td("", r[I.rank]) + "<td class='l'><b>"+esc(syms[r[I.sym]])+"</b></td>"
        + td("", fPct(r[I.vol])) + td("", (i+1)) + "</tr>";
   });
   return h + "</table>";
+}
+
+function barSummary(day){
+  const c = {0:0,1:0,2:0,3:0,q:0,na:0};
+  for (const r of day){
+    const b = r[I.bs];
+    if (b === -2) c.na++; else if (b === -1) c.q++; else c[b]++;
+  }
+  return "at the bar: R1 "+c[0]+" / R2 "+c[1]+" / R3 "+c[2]+" / R4 "+c[3]
+       + " / no regime "+c.q+(c.na ? " / n/a "+c.na : "");
 }
 
 function nearest(dateStr){
@@ -146,17 +229,19 @@ function nearest(dateStr){
 }
 
 function paint(i){
-  const day = DATA.rows[i], syms = DATA.symbols;
-  const ev = day.filter(r => r[I.last] >= 0).length;
-  document.getElementById("asof").innerHTML = "<b>" + DATA.days[i] + " 24:00 UTC</b> (daily close) &middot; market volatility regime <b>"
-    + DATA.mkt[i] + "</b> &middot; " + ev + " of " + day.length + " contracts had a regime in the last 24h";
-  document.getElementById("m1").innerHTML = masterTable(day, syms);
-  const c1 = callout(day, syms, I.a1, I.pc1, I.oc1, "R1");
-  const c3 = callout(day, syms, I.a3, I.pc3, I.oc3, "R3");
-  const c4 = callout(day, syms, I.a4, I.pc4, I.oc4, "R4");
-  document.getElementById("n1").textContent = c1.n; document.getElementById("t1").innerHTML = c1.html;
-  document.getElementById("n3").textContent = c3.n; document.getElementById("t3").innerHTML = c3.html;
-  document.getElementById("n4").textContent = c4.n; document.getElementById("t4").innerHTML = c4.html;
+  const day = DATA.rows[i], syms = DATA.symbols, ev = DATA.ev[i] || [];
+  const idx = indexEvents(ev);
+  const nEv = day.filter(function(r){ return idx.has(r[I.sym]); }).length;
+  document.getElementById("asof").innerHTML = "<b>" + DATA.days[i] + " 24:00 UTC</b> &middot; market volatility regime <b>"
+    + DATA.mkt[i] + "</b> &middot; " + nEv + " of " + day.length + " contracts had a regime in the 24h window";
+  document.getElementById("bsum").textContent = barSummary(day);
+  document.getElementById("m1").innerHTML = masterTable(day, syms, idx);
+  const s1 = sectionHtml(day, syms, idx, 0, 10);
+  const s3 = sectionHtml(day, syms, idx, 2, 10);
+  const s4 = sectionHtml(day, syms, idx, 3, 10);
+  document.getElementById("n1").textContent = s1.n; document.getElementById("t1").innerHTML = s1.html;
+  document.getElementById("n3").textContent = s3.n; document.getElementById("t3").innerHTML = s3.html;
+  document.getElementById("n4").textContent = s4.n; document.getElementById("t4").innerHTML = s4.html;
   document.getElementById("sc").innerHTML = scatter(day, syms);
   document.getElementById("ext").innerHTML = extremeTable(day, syms);
   document.getElementById("vt").innerHTML = volTable(day, syms);
@@ -171,7 +256,7 @@ function step(n){
 
 async function boot(){
   const raw = window.__D5__.payload;
-  const bin = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+  const bin = Uint8Array.from(atob(raw), function(c){ return c.charCodeAt(0); });
   const stream = new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"));
   const text = await new Response(stream).text();
   DATA = JSON.parse(text);
@@ -186,7 +271,8 @@ async function boot(){
 
 if (typeof document !== "undefined") { boot(); }
 if (typeof module !== "undefined") {
-  module.exports = {I, RN, FNAME, masterTable, callout, scatter, extremeTable, volTable, nearest, setData: function(d, ix){ DATA = d; INDEX = ix; }};
+  module.exports = {I, RN, masterTable, sectionHtml, scatter, extremeTable, volTable,
+                    barSummary, nearest, indexEvents, setData: function(d, ix){ DATA = d; INDEX = ix; }};
 }
 """
 
@@ -203,28 +289,31 @@ PAGE = """<!doctype html>
   <button id="next">next day &rarr;</button>
   <span class="asof" id="asof"></span>
 </div>
+<div class="banner">Snapshot of a frozen dataset &mdash; the last bar available is
+<b>2026-09-01 00:00 UTC</b>, so the latest selectable day is 2026-08-31. This page does not
+fetch live data.</div>
 <div class="sub">Universe: the top 50 contracts by liquidity in that month, ranked 1..50.
-Pick any day with the date control (or step a day at a time). Everything is computed
-from the frozen dataset &mdash; <b>not live data</b>.</div>
+<span id="bsum" style="color:#1a202c;font-weight:600"></span></div>
 
 <h2>1. Master table (all 50, by liquidity rank)</h2>
-<div class="sub">Each row is one contract; <b>last state</b> is its most recent regime within
-the 24h window and <b>age</b> is how long ago it happened. Contracts with nothing in the
-window show <span class="none">-</span>.</div>
+<div class="sub"><b>state @ bar</b> is the regime label at the daily close itself &mdash;
+usually <span class="tag quiet">no regime</span>, because a regime is an hourly event flag, not
+a persistent state. <b>last event</b> is the most recent regime within the 24h window.
+Open a contract in sections 2&ndash;4 to see every event of that day.</div>
 <div id="m1"></div>
 
 <h2>2. Long buildup (R1: price up + OI up) &mdash; <span id="n1">0</span> contracts</h2>
-<div class="sub">Price and open interest both above their rolling 90d thresholds. Age and size
-are the R1 event itself, which may not be the contract's most recent state.</div>
+<div class="sub">Sorted by recency (freshest first); the first 10 are shown, the rest open
+under &ldquo;show all&rdquo;. Price and open interest both above their rolling 90d thresholds.</div>
 <div id="t1"></div>
 
 <h2>3. Short buildup (R3: price down + OI up) &mdash; <span id="n3">0</span> contracts</h2>
-<div class="sub">Price below its threshold with open interest above its own.</div>
+<div class="sub">Sorted by recency; first 10 shown.</div>
 <div id="t3"></div>
 
 <h2>4. Deleveraging (R4: price down + OI down) &mdash; <span id="n4">0</span> contracts</h2>
-<div class="sub">Open interest contracting while price falls &mdash; the note's stress case.
-Strictly R4: R2 (price up + OI down) is short covering and is not listed here.</div>
+<div class="sub">Sorted by recency; first 10 shown. Strictly R4: R2 (price up + OI down) is
+short covering and is not listed here.</div>
 <div id="t4"></div>
 
 <h2>5. Funding-adjusted crowding view</h2>
@@ -248,11 +337,10 @@ Direction is not.</div>
 <b>Not a trading signal.</b> This board is a state monitor. The strategy test in Phase 5
 found no first-moment edge after a 20bp taker round trip: net Sharpe -1.48 (A1) and -0.98
 (B1) on the main test window, and the verdict is not passed. The robust finding is the
-<i>second</i> moment &mdash; see section 6 and <code>phase3_event/GUIDANCE.md</code>. No
-historical return, Sharpe or cost figure appears anywhere on this page by design.
-<br><br>Regimes are hourly event flags, not persistent states: at any hour only ~4-8% of
-contracts sit in one. Snapshots are taken at each UTC day's last bar; the dataset ends
-2026-09-01 00:00 UTC, so the last selectable day is 2026-08-31.
+<i>second</i> moment &mdash; see section 6 and <code>phase3_event/GUIDANCE.md</code>.
+<br><br>Regimes are hourly event flags, not persistent states: across the full sample
+<b>12.7%</b> of contract-hours sit in one, and at any single bar only a handful of the 50
+do. Sections 2&ndash;4 are sorted by recency, not by signal strength or expected return.
 </footer>
 <script>window.__D5__={payload:"__PAYLOAD__",asof:"__ASOF__"};</script>
 <script>__JS__</script>

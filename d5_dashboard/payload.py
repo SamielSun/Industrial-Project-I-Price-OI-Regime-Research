@@ -1,11 +1,12 @@
 """D5 -- build the per-day payload that the interactive board embeds in one HTML.
 
-One snapshot per UTC day (the last bar of that day), for the 50-contract universe
-of that month.  Everything is vectorised; the result is a small JSON object.
+One snapshot per UTC day (the last bar of that day) for the 50-contract universe of
+that month.  The only per-event data carried is the day's event list; everything
+else about events (the latest one, its age, the section membership) is derived
+from it in the browser.
 """
 from __future__ import annotations
 
-import glob
 from pathlib import Path
 
 import numpy as np
@@ -32,15 +33,11 @@ def _dayend(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def collect_dayend() -> pd.DataFrame:
-    """Bars that close each UTC day, with the funding/reference fields attached."""
-    cols = ["symbol", "ts_end", "regime", "price_change", "oi_change",
+    cols = ["symbol", "ts_end", "regime", "excl_reason", "price_change", "oi_change",
             "funding_negative", "funding_neutral", "funding_high", "funding_extreme",
             "funding_p25", "funding_p75", "funding_p90", "mkt_vol_state"]
-    parts = []
-    for p in _files(LAB):
-        d = pd.read_parquet(p, columns=cols)
-        parts.append(_dayend(d))
-    return pd.concat(parts, ignore_index=True)
+    return pd.concat([_dayend(pd.read_parquet(p, columns=cols)) for p in _files(LAB)],
+                     ignore_index=True)
 
 
 def collect_events() -> pd.DataFrame:
@@ -52,21 +49,7 @@ def collect_events() -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True)
 
 
-def collect_hourly(root: Path, col: str) -> pd.DataFrame:
-    parts = []
-    for p in _files(root):
-        parts.append(pd.read_parquet(p, columns=["symbol", "ts_end", col]))
-    return pd.concat(parts, ignore_index=True)
-
-
-def collect_funding() -> pd.DataFrame:
-    parts = [pd.read_parquet(p, columns=["symbol", "ts_funding", "funding_rate"])
-             for p in _files(FUND)]
-    return pd.concat(parts, ignore_index=True)
-
-
 def _hourly_feature(root: Path, col: str, kind: str) -> pd.DataFrame:
-    """Day-end rows carrying a trailing 24h statistic computed on the hourly grid."""
     out = []
     for f in _files(root):
         d = pd.read_parquet(f, columns=["symbol", "ts_end", col]).sort_values(["symbol", "ts_end"])
@@ -87,24 +70,9 @@ def _last_rate(day: pd.DataFrame, funding: pd.DataFrame) -> pd.DataFrame:
                          by="symbol", direction="backward")
 
 
-def _event_fields(day: pd.DataFrame, ev: pd.DataFrame):
-    """Age / price change / OI change of the most recent event, aligned to day."""
-    left = day[["symbol", "ts_end"]].copy()
-    left["__i"] = np.arange(len(left))
-    d = left.sort_values("ts_end")
-    l = ev.sort_values("ts_end").rename(
-        columns={"ts_end": "ev_ts", "price_change": "ev_pc", "oi_change": "ev_oc"})
-    m = pd.merge_asof(d, l[["symbol", "ev_ts", "ev_pc", "ev_oc"]],
-                      left_on="ts_end", right_on="ev_ts", by="symbol", direction="backward")
-    age = (m["ts_end"] - m["ev_ts"]).dt.total_seconds().to_numpy() / 3600.0
-    idx = m["__i"].to_numpy()
-    out_age = np.full(len(day), np.nan)
-    out_pc = np.full(len(day), np.nan)
-    out_oc = np.full(len(day), np.nan)
-    out_age[idx] = age
-    out_pc[idx] = m["ev_pc"].to_numpy(dtype="float64")
-    out_oc[idx] = m["ev_oc"].to_numpy(dtype="float64")
-    return out_age, out_pc, out_oc
+def collect_funding() -> pd.DataFrame:
+    return pd.concat([pd.read_parquet(p, columns=["symbol", "ts_funding", "funding_rate"])
+                      for p in _files(FUND)], ignore_index=True)
 
 
 def funding_position(rate, p25, p75, p90, state):
@@ -127,30 +95,30 @@ def funding_position(rate, p25, p75, p90, state):
     return lo_b + (hi_b - lo_b) * t
 
 
+def _num(v, scale=1.0, nd=1):
+    """Round for JSON; anything non-finite becomes None (JSON has no NaN)."""
+    if v is None:
+        return None
+    v = float(v) * scale
+    return round(v, nd) if np.isfinite(v) else None
+
+
 def build() -> dict:
     day = collect_dayend()
     ev = collect_events()
-    vol = _hourly_feature(FEAT, "close", "vol")
-    oi = _hourly_feature(OID, "oi", "oi")
     fund = collect_funding()
     mem = pd.read_parquet(MEM)
 
-    day = day.merge(vol[["symbol", "ts_end", "v24"]], on=["symbol", "ts_end"], how="left")
-    day = day.merge(oi[["symbol", "ts_end", "oi24"]], on=["symbol", "ts_end"], how="left")
+    day = day.merge(_hourly_feature(FEAT, "close", "vol")[["symbol", "ts_end", "v24"]],
+                    on=["symbol", "ts_end"], how="left")
+    day = day.merge(_hourly_feature(OID, "oi", "oi")[["symbol", "ts_end", "oi24"]],
+                    on=["symbol", "ts_end"], how="left")
     day = _last_rate(day, fund)
 
-    for rg in REGIMES:
-        a, p, o = _event_fields(day, ev[ev.regime == rg])
-        day["age_" + rg] = a
-        day["pc_" + rg] = p
-        day["oc_" + rg] = o
-
-    # volatility percentile against the contract's own trailing 90 days (daily grid)
     day = day.sort_values(["symbol", "ts_end"])
     day["vol_pct"] = (day.groupby("symbol")["v24"]
                          .transform(lambda s: s.rolling(90, min_periods=60).rank(pct=True)))
 
-    # funding state and its position on the 0-1 axis
     st = np.full(len(day), -1, dtype="int8")
     for key, val in (("funding_negative", 0), ("funding_neutral", 1),
                      ("funding_high", 2), ("funding_extreme", 3)):
@@ -161,7 +129,14 @@ def build() -> dict:
                                                 day["funding_p75"], day["funding_p90"],
                                                 day["funding"])]
 
-    # membership of the month that the bar belongs to
+    # state of each contract at the bar itself: 0-3 = R1-R4, -1 = no regime, -2 = n/a
+    reg = day["regime"].to_numpy()
+    okr = day["excl_reason"].to_numpy() == "ok"
+    bar_state = np.where(okr, -1, -2).astype("int8")
+    for i, rg in enumerate(REGIMES):
+        bar_state = np.where(reg == rg, i, bar_state)
+    day["bar_state"] = bar_state
+
     day["month"] = (day["ts_end"] - pd.Timedelta(hours=1)).dt.strftime("%Y-%m")
     day = day.merge(mem[["symbol", "month", "rank"]], on=["symbol", "month"], how="inner")
     day["date"] = (day["ts_end"] - pd.Timedelta(hours=1)).dt.strftime("%Y-%m-%d")
@@ -174,56 +149,53 @@ def build() -> dict:
     rows, mkt = [], []
     for d, g in day.groupby("date", sort=True):
         mkt.append(str(g["mkt_vol_state"].mode().iloc[0]) if len(g) else "unknown")
-        block = []
-        for r in g.itertuples(index=False):
-            age = {rg: getattr(r, "age_" + rg) for rg in REGIMES}
-            ok = [rg for rg in REGIMES if np.isfinite(age[rg]) and age[rg] <= 24]
-            last = min(ok, key=lambda k: age[k]) if ok else None
+        rows.append([[int(r.rank), sidx[r.symbol], int(r.funding),
+                      _num(r.vol_pct, 1, 3), _num(r.oi24, 1, 4), _num(r.fund_pct, 1, 3),
+                      int(r.bar_state), _num(r.price_change, 1e4, 1),
+                      _num(r.oi_change, 100, 2)]
+                     for r in g.itertuples(index=False)])
 
-            def fresh(rg, key):
-                a = age[rg]
-                if not np.isfinite(a) or a > 24:
-                    return None
-                v = float(getattr(r, key + "_" + rg))
-                return None if not np.isfinite(v) else v
+    # ---- per-day event list: the single source of truth for every event fact ----
+    # a day's window is [D 00:00, D+1 00:00]; an event exactly at midnight belongs to
+    # that day (hour 0) and also to the previous day (hour 24)
+    e = ev.copy()
+    e["day"] = e["ts_end"].dt.floor("D")
+    e["hour"] = ((e["ts_end"] - e["day"]).dt.total_seconds() / 3600).round().astype("int8")
+    mid = e[e["hour"] == 0]
+    if len(mid):
+        e = pd.concat([e, mid.assign(day=mid["day"] - pd.Timedelta(days=1), hour=24)],
+                      ignore_index=True)
+    e["day_s"] = e["day"].dt.strftime("%Y-%m-%d")
+    # only events on days when the contract is actually in that month's universe
+    valid = set(zip(day["symbol"], day["date"]))
+    e = e[[(s, d) in valid for s, d in zip(e["symbol"], e["day_s"])]]
+    e["ri"] = e["regime"].map({r: i for i, r in enumerate(REGIMES)}).astype("int8")
+    e["si"] = e["symbol"].map(sidx).astype("int32")
 
-            def f(v, scale=1.0, nd=1):
-                """Round for JSON; anything non-finite becomes null (JSON has no NaN)."""
-                if v is None:
-                    return None
-                v = float(v) * scale
-                return round(v, nd) if np.isfinite(v) else None
+    ev_list = {d: [] for d in days}
+    for d, g in e.groupby("day_s", sort=False):
+        block = [[int(si), int(h), int(ri), _num(pc, 1e4, 1), _num(oc, 100, 2)]
+                 for si, h, ri, pc, oc in zip(g["si"], g["hour"], g["ri"],
+                                              g["price_change"], g["oi_change"])]
+        block.sort(key=lambda x: (x[0], x[1]))
+        ev_list[d] = block
 
-            block.append([
-                int(r.rank), sidx[r.symbol],
-                REGIMES.index(last) if last else -1,
-                f(age[last], 1, 1) if last else None,
-                f(getattr(r, "pc_" + last), 1e4, 1) if last else None,
-                f(getattr(r, "oc_" + last), 100, 2) if last else None,
-                int(r.funding),
-                f(r.vol_pct, 1, 3),
-                f(r.oi24, 1, 4),
-                f(age["R1"], 1, 1) if fresh("R1", "age") is not None else None,
-                f(age["R3"], 1, 1) if fresh("R3", "age") is not None else None,
-                f(age["R4"], 1, 1) if fresh("R4", "age") is not None else None,
-                f(r.fund_pct, 1, 3),
-                f(r.pc_R1, 1e4, 1) if fresh("R1", "pc") is not None else None,
-                f(r.oc_R1, 100, 2) if fresh("R1", "oc") is not None else None,
-                f(r.pc_R3, 1e4, 1) if fresh("R3", "pc") is not None else None,
-                f(r.oc_R3, 100, 2) if fresh("R3", "oc") is not None else None,
-                f(r.pc_R4, 1e4, 1) if fresh("R4", "pc") is not None else None,
-                f(r.oc_R4, 100, 2) if fresh("R4", "oc") is not None else None,
-            ])
-        rows.append(block)
-
-    return {"symbols": syms, "days": days, "mkt": mkt, "rows": rows}
+    return {"symbols": syms, "days": days, "mkt": mkt, "rows": rows,
+            "ev": [ev_list[d] for d in days]}
 
 
 if __name__ == "__main__":
+    import base64
+    import gzip
     import json
     import time
+
     t = time.time()
-    payload = build()
-    raw = json.dumps(payload, separators=(",", ":"))
-    print("days: %d | symbols: %d | json: %.1f MB | %.0fs"
-          % (len(payload["days"]), len(payload["symbols"]), len(raw) / 1e6, time.time() - t))
+    pl = build()
+    raw = json.dumps(pl, separators=(",", ":"), allow_nan=False).encode()
+    gz = gzip.compress(raw, 6, mtime=0)
+    print("days %d | symbols %d | fields/row %d | events %d"
+          % (len(pl["days"]), len(pl["symbols"]), len(pl["rows"][0][0]),
+             sum(len(x) for x in pl["ev"])))
+    print("json %.2f MB | gzip %.2f MB | b64 %.2f MB | %.0fs"
+          % (len(raw) / 1e6, len(gz) / 1e6, len(base64.b64encode(gz)) / 1e6, time.time() - t))

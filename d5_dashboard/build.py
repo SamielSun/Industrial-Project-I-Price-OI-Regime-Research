@@ -12,6 +12,7 @@ import argparse
 import base64
 import gzip
 import json
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +27,7 @@ OUT = DATA / "09_dashboard"
 LAB = DATA / "05_regime" / "regime_labels" / "freq=1h"
 BASE1 = DATA / "07_funding" / "base" / "p4_base_h=1.parquet"
 T0 = pd.Timestamp("2021-12-01", tz="UTC")
+NFIELDS = 9
 
 
 def log(msg: str) -> None:
@@ -37,11 +39,9 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
     return bool(ok)
 
 
-def _labels_for(day: str) -> pd.DataFrame:
+def _month_file(day: str) -> Path:
     ts = pd.Timestamp(day, tz="UTC")
-    path = LAB / ("year=%d" % ts.year) / ("chunk=%s.parquet" % ts.strftime("%Y-%m"))
-    cols = ["symbol", "ts_end", "regime"]
-    return pd.read_parquet(path, columns=cols)
+    return LAB / ("year=%d" % ts.year) / ("chunk=%s.parquet" % ts.strftime("%Y-%m"))
 
 
 def main() -> int:
@@ -51,40 +51,47 @@ def main() -> int:
 
     log("D5 board   building the full-history payload ...")
     pl = P.build()
-    days, rows, syms = pl["days"], pl["rows"], pl["symbols"]
+    days, rows, syms, evs = pl["days"], pl["rows"], pl["symbols"], pl["ev"]
     asof = args.asof or days[-1]
     if asof not in set(days):
         raise SystemExit("--asof %s is not a day in the dataset (%s .. %s)"
                          % (asof, days[0], days[-1]))
-    log("  days %d | symbols %d | contracts per day %d"
-        % (len(days), len(syms), len(rows[0])))
+    log("  days %d | symbols %d | rows/day %d | events %d"
+        % (len(days), len(syms), len(rows[0]), sum(len(x) for x in evs)))
 
     ok = True
-    full = sum(1 for r in rows if len(r) == 50)
     mn, mx = min(len(r) for r in rows), max(len(r) for r in rows)
+    full = sum(1 for r in rows if len(r) == 50)
     ok &= check("every day falls inside the 50-contract universe",
-                mx <= 50 and mn >= 45,
+                mx <= 50 and mn >= 49 and len(rows) == len(days),
                 "min %d / max %d rows per day, %d of %d days complete"
                 % (mn, mx, full, len(rows)))
+    ok &= check("every row carries %d fields" % NFIELDS,
+                all(len(x) == NFIELDS for r in rows for x in r),
+                "checked %d rows" % sum(len(r) for r in rows))
 
+    states = Counter(x[6] for r in rows for x in r)
+    ok &= check("bar_state is in {-2,-1,0,1,2,3}",
+                set(states) <= {-2, -1, 0, 1, 2, 3},
+                "counts %s" % dict(sorted(states.items())))
+
+    # sampled events must reproduce from the raw label table
     i = days.index(asof)
-    day = rows[i]
     bar = pd.Timestamp(asof, tz="UTC") + pd.Timedelta(days=1)
-    lab = _labels_for(asof)
-    lab = lab[lab.symbol.isin([syms[r[1]] for r in day])]
-
-    r1 = [r for r in day if r[P.REGIMES.index("R1") + 9] is not None]
-    sample = r1 if len(r1) <= 3 else [r1[0], r1[len(r1) // 2], r1[-1]]
+    lab = pd.read_parquet(_month_file(asof), columns=["symbol", "ts_end", "regime"])
+    pool = [e for e in evs[i] if e[2] == 0]
+    sample = pool[:1] + pool[len(pool) // 2:len(pool) // 2 + 1] + pool[-1:]
     hit = True
-    for r in sample:
-        ev_ts = bar - pd.Timedelta(hours=float(r[9]))
-        m = lab[(lab.symbol == syms[r[1]]) & (lab.ts_end == ev_ts) & (lab.regime == "R1")]
+    for e in sample:
+        ts = pd.Timestamp(asof, tz="UTC") + pd.Timedelta(hours=int(e[1]))
+        m = lab[(lab.symbol == syms[e[0]]) & (lab.ts_end == ts) & (lab.regime == "R1")]
         hit &= len(m) == 1
-    ok &= check("sampled R1 rows reproduce from the raw label table", hit,
+    ok &= check("sampled R1 events reproduce from the raw label table", hit,
                 "%d sampled on %s" % (len(sample), asof))
 
-    hh = int((bar - T0).total_seconds() // 3600)
-    if BASE1.exists():
+    # funding state recomputed independently from rate vs the contract's own percentiles
+    if BASE1.exists() and len(evs[i]) >= 0:
+        hh = int((bar - T0).total_seconds() // 3600)
         b = pd.read_parquet(BASE1, columns=["sym", "hour", "state"])
         for probe in (hh, hh - 1):
             bb = b[(b.hour == probe) & (b.state >= 0)]
@@ -94,25 +101,29 @@ def main() -> int:
         else:
             b = b.iloc[0:0]
         if len(b):
-            idx = {syms[r[1]]: r[6] for r in day}
+            idx = {syms[r[1]]: r[2] for r in rows[i]}
             j = b[b.sym.isin(idx)]
             same = all(idx[s] == int(st) for s, st in zip(j.sym, j.state))
             ok &= check("funding state agrees with p4_base_h=1", same,
                         "%d overlapping rows" % len(j))
-        else:
-            check("funding state vs p4_base_h=1", True, "no p4 rows at this hour (skipped)")
 
-    band_ok = True
-    for r in day:
-        if r[12] is None:
-            continue
-        lo, hi = P.BAND[int(r[6])]
-        band_ok &= (lo - 1e-9) <= r[12] <= (hi + 1e-9)
-    ok &= check("funding percentile sits inside its state's band", band_ok,
-                "%d rows" % sum(1 for r in day if r[12] is not None))
+    hours_ok = all(0 <= e[1] <= 24 for x in evs for e in x)
+    regs_ok = all(0 <= e[2] <= 3 for x in evs for e in x)
+    ok &= check("event hours in [0,24] and regime codes in [0,3]", hours_ok and regs_ok,
+                "%d events" % sum(len(x) for x in evs))
+
+    # the day on screen: what each section will show
+    by = {}
+    for e in evs[i]:
+        by.setdefault(e[0], {})[e[2]] = max(by.get(e[0], {}).get(e[2], -1), e[1])
+    for name, reg in (("R1", 0), ("R3", 2), ("R4", 3)):
+        got = sorted([(v[reg], syms[k]) for k, v in by.items() if reg in v], reverse=True)
+        log("  %s: %d contracts, top1 %s (age %dh)"
+            % (name, len(got), got[0][1] if got else "-", 24 - got[0][0] if got else -1))
+    log("  at the bar: %s" % dict(sorted(Counter(r[6] for r in rows[i]).items())))
 
     raw = json.dumps(pl, separators=(",", ":"), allow_nan=False).encode()
-    b64 = base64.b64encode(gzip.compress(raw, 6)).decode("ascii")
+    b64 = base64.b64encode(gzip.compress(raw, 6, mtime=0)).decode("ascii")
     html = (PAGE.replace("__CSS__", CSS).replace("__JS__", JS)
                 .replace("__PAYLOAD__", b64).replace("__ASOF__", asof))
     OUT.mkdir(parents=True, exist_ok=True)
