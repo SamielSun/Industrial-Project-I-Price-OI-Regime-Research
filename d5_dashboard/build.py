@@ -1,10 +1,11 @@
 """D5 -- build the interactive price/OI regime board.
 
-    python -m d5_dashboard                 # opens on the last day in the dataset
-    python -m d5_dashboard --asof 2026-05-12
+    python -m d5_dashboard                     # opens on the last bar
+    python -m d5_dashboard --asof 2026-08-31T14 # any hour in the hourly window
+    python -m d5_dashboard --asof 2024-05-10    # a day-close snapshot
 
-One self-contained HTML file with every day embedded (gzip + base64), a date
-picker, and no server.  Reads only data/, writes only data/09_dashboard/.
+Hourly snapshots for the trailing 180 days, one snapshot per day before that.
+One self-contained HTML file with the payload embedded gzip+base64; no server.
 """
 from __future__ import annotations
 
@@ -15,7 +16,6 @@ import json
 from collections import Counter
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from . import payload as P
@@ -39,61 +39,67 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
     return bool(ok)
 
 
-def _month_file(day: str) -> Path:
-    ts = pd.Timestamp(day, tz="UTC")
-    return LAB / ("year=%d" % ts.year) / ("chunk=%s.parquet" % ts.strftime("%Y-%m"))
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description="D5 - interactive regime board")
-    ap.add_argument("--asof", default=None, help="day the page opens on (YYYY-MM-DD)")
+    ap.add_argument("--asof", default=None,
+                    help="snapshot to open on: YYYY-MM-DD (day close) or YYYY-MM-DDTHH")
     args = ap.parse_args()
 
-    log("D5 board   building the full-history payload ...")
+    log("D5 board   building the payload (hourly window %dd) ..." % P.HOURS_WINDOW_DAYS)
     pl = P.build()
-    days, rows, syms, evs = pl["days"], pl["rows"], pl["symbols"], pl["ev"]
-    asof = args.asof or days[-1]
-    if asof not in set(days):
-        raise SystemExit("--asof %s is not a day in the dataset (%s .. %s)"
-                         % (asof, days[0], days[-1]))
-    log("  days %d | symbols %d | rows/day %d | events %d"
-        % (len(days), len(syms), len(rows[0]), sum(len(x) for x in evs)))
+    snap, kind, rows, syms, days, evs = (pl["snap"], pl["kind"], pl["rows"],
+                                         pl["symbols"], pl["days"], pl["ev"])
+    want = args.asof or snap[-1]
+    if want.isdigit() is False and "T" not in want:
+        want = want + "T23"
+    idx_of = {s: i for i, s in enumerate(snap)}
+    if want not in idx_of:
+        raise SystemExit("--asof %s is not a snapshot (use YYYY-MM-DD or YYYY-MM-DDTHH, "
+                         "range %s .. %s)" % (want, snap[0], snap[-1]))
+    i = idx_of[want]
+    log("  snapshots %d (daily %d / hourly %d) | days %d | events %d"
+        % (len(snap), kind.count(0), kind.count(1), len(days), sum(len(x) for x in evs)))
 
     ok = True
+    ok &= check("snapshots are strictly increasing", all(snap[k] < snap[k + 1] for k in range(len(snap) - 1)),
+                "%s .. %s" % (snap[0], snap[-1]))
     mn, mx = min(len(r) for r in rows), max(len(r) for r in rows)
-    full = sum(1 for r in rows if len(r) == 50)
-    ok &= check("every day falls inside the 50-contract universe",
-                mx <= 50 and mn >= 49 and len(rows) == len(days),
-                "min %d / max %d rows per day, %d of %d days complete"
-                % (mn, mx, full, len(rows)))
+    ok &= check("every snapshot falls inside the 50-contract universe",
+                mx <= 50 and mn >= 49, "min %d / max %d rows, %d snapshots" % (mn, mx, len(rows)))
     ok &= check("every row carries %d fields" % NFIELDS,
                 all(len(x) == NFIELDS for r in rows for x in r),
                 "checked %d rows" % sum(len(r) for r in rows))
-
     states = Counter(x[6] for r in rows for x in r)
-    ok &= check("bar_state is in {-2,-1,0,1,2,3}",
-                set(states) <= {-2, -1, 0, 1, 2, 3},
+    ok &= check("bar_state is in {-2,-1,0,1,2,3}", set(states) <= {-2, -1, 0, 1, 2, 3},
                 "counts %s" % dict(sorted(states.items())))
 
-    # sampled events must reproduce from the raw label table
-    i = days.index(asof)
-    bar = pd.Timestamp(asof, tz="UTC") + pd.Timedelta(days=1)
-    lab = pd.read_parquet(_month_file(asof), columns=["symbol", "ts_end", "regime"])
-    pool = [e for e in evs[i] if e[2] == 0]
-    sample = pool[:1] + pool[len(pool) // 2:len(pool) // 2 + 1] + pool[-1:]
+    # sampled events reproduce from the raw label table
+    dd, hh = snap[i].split("T")
+    lab = pd.read_parquet(LAB / ("year=%d" % int(dd[:4])) / ("chunk=%s.parquet" % dd[:7]),
+                          columns=["symbol", "ts_end", "regime"])
+    dayIdx = days.index(dd)
+    win = []
+    for k in (dayIdx - 1, dayIdx):
+        if 0 <= k < len(days):
+            for e in evs[k]:
+                a = k * 24 + e[1]
+                if (dayIdx * 24 + int(hh)) - 23 <= a <= dayIdx * 24 + int(hh):
+                    win.append((e, k))
+    sample = [w for w in win if w[0][2] == 0][:3]
     hit = True
-    for e in sample:
-        ts = pd.Timestamp(asof, tz="UTC") + pd.Timedelta(hours=int(e[1]))
+    for e, k in sample:
+        # events are labelled by the bar's start; the label row sits at ts_end = start + 1h
+        ts = pd.Timestamp(days[k], tz="UTC") + pd.Timedelta(hours=int(e[1]) + 1)
         m = lab[(lab.symbol == syms[e[0]]) & (lab.ts_end == ts) & (lab.regime == "R1")]
         hit &= len(m) == 1
     ok &= check("sampled R1 events reproduce from the raw label table", hit,
-                "%d sampled on %s" % (len(sample), asof))
+                "%d sampled at %s" % (len(sample), snap[i]))
 
-    # funding state recomputed independently from rate vs the contract's own percentiles
-    if BASE1.exists() and len(evs[i]) >= 0:
-        hh = int((bar - T0).total_seconds() // 3600)
+    # funding state agrees with p4_base at the snapshot hour
+    if BASE1.exists():
+        hh_abs = int((pd.Timestamp(dd, tz="UTC") + pd.Timedelta(hours=int(hh)) - T0).total_seconds() // 3600)
         b = pd.read_parquet(BASE1, columns=["sym", "hour", "state"])
-        for probe in (hh, hh - 1):
+        for probe in (hh_abs, hh_abs - 1):
             bb = b[(b.hour == probe) & (b.state >= 0)]
             if len(bb):
                 b = bb
@@ -101,31 +107,31 @@ def main() -> int:
         else:
             b = b.iloc[0:0]
         if len(b):
-            idx = {syms[r[1]]: r[2] for r in rows[i]}
-            j = b[b.sym.isin(idx)]
-            same = all(idx[s] == int(st) for s, st in zip(j.sym, j.state))
+            cur = {syms[r[1]]: r[2] for r in rows[i]}
+            j = b[b.sym.isin(cur)]
+            same = all(cur[s] == int(st) for s, st in zip(j.sym, j.state))
             ok &= check("funding state agrees with p4_base_h=1", same,
                         "%d overlapping rows" % len(j))
 
-    hours_ok = all(0 <= e[1] <= 24 for x in evs for e in x)
+    hours_ok = all(0 <= e[1] <= 23 for x in evs for e in x)
     regs_ok = all(0 <= e[2] <= 3 for x in evs for e in x)
-    ok &= check("event hours in [0,24] and regime codes in [0,3]", hours_ok and regs_ok,
+    ok &= check("event hours in [0,23] and regime codes in [0,3]", hours_ok and regs_ok,
                 "%d events" % sum(len(x) for x in evs))
 
-    # the day on screen: what each section will show
+    # what the page will show at the selected snapshot
+    log("  at %s: %s" % (snap[i], dict(sorted(Counter(r[6] for r in rows[i]).items()))))
     by = {}
-    for e in evs[i]:
-        by.setdefault(e[0], {})[e[2]] = max(by.get(e[0], {}).get(e[2], -1), e[1])
+    for e, k in win:
+        by.setdefault(e[0], {})[e[2]] = max(by.get(e[0], {}).get(e[2], -1), k * 24 + e[1])
     for name, reg in (("R1", 0), ("R3", 2), ("R4", 3)):
-        got = sorted([(v[reg], syms[k]) for k, v in by.items() if reg in v], reverse=True)
+        got = sorted([(v[reg], syms[k2]) for k2, v in by.items() if reg in v], reverse=True)
         log("  %s: %d contracts, top1 %s (age %dh)"
-            % (name, len(got), got[0][1] if got else "-", 24 - got[0][0] if got else -1))
-    log("  at the bar: %s" % dict(sorted(Counter(r[6] for r in rows[i]).items())))
+            % (name, len(got), got[0][1] if got else "-", (dayIdx * 24 + int(hh)) - got[0][0] if got else -1))
 
     raw = json.dumps(pl, separators=(",", ":"), allow_nan=False).encode()
     b64 = base64.b64encode(gzip.compress(raw, 6, mtime=0)).decode("ascii")
     html = (PAGE.replace("__CSS__", CSS).replace("__JS__", JS)
-                .replace("__PAYLOAD__", b64).replace("__ASOF__", asof))
+                .replace("__PAYLOAD__", b64).replace("__ASOF__", snap[i]))
     OUT.mkdir(parents=True, exist_ok=True)
     dst = OUT / "dashboard.html"
     dst.write_text(html, encoding="utf-8", newline=chr(10))
