@@ -1,4 +1,4 @@
-"""Phase 5 -- engine self-test.  python -m phase5.selftest
+"""Phase 5 -- engine self-test.  python -m phase5_simple_strategy.selftest
 
 Independent recomputation of sampled trades straight from the raw parquet files
 (pandas joins on real timestamps, not the array engine) plus the accounting

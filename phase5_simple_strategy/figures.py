@@ -1,6 +1,6 @@
 """Phase 5 -- figures (f01 equity/drawdown, f02 cost hurdle, f03 by year).
 
-    python -m phase5.figures
+    python -m phase5_simple_strategy.figures
 
 f01  cumulative net PnL and drawdown, both arms, main test window
 f02  cost* (gross per trade) against the 20bp taker round trip

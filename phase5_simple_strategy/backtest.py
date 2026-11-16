@@ -1,6 +1,6 @@
 """Phase 5 -- costed event backtest engine.
 
-Protocol is frozen by phase5/GUIDANCE.md sec.4-5:
+Protocol is frozen by phase5_simple_strategy/GUIDANCE.md sec.4-5:
 
   entry   next bar OPEN after the event bar (event time = bar close)
   exit    close of the bar ending at entry_time + h

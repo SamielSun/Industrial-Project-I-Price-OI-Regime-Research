@@ -15,7 +15,7 @@
 - long-only；10 并发；等名义本金；1× 杠杆。
 - 27/27 训练/测试 + 3 折 walk-forward + 3 个月最终 holdout。
 - 4 条 baseline；成本、funding carry、滑点；OOS Sharpe 为唯一显著性指标。
-- 交付：`phase5/` 代码、OOS 报告、`phase5/REPRODUCE.md`。
+- 交付：`phase5_simple_strategy/` 代码、OOS 报告、`phase5_simple_strategy/REPRODUCE.md`。
 
 ### 明确不在范围内
 - **D5（dashboard）**：独立工程。
@@ -48,7 +48,7 @@
 
 ### 输出（新建）
 ```
-phase5/
+phase5_simple_strategy/
   backtest.py            主回测
   rules.py               M1a/M1b/M2/M3 定义
   eval.py                OOS 指标与 baseline
@@ -203,9 +203,9 @@ data/08_strategy/
 ## 9. 交付物与验收（冻结）
 
 ### 交付
-1. `phase5/` 可复现回测代码：**一条命令**跑完训练 + 测试 + 报告。
+1. `phase5_simple_strategy/` 可复现回测代码：**一条命令**跑完训练 + 测试 + 报告。
 2. OOS 报告（§7 的 4 张表 + 失败/通过判定）。
-3. `phase5/REPRODUCE.md`：命令、依赖、耗时、数据前置。
+3. `phase5_simple_strategy/REPRODUCE.md`：命令、依赖、耗时、数据前置。
 4. 代码只读 Phase 1–4 的 `data/`，**不修改任何 Phase 1–4 文件**。
 
 ### 验收（三条全满足才算完成）

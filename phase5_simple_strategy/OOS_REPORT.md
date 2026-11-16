@@ -179,6 +179,6 @@ f03 逐年毛边际（全样本），虚线是 20bp 成本。越过线的组合�
 
 ## 8. 复现
 
-    python -m phase5.build all
+    python -m phase5_simple_strategy.build all
 
 产物：data/08_strategy/tables/p5_*.csv 与本文件。

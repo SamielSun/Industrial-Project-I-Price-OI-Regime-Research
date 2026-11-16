@@ -13,7 +13,8 @@ transaction costs in a long-only book. Phase 5 formalises that negative result.
 | 2 | Regime labels at 1h/4h/8h/1d (D2) | — | `phase2_regime/REPRODUCE.md` |
 | 3 | Event study: 4 regimes x 4 horizons (D3) | `phase3_event/GUIDANCE.md` | `phase3_event/REPRODUCE.md` |
 | 4 | Funding x regime conditional event study | `phase4_funding/GUIDANCE.md`, `TABLES.md` | `phase4_funding/REPRODUCE.md` |
-| 5 | Level-gated strategy prototype + OOS report (D4) | `phase5/GUIDANCE.md`, `OOS_REPORT.md` | `phase5/REPRODUCE.md` |
+| 5 | Level-gated strategy prototype + OOS report (D4) | `phase5_simple_strategy/GUIDANCE.md`, `OOS_REPORT.md` | `phase5_simple_strategy/REPRODUCE.md` |
+| D5 | Regime board: self-contained HTML state monitor | — | `d5_dashboard/REPRODUCE.md` |
 
 Design docs are in Chinese; the REPRODUCE files are in English. Every analysis
 phase has exactly one `GUIDANCE.md` and one `REPRODUCE.md`.
@@ -26,7 +27,8 @@ phase has exactly one `GUIDANCE.md` and one `REPRODUCE.md`.
     phase2_regime/       regime labelling                      (builds data/05_regime/)
     phase3_event/        event study + figures                 (builds data/06_event_study/)
     phase4_funding/      funding x regime study                (builds data/07_funding/)
-    phase5/              strategy backtest + report            (builds data/08_strategy/)
+    phase5_simple_strategy/              strategy backtest + report            (builds data/08_strategy/)
+    d5_dashboard/        regime board (HTML snapshot)         (builds data/09_dashboard/)
     data/                all outputs, NOT in version control (~4.8 GB, rebuildable)
     research_archive/    course materials, literature, submissions (not part of the pipeline)
 
@@ -39,7 +41,7 @@ runtimes and prerequisites:
     python phase2_regime/regime_generator.py --out-root data --sample-end 2026-08-31
     python phase3_event/build.py panel && python phase3_event/experiment/exp1_4.py
     python phase4_funding/build.py data && python phase4_funding/experiment/exp1_2.py
-    python -m phase5.build all
+    python -m phase5_simple_strategy.build all
 
 Phase 1 steps 0-3 need a VPN. Phases 3-5 read only `data/` and write only under it.
 
@@ -59,7 +61,7 @@ Phase 1 steps 0-3 need a VPN. Phases 3-5 read only `data/` and write only under 
 
 The Phase 4 gate used **contrast** significance (negative vs neutral funding within a
 regime). A long-only book earns the **level**, not the contrast, so Phase 5 re-gates
-on the level (G0-G5 in `phase5/GUIDANCE.md` §2). Two arms survive: A1 (R4 x negative
+on the level (G0-G5 in `phase5_simple_strategy/GUIDANCE.md` §2). Two arms survive: A1 (R4 x negative
 funding, hold 8h) and B1 (R4 x high market-vol, hold 1h). At a 20bp taker round trip
 both lose: net Sharpe **-1.48** and **-0.98** on the main test window. The volatility
 overlay (V1) improves every window but does not turn either arm positive.

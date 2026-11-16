@@ -1,7 +1,7 @@
 # Phase 5 — GUIDANCE（level-gated D4）
 
-**状态**：取代 `phase5/GUIDANCE.md`（v1 保留作历史记录，不删）。本文件是 Phase 5 代码实现的唯一依据。
-**读者**：实现 `phase5/` 的 agent。读完应能独立实现、回测、评估，不需要再问设计问题。
+**状态**：取代 `phase5_simple_strategy/GUIDANCE.md`（v1 保留作历史记录，不删）。本文件是 Phase 5 代码实现的唯一依据。
+**读者**：实现 `phase5_simple_strategy/` 的 agent。读完应能独立实现、回测、评估，不需要再问设计问题。
 
 ---
 
@@ -127,7 +127,7 @@ v2 改动四处，其余全部继承 v1：
 
 掉队的两个（R4×mv-high h=4/8）都是「正年数够、但最近 12 个月为负」（−5.82 / −2.60）——它们的水平来自 2023–2024，现在没有了。
 
-复现：`python -m phase5.gate`，输出 `data/08_strategy/tables/p5_gate.csv`（96 行，逐条件判定）与 `p5_gate_arms.csv`（2 臂）。本节数字由该命令生成。
+复现：`python -m phase5_simple_strategy.gate`，输出 `data/08_strategy/tables/p5_gate.csv`（96 行，逐条件判定）与 `p5_gate_arms.csv`（2 臂）。本节数字由该命令生成。
 
 ---
 
@@ -286,7 +286,7 @@ v2 改动四处，其余全部继承 v1：
 
 ### 文件
 
-    phase5/
+    phase5_simple_strategy/
       GUIDANCE.md          本文件
       gate.py              G0–G5，一条命令复现 §3 的表
       rules.py             臂定义 + V1 波动率层
@@ -295,7 +295,7 @@ v2 改动四处，其余全部继承 v1：
       figures.py           3 张图（净值/成本/逐年）
       report.py            4 张表 + 图表索引 + md
       selftest.py          10 条断言
-      build.py             唯一入口：python -m phase5.build all
+      build.py             唯一入口：python -m phase5_simple_strategy.build all
       REPRODUCE.md         命令、依赖、耗时、数据前置
     data/08_strategy/figures/  f01..f03
     data/08_strategy/tables/

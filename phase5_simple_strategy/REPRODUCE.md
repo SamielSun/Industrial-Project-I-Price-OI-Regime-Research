@@ -5,7 +5,7 @@ report. All commands run from the repo root.
 
 ## One command
 
-    python -m phase5.build all
+    python -m phase5_simple_strategy.build all
 
 That runs the gate (G0-G5), the evaluation (splits, six baselines, metrics) and
 the report renderer, in that order, and rewrites every product below. No manual
@@ -26,16 +26,16 @@ No scipy: the gate's one-sided normal tail uses math.erfc.
     data/03_reference/universe_membership.parquet   monthly universe for buy-and-hold
     data/06_event_study/panel/freq=1h/symbols.parquet  code <-> symbol map
 
-Phase 5 never writes outside data/08_strategy/ and phase5/.
+Phase 5 never writes outside data/08_strategy/ and phase5_simple_strategy/.
 
 ## Commands (the same three steps, individually)
 
-    python -m phase5.gate        # G0-G5 -> p5_gate.csv, p5_gate_arms.csv
-    python -m phase5.eval        # splits + baselines -> p5_rules / p5_baselines / p5_by_*
-    python -m phase5.figures     # -> data/08_strategy/figures/f0*.png
-    python -m phase5.report      # -> phase5/OOS_REPORT.md
+    python -m phase5_simple_strategy.gate        # G0-G5 -> p5_gate.csv, p5_gate_arms.csv
+    python -m phase5_simple_strategy.eval        # splits + baselines -> p5_rules / p5_baselines / p5_by_*
+    python -m phase5_simple_strategy.figures     # -> data/08_strategy/figures/f0*.png
+    python -m phase5_simple_strategy.report      # -> phase5_simple_strategy/OOS_REPORT.md
 
-    python -m phase5.build smoke # both arms end to end, ledger only (no files)
+    python -m phase5_simple_strategy.build smoke # both arms end to end, ledger only (no files)
 
 ## Products
 
@@ -50,7 +50,7 @@ Phase 5 never writes outside data/08_strategy/ and phase5/.
     data/08_strategy/figures/f01_equity.png     cumulative PnL and drawdown
     data/08_strategy/figures/f02_cost_hurdle.png  cost* against the 20bp line
     data/08_strategy/figures/f03_year_decay.png   net PnL per trade by year
-    phase5/OOS_REPORT.md                        the report
+    phase5_simple_strategy/OOS_REPORT.md                        the report
 
 ## Runtimes (project machine)
 
@@ -84,5 +84,5 @@ Phase 5 never writes outside data/08_strategy/ and phase5/.
 
 ## History
 
-    phase5/archive/HANDOFF_v1.md   the superseded contrast-gated design
-    phase5/GUIDANCE.md              the operative design (v2)
+    phase5_simple_strategy/archive/HANDOFF_v1.md   the superseded contrast-gated design
+    phase5_simple_strategy/GUIDANCE.md              the operative design (v2)

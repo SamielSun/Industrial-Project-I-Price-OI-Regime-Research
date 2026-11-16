@@ -1,7 +1,7 @@
 """One-command entry point.
 
-    python -m phase5.build all     # gate -> eval -> report
-    python -m phase5.build smoke   # both arms end to end, ledger only
+    python -m phase5_simple_strategy.build all     # gate -> eval -> report
+    python -m phase5_simple_strategy.build smoke   # both arms end to end, ledger only
 """
 from __future__ import annotations
 

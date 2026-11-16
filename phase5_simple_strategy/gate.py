@@ -1,7 +1,7 @@
 """Phase 5 -- the Phase 4 -> Phase 5 gate (GUIDANCE.md sec.2, G0-G5).
 
-    python -m phase5.gate            # write the table, print the pass set
-    python -m phase5.gate --all      # print all 96 cells, not just those past G1
+    python -m phase5_simple_strategy.gate            # write the table, print the pass set
+    python -m phase5_simple_strategy.gate --all      # print all 96 cells, not just those past G1
 
 The gate answers one question only: does this cell contain something.  Cost and
 executability are Phase 5's job (sec.6), not the gate's.

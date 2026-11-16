@@ -1,6 +1,6 @@
 """Phase 5 -- render the OOS report (markdown + csv summary).
 
-Reads only the tables written by phase5.gate and phase5.eval, so the report can
+Reads only the tables written by phase5_simple_strategy.gate and phase5_simple_strategy.eval, so the report can
 never disagree with the run that produced it.
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ import pandas as pd
 from . import backtest as bt
 
 TBL = bt.DATA / "08_strategy" / "tables"
-OUT = bt.ROOT / "phase5" / "OOS_REPORT.md"
+OUT = bt.ROOT / "phase5_simple_strategy" / "OOS_REPORT.md"
 COST = bt.COST_BP
 TEXT_COLS = {"arm", "window", "variant", "role", "dim", "key", "sym", "bucket"}
 INT_COLS = {"n", "n_trades", "n_events", "n_settle", "n_settle_missing",
@@ -183,7 +183,7 @@ def main() -> int:
     A("")
     A("## 8. 复现")
     A("")
-    A("    python -m phase5.build all")
+    A("    python -m phase5_simple_strategy.build all")
     A("")
     A("产物：data/08_strategy/tables/p5_*.csv 与本文件。")
     OUT.write_text("\n".join(L) + "\n", encoding="utf-8")
