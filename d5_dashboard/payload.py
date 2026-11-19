@@ -34,21 +34,24 @@ def collect_funding() -> pd.DataFrame:
 
 
 def _hourly_stats(root: Path, col: str, kind: str, want: pd.DataFrame) -> pd.DataFrame:
-    """Trailing stats on the hourly grid, kept only for the bars we show."""
-    parts = []
-    for f in _files(root):
-        d = pd.read_parquet(f, columns=["symbol", "ts_end", col]).sort_values(["symbol", "ts_end"])
-        if kind == "vol":
-            r = np.log(d.groupby("symbol")[col].pct_change(fill_method=None).add(1.0))
-            d["v24"] = r.groupby(d["symbol"]).transform(
-                lambda s: s.rolling(24, min_periods=18).std())
-            d["x"] = d.groupby("symbol")["v24"].transform(
-                lambda s: s.rolling(2160, min_periods=1000).rank(pct=True))
-        else:
-            d["x"] = d.groupby("symbol")[col].pct_change(24, fill_method=None)
-        parts.append(d[["symbol", "ts_end", "x"]])
-    st = pd.concat(parts, ignore_index=True)
-    return want.merge(st, on=["symbol", "ts_end"], how="left")
+    """Trailing stats on the hourly grid, kept only for the bars we show.
+
+    The rolling windows span months, so the series must be concatenated BEFORE the
+    rolling operations - doing it per monthly chunk makes every window too short.
+    """
+    parts = [pd.read_parquet(f, columns=["symbol", "ts_end", col]) for f in _files(root)]
+    d = pd.concat(parts, ignore_index=True)
+    del parts
+    d = d.sort_values(["symbol", "ts_end"], kind="mergesort")
+    if kind == "vol":
+        d["r"] = np.log(d.groupby("symbol")[col].pct_change(fill_method=None).add(1.0))
+        d["v24"] = d.groupby("symbol")["r"].transform(
+            lambda s: s.rolling(24, min_periods=18).std())
+        d["x"] = d.groupby("symbol")["v24"].transform(
+            lambda s: s.rolling(2160, min_periods=1000).rank(pct=True))
+    else:
+        d["x"] = d.groupby("symbol")[col].pct_change(24, fill_method=None)
+    return want.merge(d[["symbol", "ts_end", "x"]], on=["symbol", "ts_end"], how="left")
 
 
 def funding_position(rate, p25, p75, p90, state):

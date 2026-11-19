@@ -69,6 +69,11 @@ def main() -> int:
     ok &= check("every row carries %d fields" % NFIELDS,
                 all(len(x) == NFIELDS for r in rows for x in r),
                 "checked %d rows" % sum(len(r) for r in rows))
+    n_all = sum(len(r) for r in rows)
+    n_vol = sum(1 for r in rows for x in r if x[3] is not None)
+    ok &= check("volatility percentile is populated", n_vol >= 0.9 * n_all,
+                "%d / %d rows (%.1f%%)" % (n_vol, n_all, 100.0 * n_vol / n_all))
+
     states = Counter(x[6] for r in rows for x in r)
     ok &= check("bar_state is in {-2,-1,0,1,2,3}", set(states) <= {-2, -1, 0, 1, 2, 3},
                 "counts %s" % dict(sorted(states.items())))
