@@ -224,7 +224,8 @@ function extremeTable(day, syms){
   return h + "</table>";
 }
 
-function fBp1(v){ return (v===null||v===undefined) ? "-" : v.toFixed(1); }
+const ANN = Math.sqrt(24 * 365) / 100;   // bp/hour -> annualised %  (93.59 / 100)
+function fAnn(v){ return (v===null||v===undefined) ? "-" : (v * ANN).toFixed(1) + "%"; }
 function fRatio(v){
   if (v===null||v===undefined) return "-";
   const c = v >= 2.5 ? "color:#c53030;font-weight:700" : (v >= 1.5 ? "color:#dd6b20" : "color:#a0aec0");
@@ -233,11 +234,11 @@ function fRatio(v){
 
 function volTable(day, syms){
   const rows = day.filter(function(r){ return r[I.vol] !== null; }).sort(function(a,b){ return b[I.vol]-a[I.vol]; });
-  let h = "<table><tr><th>#</th><th class='l'>contract</th><th>24h vol (bp/h)</th>"
+  let h = "<table><tr><th>#</th><th class='l'>contract</th><th>ann. vol (24h)</th>"
         + "<th>vs own 90d median</th><th>vol pctile (own)</th></tr>";
   rows.forEach(function(r){
     h += "<tr>" + td("", r[I.rank]) + "<td class='l'><b>"+esc(syms[r[I.sym]])+"</b></td>"
-       + td("", fBp1(r[I.v24])) + td("", fRatio(r[I.ratio])) + td("", fPct(r[I.vol])) + "</tr>";
+       + td("", fAnn(r[I.v24])) + td("", fRatio(r[I.ratio])) + td("", fPct(r[I.vol])) + "</tr>";
   });
   return h + "</table>";
 }
@@ -379,9 +380,11 @@ line marks the 75th percentile.</div>
 <div id="ext"></div>
 
 <h2>6. Realised volatility: level and percentile</h2>
-<div class="sub"><b>24h vol</b> = standard deviation of the last 24 hourly log returns, in bp per
-hour (not annualised). <b>vs own 90d median</b> is that level divided by the median of the same
-measure over the trailing 90 days &mdash; above 2.5x is the practical "abnormal" line.
+<div class="sub"><b>ann. vol</b> = standard deviation of the last 24 hourly log returns,
+annualised by &radic;(24&times;365) = 93.6 &mdash; i.e. "if this day were the year". It is a
+one-day estimate, so treat it as a coarse risk gauge, not a forecast.
+<b>vs own 90d median</b> is that level divided by the median of the same measure over the
+trailing 90 days &mdash; above 2.5x is the practical "abnormal" line.
 <b>vol pctile</b> is its rank inside the same 90-day window (own history, not peers).
 This is the one dimension of the price/OI framework that is statistically robust: forward
 volatility rises after these events (16/16 cells, Phase 3). Direction is not.</div>
