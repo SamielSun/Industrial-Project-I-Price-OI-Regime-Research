@@ -47,10 +47,15 @@ def _hourly_stats(root: Path, col: str, kind: str, want: pd.DataFrame) -> pd.Dat
         d["r"] = np.log(d.groupby("symbol")[col].pct_change(fill_method=None).add(1.0))
         d["v24"] = d.groupby("symbol")["r"].transform(
             lambda s: s.rolling(24, min_periods=18).std())
+        d["med"] = d.groupby("symbol")["v24"].transform(
+            lambda s: s.rolling(2160, min_periods=1000).median())
         d["x"] = d.groupby("symbol")["v24"].transform(
             lambda s: s.rolling(2160, min_periods=1000).rank(pct=True))
-    else:
-        d["x"] = d.groupby("symbol")[col].pct_change(24, fill_method=None)
+        d["v24bp"] = d["v24"] * 1e4
+        d["ratio"] = d["v24"] / d["med"]
+        return want.merge(d[["symbol", "ts_end", "v24bp", "ratio", "x"]],
+                          on=["symbol", "ts_end"], how="left")
+    d["x"] = d.groupby("symbol")[col].pct_change(24, fill_method=None)
     return want.merge(d[["symbol", "ts_end", "x"]], on=["symbol", "ts_end"], how="left")
 
 
@@ -144,7 +149,7 @@ def build() -> dict:
         rows.append([[int(r.rank), sidx[r.symbol], int(r.funding),
                       _num(r.vol_pct, 1, 2), _num(r.oi24, 1, 2), _num(r.fund_pct, 1, 2),
                       int(r.bar_state), _num(r.price_change, 1e4, 0),
-                      _num(r.oi_change, 100, 1)]
+                      _num(r.oi_change, 100, 1), _num(r.v24bp, 1, 1), _num(r.ratio, 1, 2)]
                      for r in g.itertuples(index=False)])
 
     # ---- per-day event list (unchanged: the drill-down and 24h windows) ----

@@ -27,7 +27,7 @@ OUT = DATA / "09_dashboard"
 LAB = DATA / "05_regime" / "regime_labels" / "freq=1h"
 BASE1 = DATA / "07_funding" / "base" / "p4_base_h=1.parquet"
 T0 = pd.Timestamp("2021-12-01", tz="UTC")
-NFIELDS = 9
+NFIELDS = 11
 
 
 def log(msg: str) -> None:
@@ -73,6 +73,11 @@ def main() -> int:
     n_vol = sum(1 for r in rows for x in r if x[3] is not None)
     ok &= check("volatility percentile is populated", n_vol >= 0.9 * n_all,
                 "%d / %d rows (%.1f%%)" % (n_vol, n_all, 100.0 * n_vol / n_all))
+    n_lvl = sum(1 for r in rows for x in r if x[9] is not None)
+    n_rat = sum(1 for r in rows for x in r if x[10] is not None)
+    ok &= check("24h volatility level and ratio are populated",
+                n_lvl >= 0.9 * n_all and n_rat >= 0.9 * n_all,
+                "level %d / ratio %d of %d" % (n_lvl, n_rat, n_all))
 
     states = Counter(x[6] for r in rows for x in r)
     ok &= check("bar_state is in {-2,-1,0,1,2,3}", set(states) <= {-2, -1, 0, 1, 2, 3},

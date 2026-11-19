@@ -44,7 +44,7 @@ footer{margin-top:34px;font-size:11px;color:#718096;line-height:1.7;border-top:1
 """
 
 JS = r"""
-const I = {rank:0,sym:1,fund:2,vol:3,oi24:4,fp:5,bs:6,bpc:7,boc:8};
+const I = {rank:0,sym:1,fund:2,vol:3,oi24:4,fp:5,bs:6,bpc:7,boc:8,v24:9,ratio:10};
 const RN = ["R1","R2","R3","R4"];
 const FNAME = ["negative","neutral","high","extreme"];
 const FCOL = ["#3182ce","#a0aec0","#dd6b20","#c53030"];
@@ -224,12 +224,20 @@ function extremeTable(day, syms){
   return h + "</table>";
 }
 
+function fBp1(v){ return (v===null||v===undefined) ? "-" : v.toFixed(1); }
+function fRatio(v){
+  if (v===null||v===undefined) return "-";
+  const c = v >= 2.5 ? "color:#c53030;font-weight:700" : (v >= 1.5 ? "color:#dd6b20" : "color:#a0aec0");
+  return "<span style='"+c+"'>"+v.toFixed(2)+"x</span>";
+}
+
 function volTable(day, syms){
   const rows = day.filter(function(r){ return r[I.vol] !== null; }).sort(function(a,b){ return b[I.vol]-a[I.vol]; });
-  let h = "<table><tr><th>#</th><th class='l'>contract</th><th>vol pctile (own)</th><th>cross-sectional rank</th></tr>";
+  let h = "<table><tr><th>#</th><th class='l'>contract</th><th>24h vol (bp/h)</th>"
+        + "<th>vs own 90d median</th><th>vol pctile (own)</th><th>x-sec rank</th></tr>";
   rows.forEach(function(r, i){
     h += "<tr>" + td("", r[I.rank]) + "<td class='l'><b>"+esc(syms[r[I.sym]])+"</b></td>"
-       + td("", fPct(r[I.vol])) + td("", (i+1)) + "</tr>";
+       + td("", fBp1(r[I.v24])) + td("", fRatio(r[I.ratio])) + td("", fPct(r[I.vol])) + td("", (i+1)) + "</tr>";
   });
   return h + "</table>";
 }
@@ -370,11 +378,13 @@ line marks the 75th percentile.</div>
 <b>and</b> 24h OI still rising &mdash; crowded longs still being added to.</div>
 <div id="ext"></div>
 
-<h2>6. Volatility percentile (own 90d history)</h2>
-<div class="sub">24h realised volatility of hourly returns, ranked against a rolling 90-day
-window of the same hourly measure. This is the one dimension of the price/OI framework that
-is statistically robust: forward volatility rises after these events (16/16 cells, Phase 3).
-Direction is not.</div>
+<h2>6. Realised volatility: level and percentile</h2>
+<div class="sub"><b>24h vol</b> = standard deviation of the last 24 hourly log returns, in bp per
+hour (not annualised). <b>vs own 90d median</b> is that level divided by the median of the same
+measure over the trailing 90 days &mdash; above 2.5x is the practical "abnormal" line.
+<b>vol pctile</b> is its rank inside the same 90-day window (own history, not peers).
+This is the one dimension of the price/OI framework that is statistically robust: forward
+volatility rises after these events (16/16 cells, Phase 3). Direction is not.</div>
 <div id="vt"></div>
 
 <footer>
