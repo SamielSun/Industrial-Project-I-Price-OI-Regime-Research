@@ -1,7 +1,7 @@
 """D5 -- the interactive HTML shell: one file, payload embedded, no server."""
 
 CSS = """
-body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px auto;max-width:1180px;color:#1a202c}
+body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px auto;max-width:1240px;color:#1a202c;font-variant-numeric:tabular-nums}
 h1{font-size:21px;margin:0 0 2px}
 h2{font-size:15px;margin:26px 0 8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px}
 .sub{color:#4a5568;font-size:12.5px;margin-bottom:14px;line-height:1.7}
@@ -13,7 +13,7 @@ h2{font-size:15px;margin:26px 0 8px;border-bottom:1px solid #e2e8f0;padding-bott
 .bar .asof b{color:#1a202c}
 .bar .hint{font-size:11.5px;color:#a0aec0}
 table{border-collapse:collapse;font-size:12px;width:100%}
-th,td{padding:4px 9px;border-bottom:1px solid #edf2f7;text-align:right}
+th,td{padding:4px 9px;border-bottom:1px solid #edf2f7;text-align:right;white-space:nowrap}
 th{background:#f7fafc;font-weight:600}
 td.l,th.l{text-align:left}
 .tag{font-family:ui-monospace,Menlo,monospace;font-size:11px;padding:1px 5px;border-radius:3px}
@@ -25,12 +25,14 @@ td.l,th.l{text-align:left}
 .na{background:#fff;color:#cbd5e0;border:1px dashed #e2e8f0}
 .none{color:#a0aec0}
 tr.quietrow td{color:#a0aec0}
-.grid-h{display:grid;grid-template-columns:40px 1fr 54px 88px 88px 96px 74px;gap:0;padding:4px 9px;font-weight:600;background:#f7fafc;font-size:12px;border-bottom:1px solid #edf2f7}
+.grid-h{display:grid;grid-template-columns:44px 1fr 76px 92px 92px 92px 80px;gap:0;padding:4px 9px;font-weight:600;background:#f7fafc;font-size:12px;border-bottom:1px solid #edf2f7}
+.grid-h span{text-align:right;white-space:nowrap}
+.grid-h span:nth-child(2){text-align:left}
 details.row{border-bottom:1px solid #edf2f7}
-details.row>summary{display:grid;grid-template-columns:40px 1fr 54px 88px 88px 96px 74px;padding:4px 9px;font-size:12px;cursor:pointer;list-style:none;align-items:center}
+details.row>summary{display:grid;grid-template-columns:44px 1fr 76px 92px 92px 92px 80px;padding:4px 9px;font-size:12px;cursor:pointer;list-style:none;align-items:center}
 details.row>summary::-webkit-details-marker{display:none}
 details.row>summary:hover{background:#f7fafc}
-details.row>summary span{text-align:right}
+details.row>summary span{text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 details.row>summary span:nth-child(2){text-align:left}
 .evtab{margin:2px 0 10px 48px;width:auto;font-size:11.5px}
 .evtab td,.evtab th{padding:2px 10px}
