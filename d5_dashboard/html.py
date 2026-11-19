@@ -234,10 +234,10 @@ function fRatio(v){
 function volTable(day, syms){
   const rows = day.filter(function(r){ return r[I.vol] !== null; }).sort(function(a,b){ return b[I.vol]-a[I.vol]; });
   let h = "<table><tr><th>#</th><th class='l'>contract</th><th>24h vol (bp/h)</th>"
-        + "<th>vs own 90d median</th><th>vol pctile (own)</th><th>x-sec rank</th></tr>";
-  rows.forEach(function(r, i){
+        + "<th>vs own 90d median</th><th>vol pctile (own)</th></tr>";
+  rows.forEach(function(r){
     h += "<tr>" + td("", r[I.rank]) + "<td class='l'><b>"+esc(syms[r[I.sym]])+"</b></td>"
-       + td("", fBp1(r[I.v24])) + td("", fRatio(r[I.ratio])) + td("", fPct(r[I.vol])) + td("", (i+1)) + "</tr>";
+       + td("", fBp1(r[I.v24])) + td("", fRatio(r[I.ratio])) + td("", fPct(r[I.vol])) + "</tr>";
   });
   return h + "</table>";
 }
