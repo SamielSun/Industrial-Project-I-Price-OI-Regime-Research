@@ -3,9 +3,7 @@ import re
 from pathlib import Path
 
 base = Path(r"D:\CUHK Fintech\Industrial Programme I\research_archive\report")
-src = base / "report.md"
-out = base / "report.tex"
-lines = src.read_text(encoding="utf-8").split("\n")
+lines = (base / "report.md").read_text(encoding="utf-8").split("\n")
 
 def esc(s):
     s = s.replace("\\", r"\textbackslash{}")
@@ -22,15 +20,23 @@ UNI = [("\u2212", r"$-$"), ("\u2013", "--"), ("\u2014", "---"), ("\u00d7", r"$\t
 
 BT = "\x60"
 
+def breakable_code(s):
+    def rep(m):
+        inner = m.group(1).replace("/", "/\\allowbreak{}").replace(",", ",\\allowbreak{}")
+        return r"\texttt{" + inner + "}"
+    return re.sub(r"\\texttt\{([^}]*)\}", rep, s)
+
 def inline(s):
-    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", lambda m: r"\href{" + m.group(2) + "}{" + esc(m.group(1)) + "}", s)
-    s = re.sub(BT + r"([^" + BT + r"]+)" + BT, lambda m: r"\texttt{" + esc(m.group(1)) + "}", s)
     s = esc(s)
+    s = re.sub(BT + r"([^" + BT + r"]+)" + BT, lambda m: r"\texttt{" + m.group(1) + "}", s)
     s = re.sub(r"\*\*([^*]+)\*\*", r"\\textbf{\1}", s)
     s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\\emph{\1}", s)
+    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", lambda m: r"\href{" + m.group(2) + "}{" + m.group(1) + "}", s)
     for a, b in UNI:
         s = s.replace(a, b)
-    return s
+    return breakable_code(s)
+
+NUM = re.compile(r"^[\u2212+\-\u2013]?[\d.,%()\s]*$")
 
 preamble = r"""\documentclass[11pt,a4paper]{article}
 \usepackage[margin=2.5cm]{geometry}
@@ -84,16 +90,20 @@ def flush_quote():
 def render_table(rows, caption=None):
     parsed = [r for r in rows if r.strip().startswith("|")]
     if len(parsed) < 2:
-        return False
+        return
     cells = [[c.strip() for c in r.strip().strip("|").split("|")] for r in parsed]
     header, data = cells[0], cells[2:]
     ncol = len(header)
-    spec = "X" + "r" * (ncol - 1)
+    specs = []
+    for c in range(ncol):
+        col = [row[c] for row in data if c < len(row)]
+        numeric = bool(col) and all(NUM.match(x) and x for x in col)
+        specs.append(r">{\raggedleft\arraybackslash}X" if numeric else r">{\raggedright\arraybackslash}X")
     body.append(r"\begin{table}[htbp]\centering")
     if caption:
         body.append(r"\caption{" + inline(caption) + "}")
-    body.append(r"\small")
-    body.append(r"\begin{tabularx}{\linewidth}{" + spec + "}")
+    body.append(r"\footnotesize")
+    body.append(r"\begin{tabularx}{\linewidth}{" + "".join(specs) + "}")
     body.append(r"\toprule")
     body.append(" & ".join(inline(h) for h in header) + r" \\")
     body.append(r"\midrule")
@@ -103,7 +113,6 @@ def render_table(rows, caption=None):
     body.append(r"\bottomrule")
     body.append(r"\end{tabularx}")
     body.append(r"\end{table}")
-    return True
 
 while i < n:
     line = lines[i]
@@ -144,6 +153,17 @@ while i < n:
         body.append(r"\subsection{" + inline(m.group(2)) + "}" if m else r"\subsection*{" + inline(title) + "}")
         i += 1
         continue
+    if line.startswith("    ") and s and not s.startswith("- "):
+        flush_bullets(); flush_quote()
+        block = []
+        while i < n and (lines[i].startswith("    ") or not lines[i].strip()):
+            if lines[i].startswith("    "):
+                block.append(lines[i][4:])
+            i += 1
+        body.append(r"\begin{verbatim}")
+        body.extend(block)
+        body.append(r"\end{verbatim}")
+        continue
     mt = re.match(r"^\*\*Table (\d+)\.\s*(.*?)\*\*$", s)
     if mt:
         caption = "Table " + mt.group(1) + ". " + mt.group(2)
@@ -155,7 +175,6 @@ while i < n:
             rows.append(lines[i]); i += 1
         render_table(rows, caption)
         continue
-    # any pipe table without a caption
     if s.startswith("|") and i + 1 < n and re.match(r"^\|[\s:\-|]+\|$", lines[i+1].strip()):
         flush_bullets(); flush_quote()
         rows = []
@@ -219,6 +238,5 @@ if in_bullets:
     body.append(r"\end{itemize}")
 
 tex = preamble + "\n" + "\n".join(body) + "\n\\end{document}\n"
-(base / "build_tex.py").write_text(Path(__file__).read_text(encoding="utf-8"), encoding="utf-8")
-out.write_text(tex, encoding="utf-8")
-print("written", out, "| tables:", tex.count(r"\begin{table}"), "| figures:", tex.count(r"\begin{figure}"))
+(base / "report.tex").write_text(tex, encoding="utf-8")
+print("written | tables:", tex.count(r"\begin{table}"), "| figures:", tex.count(r"\begin{figure}"))

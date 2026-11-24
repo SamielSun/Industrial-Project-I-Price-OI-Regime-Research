@@ -101,7 +101,7 @@ For each contract-hour the one-hour price change is $\Delta$p = close\_t / close
 A contract-hour becomes an event when both absolute changes exceed their thresholds. The quadrant then follows from the signs:
 \begin{table}[htbp]\centering
 \footnotesize
-\begin{tabularx}{\linewidth}{X X X X}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 Cell & Price & Open interest & Retail reading \\
 \midrule
@@ -132,8 +132,8 @@ Forward returns are close-to-close over 1, 4, 8 and 24 hours. Each is reported t
 Estimation is a fixed-effects regression of the forward return on the regime indicator, with contract and month effects, so the coefficient is the regime less its same-direction benchmark. Standard errors are two-way clustered on contract and calendar month (Cameron, Gelbach and Miller, 2011; Petersen, 2009), for the reason set out in Section 2.4. The event-study tests are two-sided on the mean against the same-direction benchmark. The gate in Section 4.6 is two-sided, because there the sign of the mean also chooses the side of the trade.
 Eight experiments carry a test, and they run in the order Phase 3 specified them:
 \begin{table}[htbp]\centering
-\small
-\begin{tabularx}{\linewidth}{Xrr}
+\footnotesize
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 \# & Question & Measured as \\
 \midrule
@@ -155,7 +155,7 @@ Phase 3 tests funding once, as a standalone baseline (experiment 7). Phase 4 mak
 Seven blocks make up Phase 4, and they run in this order:
 \begin{table}[htbp]\centering
 \footnotesize
-\begin{tabularx}{\linewidth}{X X X X}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 ID & Question & Measured as & Family \\
 \midrule
@@ -188,8 +188,8 @@ The order matters. G1 removes most candidates cheaply. G2 and G3 remove the two 
 \subsection{Functional requirements}
 The system had to satisfy six requirements, each traceable to a deliverable in the industry brief:
 \begin{table}[htbp]\centering
-\small
-\begin{tabularx}{\linewidth}{Xrr}
+\footnotesize
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 ID & Requirement & Delivered by \\
 \midrule
@@ -205,19 +205,19 @@ FR6 & Expose the current state of the universe interactively & D5 board \\
 \subsection{Functional design}
 Two design choices carry the rest. The first is the unit of analysis: one row per contract-hour, carrying the state knowable at that hour and the outcomes that follow it in separate columns, so a label is always computed from the past and never from the window it is meant to predict. The second is that the comparison lives inside the sample. The price-only benchmark is rebuilt on the same events rather than imported from another study, the market-neutral adjustment uses the same-hour cross-section, and the only number brought in from outside is the cost, which is why every table reports a break-even cost beside it.
 \subsection{System architecture}
-Everything runs from \texttt{config.py}, which holds every path, threshold and window, and \texttt{lib/schema.py}, which declares the type and unit of every column. Five stage directories then read the layer before them and write one data directory each:
+Everything runs from \texttt{config.py}, which holds every path, threshold and window, and \texttt{lib/\allowbreak{}schema.py}, which declares the type and unit of every column. Five stage directories then read the layer before them and write one data directory each:
 \begin{table}[htbp]\centering
-\small
-\begin{tabularx}{\linewidth}{Xrr}
+\footnotesize
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 Stage & Modules & Writes \\
 \midrule
-\texttt{phase1/} & \texttt{fetch\_market\_data}, \texttt{build\_candidate\_pool}, \texttt{build\_layer2}, \texttt{build\_features}, \texttt{build\_universe}, \texttt{build\_deliverables}, \texttt{run\_phase1} & \texttt{data/raw}, \texttt{00\_config}, \texttt{01\_layer2}, \texttt{02\_features}, \texttt{03\_reference}, \texttt{04\_qa} \\
-\texttt{phase2\_regime/} & \texttt{regime\_generator}, \texttt{build\_sensitivity} & \texttt{data/05\_regime} \\
-\texttt{phase3\_event/} & \texttt{build}, \texttt{infer}, \texttt{figures}, \texttt{experiment/} & \texttt{data/06\_event\_study} \\
-\texttt{phase4\_funding/} & \texttt{build}, \texttt{figures} & \texttt{data/07\_funding} \\
-\texttt{phase5\_simple\_strategy/} & \texttt{gate}, \texttt{rules}, \texttt{backtest}, \texttt{eval}, \texttt{report}, \texttt{figures}, \texttt{selftest}, \texttt{build} & \texttt{data/08\_strategy} \\
-\texttt{d5\_dashboard/} & \texttt{payload}, \texttt{html}, \texttt{build} & \texttt{data/09\_dashboard/dashboard.html} \\
+\texttt{phase1/\allowbreak{}} & \texttt{fetch\_market\_data}, \texttt{build\_candidate\_pool}, \texttt{build\_layer2}, \texttt{build\_features}, \texttt{build\_universe}, \texttt{build\_deliverables}, \texttt{run\_phase1} & \texttt{data/\allowbreak{}raw}, \texttt{00\_config}, \texttt{01\_layer2}, \texttt{02\_features}, \texttt{03\_reference}, \texttt{04\_qa} \\
+\texttt{phase2\_regime/\allowbreak{}} & \texttt{regime\_generator}, \texttt{build\_sensitivity} & \texttt{data/\allowbreak{}05\_regime} \\
+\texttt{phase3\_event/\allowbreak{}} & \texttt{build}, \texttt{infer}, \texttt{figures}, \texttt{experiment/\allowbreak{}} & \texttt{data/\allowbreak{}06\_event\_study} \\
+\texttt{phase4\_funding/\allowbreak{}} & \texttt{build}, \texttt{figures} & \texttt{data/\allowbreak{}07\_funding} \\
+\texttt{phase5\_simple\_strategy/\allowbreak{}} & \texttt{gate}, \texttt{rules}, \texttt{backtest}, \texttt{eval}, \texttt{report}, \texttt{figures}, \texttt{selftest}, \texttt{build} & \texttt{data/\allowbreak{}08\_strategy} \\
+\texttt{d5\_dashboard/\allowbreak{}} & \texttt{payload}, \texttt{html}, \texttt{build} & \texttt{data/\allowbreak{}09\_dashboard/\allowbreak{}dashboard.html} \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -270,7 +270,7 @@ A significant increment is not a level a trader can hold. Table 1 gives the mark
 \begin{table}[htbp]\centering
 \caption{Table 1. Forward return by cell and horizon, market-neutral, in basis points.}
 \footnotesize
-\begin{tabularx}{\linewidth}{X X X X X}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X}
 \toprule
 Cell & 1h & 4h & 8h & 24h \\
 \midrule
@@ -330,8 +330,8 @@ Figure 14 lays out all ninety-six contrasts, one column per outcome and one row 
 \subsection{Phase 5: can it be traded}
 The ninety-six candidates are four regimes crossed with six conditioning states, three of funding and three of market volatility, at four horizons each. The two sets do not overlap: a candidate is conditioned on funding or on volatility, never on both. Funding enters the gate as negative, neutral and high; high covers both the high-only and the extreme-only rows, because the extreme-only cells are too thin to carry a test of their own.
 \begin{table}[htbp]\centering
-\small
-\begin{tabularx}{\linewidth}{Xr}
+\footnotesize
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 Stage & Surviving candidates \\
 \midrule
@@ -348,7 +348,7 @@ Each gate rules out a different way for a backtest to lie. G1 asks whether the f
 \begin{table}[htbp]\centering
 \caption{Table 2. The two surviving strategies over the full sample (2022-03 to 2026-08), net of a 20 bp round trip.}
 \footnotesize
-\begin{tabularx}{\linewidth}{X X X X X X X X X X}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X}
 \toprule
 Strategy & Source & Cell & Horizon & Events & Trades & Gross = break-even, bp & Net bp & Gross Sharpe & Net Sharpe \\
 \midrule
@@ -415,7 +415,7 @@ DeepSeek. (2026). \emph{DeepSeek Harness} (accessed 24 November 2026). https://w
 \subsection*{Appendix B --- List of Figures and Tables}
 \begin{table}[htbp]\centering
 \footnotesize
-\begin{tabularx}{\linewidth}{X X X X}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 Item & Caption & Section & Source \\
 \midrule
@@ -450,8 +450,8 @@ Table 2 & The two surviving strategies, net of cost & 6.4 &  \\
 \subsection*{Appendix D --- Sample construction}
 Every row below is a filter on the hourly grid, and each one removes a different kind of observation. The counts are the ones the pipeline prints at run time; the panel figures were re-counted from the parquet files.
 \begin{table}[htbp]\centering
-\small
-\begin{tabularx}{\linewidth}{Xrr}
+\footnotesize
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 Stage & Units & What it means \\
 \midrule
@@ -468,8 +468,8 @@ Funding settlements & 1,229,941 & 8-hour 52\%, 4-hour 45\%, 1-hour 3\% of settle
 \end{table}
 The universe is rebuilt at every month start, and a contract has to pass four gates before it is ranked.
 \begin{table}[htbp]\centering
-\small
-\begin{tabularx}{\linewidth}{Xrr}
+\footnotesize
+\begin{tabularx}{\linewidth}{>{\raggedleft\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 Gate & Rule & Threshold in this study \\
 \midrule
@@ -486,7 +486,7 @@ Both label definitions were varied and the effect on the analysis sample recorde
 \textbf{Threshold level.} Moving the event threshold from the 55th to the 80th percentile of each contract's own trailing distribution cuts the labelled share from 23.0\% to 7.5\% at one hour. The mix inside the labelled set is more stable than the count: the largest shift in any regime's share is 1.8 percentage points at p70 and 3.8 points at p80, and 5.5 and 11.8 points at one day.
 \begin{table}[htbp]\centering
 \footnotesize
-\begin{tabularx}{\linewidth}{X X X X X}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedleft\arraybackslash}X>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
 \toprule
 Threshold & Labelled share, 1h & Labelled share, 1d & Largest mix shift, 1h & Largest mix shift, 1d \\
 \midrule
