@@ -33,3 +33,6 @@ _cm.txt
 # ---- 编辑器 / 系统 ----
 .DS_Store
 Thumbs.db
+# ---- 版权材料：出版社 PDF 与课程材料，不进公开仓库（本地保留）----
+research_archive/literature/*.pdf
+research_archive/course/
