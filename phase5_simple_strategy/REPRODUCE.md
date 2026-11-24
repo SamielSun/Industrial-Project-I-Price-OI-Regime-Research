@@ -7,7 +7,7 @@ report. All commands run from the repo root.
 
     python -m phase5_simple_strategy.build all
 
-That runs the gate (G0-G5), the evaluation (splits, six baselines, metrics) and
+That runs the gate (G0-G5), the evaluation (full-sample backtest, six baselines, metrics) and
 the report renderer, in that order, and rewrites every product below. No manual
 step.
 
@@ -16,7 +16,7 @@ step.
     python      C:\miniconda\python.exe   (3.12.9)
     packages    pandas 2.3.3, numpy 2.3.4, pyarrow 23.0.1
 
-No scipy: the gate's one-sided normal tail uses math.erfc.
+No scipy: the gate's two-sided normal tail uses math.erfc.
 
 ## Data prerequisites (read-only, produced by Phase 1-3)
 
@@ -31,9 +31,9 @@ Phase 5 never writes outside data/08_strategy/ and phase5_simple_strategy/.
 ## Commands (the same three steps, individually)
 
     python -m phase5_simple_strategy.gate        # G0-G5 -> p5_gate.csv, p5_gate_arms.csv
-    python -m phase5_simple_strategy.eval        # splits + baselines -> p5_rules / p5_baselines / p5_by_*
+    python -m phase5_simple_strategy.eval        # full sample + baselines -> p5_rules / p5_baselines / p5_by_*
     python -m phase5_simple_strategy.figures     # -> data/08_strategy/figures/f0*.png
-    python -m phase5_simple_strategy.report      # -> phase5_simple_strategy/OOS_REPORT.md
+    python -m phase5_simple_strategy.report      # -> phase5_simple_strategy/RESULTS.md
 
     python -m phase5_simple_strategy.build smoke # both arms end to end, ledger only (no files)
 
@@ -41,16 +41,16 @@ Phase 5 never writes outside data/08_strategy/ and phase5_simple_strategy/.
 
     data/08_strategy/tables/p5_gate.csv         96 cells x every gate condition
     data/08_strategy/tables/p5_gate_arms.csv    2 arms that passed
-    data/08_strategy/tables/p5_rules.csv        arms x windows x base/V1
-    data/08_strategy/tables/p5_baselines.csv    six baselines, main test window
+    data/08_strategy/tables/p5_rules.csv        both arms, full sample
+    data/08_strategy/tables/p5_baselines.csv    six baselines, full sample
     data/08_strategy/tables/p5_by_regime.csv    funding state / market-vol cells
     data/08_strategy/tables/p5_by_asset.csv     per-contract
-    data/08_strategy/tables/p5_daily.csv        daily PnL of the main test window
+    data/08_strategy/tables/p5_daily.csv        daily PnL over the full sample
     data/08_strategy/tables/p5_year.csv         executable PnL per trade by year
     data/08_strategy/figures/f01_equity.png     cumulative PnL and drawdown
     data/08_strategy/figures/f02_cost_hurdle.png  cost* against the 20bp line
     data/08_strategy/figures/f03_year_decay.png   net PnL per trade by year
-    phase5_simple_strategy/OOS_REPORT.md                        the report
+    phase5_simple_strategy/RESULTS.md                        the report
 
 ## Runtimes (project machine)
 
@@ -74,15 +74,16 @@ Phase 5 never writes outside data/08_strategy/ and phase5_simple_strategy/.
 3. **rv is a volatility, not a variance**, despite the name and despite one
    sentence in phase4_funding/TABLES.md. exp(lrv) == rv row by row, and
    mean(rv^2) ~ mean(fwd^2).  rv is therefore the FORWARD realised vol and is
-   never used as an input; V1 uses backtest.trailing_vol instead.
+   never used as an input.
 
-4. **The gate is level-based** (fwd), not contrast-based. The v1 gate used the
-   Phase 4 contrasts; a contrast does not identify a level, and a long-only book
-   can only earn the level. archive/HANDOFF_v1.md is the superseded design.
+4. **The gate is level-based** (fwd) and two-sided, not contrast-based. The v1
+   gate used the Phase 4 contrasts; a contrast does not identify a level, and a
+   traded book can only earn the level. The sign of the level sets the side of
+   the trade. The earlier contrast-gated design was superseded and removed.
 
 5. **No stop-loss, no winsorising** (Phase 3 frozen conventions).
 
 ## History
 
-    phase5_simple_strategy/archive/HANDOFF_v1.md   the superseded contrast-gated design
-    phase5_simple_strategy/GUIDANCE.md              the operative design (v2)
+    phase5_simple_strategy/GUIDANCE.md   the operative design (v2); the earlier
+                                         contrast-gated design was superseded

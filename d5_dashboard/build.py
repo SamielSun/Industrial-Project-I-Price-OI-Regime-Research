@@ -133,7 +133,7 @@ def main() -> int:
     by = {}
     for e, k in win:
         by.setdefault(e[0], {})[e[2]] = max(by.get(e[0], {}).get(e[2], -1), k * 24 + e[1])
-    for name, reg in (("R1", 0), ("R3", 2), ("R4", 3)):
+    for name, reg in (("R1", 0), ("R2", 1), ("R3", 2), ("R4", 3)):
         got = sorted([(v[reg], syms[k2]) for k2, v in by.items() if reg in v], reverse=True)
         log("  %s: %d contracts, top1 %s (age %dh)"
             % (name, len(got), got[0][1] if got else "-", (dayIdx * 24 + int(hh)) - got[0][0] if got else -1))

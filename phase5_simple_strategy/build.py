@@ -22,7 +22,7 @@ def smoke() -> int:
     for arm in R.ARMS:
         hold = arm["hold"]
         ev = R.select(bt.load_base(hold), arm)
-        tr, sk = bt.run(ev, hold, mkt, fund)
+        tr, sk = bt.run(ev, hold, mkt, fund, direction=arm.get("direction", 1))
         k = tr[tr.kept]
         d0, d1 = int(tr.entry_time.min()) // 24, int(tr.exit_time.max()) // 24
         m = bt.metrics(bt.daily_frame(tr, mkt, d0, d1), tr, (d1 - d0 + 1) / 365.0)
@@ -60,7 +60,7 @@ def run_all() -> int:
     if figures.main() != 0:
         return 1
     print("")
-    print("[4/4] report")
+    print("[4/4] results")
     if report.main() != 0:
         return 1
     print("")

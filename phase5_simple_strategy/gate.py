@@ -7,12 +7,12 @@ The gate answers one question only: does this cell contain something.  Cost and
 executability are Phase 5's job (sec.6), not the gate's.
 
 G0  load p4_base_h={1,4,8,24}, events cell 1..4, state 0..3 (2/3 merged to high)
-G1  level significantly above 0: one-sided, CGM two-way clustered (symbol, month),
-    BH within the 12-cell family of each (source, h)
-G2  not pure beta: mean(y_raw) >= 0
-G3  not tail-driven: median(fwd) > 0 and 1% trimmed mean > 0
-G4  stable: >=4 of the 5 calendar years positive AND the last 12 months >= 0
-G5  map surviving cells to strategy arms
+G1  level differs from 0: two-sided, CGM two-way clustered (symbol, month),
+    BH within the 12-cell family of each (source, h); direction = sign(level)
+G2  not pure beta: direction * mean(y_raw) >= 0
+G3  not tail-driven: direction * median(fwd) > 0 and direction * trimmed mean > 0
+G4  stable: >=4 of the 5 calendar years on the trade's side AND the last 12 months too
+G5  map surviving cells to long or short arms
 """
 from __future__ import annotations
 
@@ -76,9 +76,11 @@ def _row(src, dim, cell, cut, h, g: pd.DataFrame) -> dict:
     per = [float(g[(g["month"] >= lo) & (g["month"] <= hi)]["fwd"].mean() * 1e4)
            for _, lo, hi in YEARS]
     last12 = float(g[g["month"] >= RECENT_START]["fwd"].mean() * 1e4)
+    t = float(y.mean()) / se
     return dict(src=src, dim=dim, cell=cell, cut=cut, h=h, n=len(y),
-                level=float(y.mean()), se=se, t=float(y.mean()) / se,
-                p=_sf(float(y.mean()) / se), yraw=float(g["y_raw"].mean() * 1e4),
+                level=float(y.mean()), se=se, t=t,
+                p=2.0 * _sf(abs(t)), direction=1 if y.mean() > 0 else -1,
+                yraw=float(g["y_raw"].mean() * 1e4),
                 med=float(np.median(y)), trim=tr,
                 Y22=per[0], Y23=per[1], Y24=per[2], Y25=per[3], Y26=per[4],
                 n_pos=sum(1 for x in per if x > 0), last12=last12)
@@ -113,10 +115,12 @@ def build() -> pd.DataFrame:
     df["q"] = np.nan
     for _, idx in df.groupby(["src", "h"]).groups.items():
         df.loc[idx, "q"] = bh(df.loc[idx, "p"].to_numpy())
+    d = df["direction"]
     df["G1"] = df["q"] < BH_Q
-    df["G2"] = df["yraw"] >= 0
-    df["G3"] = (df["med"] > 0) & (df["trim"] > 0)
-    df["G4"] = (df["n_pos"] >= MIN_POS_YEARS) & (df["last12"] >= 0)
+    df["G2"] = d * df["yraw"] >= 0
+    df["G3"] = (d * df["med"] > 0) & (d * df["trim"] > 0)
+    df["G4"] = (((d > 0) & (df["n_pos"] >= MIN_POS_YEARS) & (df["last12"] >= 0))
+                | ((d < 0) & ((5 - df["n_pos"]) >= MIN_POS_YEARS) & (df["last12"] <= 0)))
     df["gate_pass"] = df[["G1", "G2", "G3", "G4"]].all(axis=1)
     arm = [ARM_BY_CELL.get((r.src, r.cell, r.cut, int(r.h)), ("", ""))
            for r in df.itertuples()]
@@ -125,7 +129,7 @@ def build() -> pd.DataFrame:
     return df
 
 
-COLS = ["src", "dim", "cell", "cut", "h", "n", "level", "se", "t", "p", "q",
+COLS = ["src", "dim", "cell", "cut", "h", "n", "level", "se", "t", "p", "q", "direction",
         "yraw", "med", "trim", "Y22", "Y23", "Y24", "Y25", "Y26", "n_pos",
         "last12", "G1", "G2", "G3", "G4", "gate_pass", "arm", "role"]
 

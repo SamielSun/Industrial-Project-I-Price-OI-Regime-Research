@@ -18,11 +18,7 @@ TBL = bt.DATA / "08_strategy" / "tables"
 MEMBERSHIP = bt.DATA / "03_reference/universe_membership.parquet"
 
 WINDOWS: dict[str, dict] = {
-    "main":    dict(train=("2022-03", "2024-05"), test=("2024-06", "2026-08")),
-    "fold1":   dict(train=("2022-03", "2023-08"), test=("2023-09", "2024-05")),
-    "fold2":   dict(train=("2023-03", "2024-08"), test=("2024-09", "2025-05")),
-    "fold3":   dict(train=("2024-03", "2025-08"), test=("2025-09", "2026-05")),
-    "final3m": dict(train=("2022-03", "2024-05"), test=("2026-06", "2026-08")),
+    "main": dict(test=("2022-03", "2026-08")),
 }
 MAIN = WINDOWS["main"]
 ANN = 365
@@ -60,15 +56,17 @@ def sharpe_ci(r: np.ndarray, reps: int = 2000, block: int = 5,
 
 
 def daily_metrics(daily: pd.DataFrame, years: float) -> dict:
-    r = daily.net.to_numpy("float64") / bt.EQUITY0
-    eq = bt.EQUITY0 + daily.net.cumsum().to_numpy()
-    sd = float(np.std(r, ddof=1))
-    mu = float(np.mean(r))
-    return dict(sharpe=mu / sd * np.sqrt(ANN) if sd > 0 else np.nan,
-                t_stat=mu / (sd / np.sqrt(len(r))) if sd > 0 else np.nan,
-                ann_ret=mu * ANN, ann_vol=sd * np.sqrt(ANN),
-                mdd=float(np.min(eq / np.maximum.accumulate(eq) - 1.0)),
-                turnover=0.0, total_ret=float(eq[-1] / bt.EQUITY0 - 1.0))
+    eq, r = bt.equity_path(daily)
+    sd = float(np.std(r, ddof=1)) if len(r) > 1 else np.nan
+    mu = float(np.mean(r)) if len(r) else np.nan
+    total = float(eq[-1] / bt.EQUITY0 - 1.0) if len(eq) else 0.0
+    cagr = ((1.0 + total) ** (1.0 / years) - 1.0
+            if years > 0 and 1.0 + total > 0 else np.nan)
+    return dict(sharpe=mu / sd * np.sqrt(ANN) if sd and sd > 0 else np.nan,
+                t_stat=mu / (sd / np.sqrt(len(r))) if sd and sd > 0 else np.nan,
+                ann_ret=cagr, ann_vol=sd * np.sqrt(ANN),
+                mdd=float(np.min(eq / np.maximum.accumulate(eq) - 1.0)) if len(eq) else 0.0,
+                turnover=0.0, total_ret=total)
 
 
 def stats(tr: pd.DataFrame, sk: dict, daily: pd.DataFrame, dgross: pd.DataFrame,
@@ -78,7 +76,8 @@ def stats(tr: pd.DataFrame, sk: dict, daily: pd.DataFrame, dgross: pd.DataFrame,
     m = bt.metrics(daily, tr, years)
     mg = bt.metrics(dgross, tr.assign(cost=0.0,
                                       net_pnl=tr.price_pnl + tr.fund_pnl), years)
-    lo, hi = sharpe_ci(daily.net.to_numpy("float64") / bt.EQUITY0)
+    eq_path, r_path = bt.equity_path(daily)
+    lo, hi = sharpe_ci(r_path)
     notional = float(k.notional.sum()) if len(k) else np.nan
     return dict(
         arm=label, n_events=sk["n_events"], n_trades=sk["n_trades"],
@@ -89,17 +88,20 @@ def stats(tr: pd.DataFrame, sk: dict, daily: pd.DataFrame, dgross: pd.DataFrame,
         net_bp=float(k.net_pnl.sum()) / notional * 1e4 if len(k) else np.nan,
         cost_star_bp=(float(k.price_pnl.sum()) + float(k.fund_pnl.sum()))
         / notional * 1e4 if len(k) else np.nan,
-        net_bp_cap=float(k.net_pnl.sum()) / bt.EQUITY0 * 1e4,
+        net_bp_cap=float(k.net_pnl.sum()) / float(np.mean(eq_path)) * 1e4,
+        win_rate=float((k.net_pnl > 0).mean()) if len(k) else np.nan,
+        hold_h=hold,
         gross_sharpe=mg["sharpe"], net_sharpe=m["sharpe"],
         ci_lo=lo, ci_hi=hi, t_stat=m["t_stat"], ann_ret=m["ann_ret"],
         ann_vol=m["ann_vol"], mdd=m["mdd"], turnover=m["turnover"],
-        exposure=notional * hold / (bt.EQUITY0 * (d1 - d0 + 1) * 24) if len(k) else np.nan,
+        exposure=notional * hold / (float(np.mean(eq_path)) * (d1 - d0 + 1) * 24) if len(k) else np.nan,
         n_settle=m["n_settle"], n_settle_missing=m["n_settle_missing"],
         total_ret=m["total_ret"],)
 
 
-def run_arm(ev: pd.DataFrame, hold: int, mkt, fund, d0: int, d1: int, size=None):
-    tr, sk = bt.run(ev, hold, mkt, fund, size=size)
+def run_arm(ev: pd.DataFrame, hold: int, mkt, fund, d0: int, d1: int, size=None,
+            direction: int = 1):
+    tr, sk = bt.run(ev, hold, mkt, fund, size=size, direction=direction)
     daily = bt.daily_frame(tr, mkt, d0, d1)
     trg = tr.assign(cost=0.0, net_pnl=tr.price_pnl + tr.fund_pnl)
     dgross = bt.daily_frame(trg, mkt, d0, d1)
@@ -189,7 +191,6 @@ def main() -> int:
     mkt = bt.load_market(sym2code)
     fund = bt.load_funding(sym2code)
     bases = {h: bt.load_base(h) for h in (1, 8)}
-    SIG = bt.trailing_vol(mkt)
     mem = pd.read_parquet(MEMBERSHIP)
     mem["code"] = mem["symbol"].map(sym2code).astype("int64")
 
@@ -199,22 +200,14 @@ def main() -> int:
         for arm in R.ARMS:
             hold = arm["hold"]
             ev = R.select(bases[hold], arm)
-            ev["sigma"] = bt.sigma_at(mkt, SIG, ev["hour"].to_numpy(),
-                                      ev["code"].to_numpy())
-            trn = _slice(ev, *w["train"])
             tst = _slice(ev, *w["test"]).reset_index(drop=True)
             if len(tst) == 0:
                 continue
-            tgt = R.target_vol(trn["sigma"].to_numpy())
-            for variant in ("base", "V1"):
-                size = (None if variant == "base"
-                        else bt.SIZE_PER_SIGNAL * R.overlay_size(
-                            tst["sigma"].to_numpy(), tgt))
-                tr, sk, daily, dg = run_arm(tst, hold, mkt, fund, d0, d1, size=size)
-                row = stats(tr, sk, daily, dg, d0, d1, hold, label=arm["name"])
-                row.update(window=wname, variant=variant, role=arm["role"],
-                           target_vol=tgt if variant != "base" else np.nan)
-                rows.append(row)
+            tr, sk, daily, dg = run_arm(tst, hold, mkt, fund, d0, d1)
+            row = stats(tr, sk, daily, dg, d0, d1, hold, label=arm["name"])
+            row.update(window=wname, variant="base", role=arm["role"],
+                       target_vol=np.nan)
+            rows.append(row)
     rules_df = pd.DataFrame(rows)
     rules_df.to_csv(TBL / "p5_rules.csv", index=False)
 
@@ -300,21 +293,12 @@ def main() -> int:
     drows = []
     for arm in R.ARMS:
         hold = arm["hold"]
-        e_all = R.select(bases[hold], arm)
-        e_all["sigma"] = bt.sigma_at(mkt, SIG, e_all["hour"].to_numpy(),
-                                     e_all["code"].to_numpy())
-        tgt = R.target_vol(_slice(e_all, *MAIN["train"])["sigma"].to_numpy())
-        ev = _slice(e_all, *MAIN["test"]).reset_index(drop=True)
-        for variant in ("base", "V1"):
-            if variant == "base":
-                size = None
-            else:
-                size = bt.SIZE_PER_SIGNAL * R.overlay_size(ev["sigma"].to_numpy(), tgt)
-            tr, sk, daily, dg = run_arm(ev, hold, mkt, fund, d0, d1, size=size)
-            for _, r in daily.iterrows():
-                drows.append(dict(arm=arm["name"], variant=variant, date=r["date"],
-                                  price=r["price"], funding=r["funding"],
-                                  cost=r["cost"], net=r["net"]))
+        ev = _slice(R.select(bases[hold], arm), *MAIN["test"]).reset_index(drop=True)
+        tr, sk, daily, dg = run_arm(ev, hold, mkt, fund, d0, d1)
+        for _, r in daily.iterrows():
+            drows.append(dict(arm=arm["name"], variant="base", date=r["date"],
+                              price=r["price"], funding=r["funding"],
+                              cost=r["cost"], net=r["net"]))
     pd.DataFrame(drows).to_csv(TBL / "p5_daily.csv", index=False)
 
     yrows = []

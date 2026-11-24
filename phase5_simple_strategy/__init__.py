@@ -1,1 +1,1 @@
-"""Phase 5 -- D4 simple strategy prototype and OOS report (see GUIDANCE.md)."""
+"""Phase 5 -- D4 simple strategy prototype and results report (see GUIDANCE.md)."""

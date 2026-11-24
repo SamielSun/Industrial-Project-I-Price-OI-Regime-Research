@@ -35,9 +35,11 @@ A snapshot is labelled by the **bar it shows**: `YYYY-MM-DDTHH` means the bar co
 - **last event** - the most recent regime inside the **24 bars ending at that bar**,
   with its age in hours.
 
-Sections 2-4 list every contract with that regime inside the window, sorted by
-recency. The first 10 are visible, the rest open under "show all". Each row expands
-to that contract's **events inside the window**.
+Sections 2-5 list every contract with that regime inside the window, one section
+per quadrant (R1 long buildup, R2 short covering, R3 short buildup, R4
+deleveraging), sorted by recency. The first 10 are visible, the rest open under
+"show all". Each row expands to that contract's **events inside the window**, which
+is why a contract can appear in more than one section.
 
 ## Hourly vs daily snapshots
 

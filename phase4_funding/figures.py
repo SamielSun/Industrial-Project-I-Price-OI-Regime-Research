@@ -151,12 +151,7 @@ def f_p4_5() -> None:
     fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=7,
                frameon=False, bbox_to_anchor=(0.5, 0.005))
     fig.suptitle("P4-5 · all cells, BH16 + drop5 filled: forest", fontsize=11)
-    fig.text(0.5, 0.035,
-             "Event (gray): 0/16 significant.  Contract-day (orange): 5/16.  "
-             "Event and contract-day betas can carry opposite signs: the beta is "
-             "weight-dependent, not one estimate.  Full table: p4_5_beta.csv.",
-             ha="center", fontsize=6.8, color="#4a5568")
-    fig.tight_layout(rect=(0, 0.06, 1, 0.95))
+    fig.tight_layout(rect=(0, 0.04, 1, 0.95))
     OUT.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT / "f04_beta_forest.png", dpi=200, bbox_inches="tight")
     plt.close(fig)
@@ -225,77 +220,74 @@ def f_p4_2_level() -> None:
            "lrv", "viridis", "f02_vol_level.png", ".2f", False)
 
 
-def f_p4_3_difference() -> None:
+def f_p4_difference_panorama() -> None:
+    """Every within-regime contrast, every horizon: 4 h x 3 outcomes."""
     a = pd.read_parquet(TBL / "p4_1_contrasts.parquet")
-    a = a[(a["dv"] == "y_raw") & (a["h"] == 1)].copy()
-    a["est"] = a["estimate"]
-    a["se"] = a["se"]
-    a["td"] = a["t_drop5"]
-    b = pd.read_parquet(TBL / "p4_2_contrasts.parquet")
-    b = b[b["h"] == 24].copy()
-    b["est"] = b["estimate"] * 100
-    b["se"] = b["se"] * 100
-    b["td"] = b["t_drop5"]
-    c = pd.read_parquet(TBL / "p4_3_reversal.parquet")
-    c = c[c["h"] == 1].copy()
-    c["est"] = c["rev_estimate_pp"]
-    c["se"] = c["rev_se_pp"]
-    c["td"] = c["rev_t_drop5"]
+    a = a[a["dv"] == "y_raw"].copy()
+    a["est"], a["se"], a["td"], a["pv"] = a["estimate"], a["se"], a["t_drop5"], a["p_bh"]
+    b = pd.read_parquet(TBL / "p4_2_contrasts.parquet").copy()
+    b["est"], b["se"], b["td"], b["pv"] = (b["estimate"] * 100, b["se"] * 100,
+                                           b["t_drop5"], b["p_bh"])
+    c = pd.read_parquet(TBL / "p4_3_reversal.parquet").copy()
+    c["est"], c["se"], c["td"], c["pv"] = (c["rev_estimate_pp"], c["rev_se_pp"],
+                                           c["rev_t_drop5"], c["p_bh"])
 
-    kinds = ["negative - neutral", "high(incl ext) - neutral",
-             "extreme - neutral"]
+    kinds = ["negative - neutral", "high(incl ext) - neutral", "extreme - neutral"]
     short = ["neg-neu", "high-neu", "ext-neu"]
     order = [(r, k) for r in ["R1", "R2", "R3", "R4"] for k in kinds]
     labels = [f"{r} {s}" for r in ["R1", "R2", "R3", "R4"] for s in short]
     ypos = {k: i for i, k in enumerate(order)}
+    xlim = {"bp": (-30, 30), "pp": (-7, 7), "%": (-6, 30)}
 
-    fig, axes = plt.subplots(1, 3, figsize=(14.2, 6.4), sharey=True)
-    panels = [
-        (axes[0], a, "P4-1a · return difference (h=1, bp)", "bp"),
-        (axes[1], b, "P4-2 · volatility difference (h=24, % of lrv)", "%"),
-        (axes[2], c, "P4-3 · reversal difference (h=1, pp)", "pp"),
-    ]
-    for ax, d, ttl, unit in panels:
-        for w, color in (("event", "#2b6cb0"),
-                         ("contract_day", "#c05621")):
-            q = d[d["weighting"] == w]
-            for _, row in q.iterrows():
-                y = ypos[(row["regime"], row["contrast"])]
-                sig = (row["p_bh"] < 0.05) and (abs(row["td"]) > 1.96)
-                ax.errorbar(float(row["est"]), y,
-                            xerr=1.96 * float(row["se"]), fmt="o",
-                            color=color, ms=3.6, lw=0.9, capsize=2,
-                            mfc=color if sig else "white", mec=color,
-                            mew=0.6, zorder=3)
-        ax.axvline(0, color="0.35", lw=0.8, zorder=1)
-        ax.set_yticks(range(len(order)))
-        ax.set_yticklabels(labels, fontsize=5.8)
-        ax.set_ylim(-0.6, len(order) - 0.4)
-        ax.set_xlabel(unit, fontsize=8)
-        ax.set_title(ttl, fontsize=9)
-        ax.grid(axis="x", lw=0.3, alpha=0.4)
-        ax.tick_params(labelsize=6.5)
-    handles = [
-        Line2D([0], [0], color="#2b6cb0", lw=1.2, label="event"),
-        Line2D([0], [0], color="#c05621", lw=1.2, label="contract-day"),
-        Line2D([0], [0], color="0.25", ls="", marker="o", ms=4,
-               markerfacecolor="0.25", label="BH12 + drop5"),
-        Line2D([0], [0], color="0.25", ls="", marker="o", ms=4,
-               markerfacecolor="white", label="not significant"),
-    ]
-    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=7,
-               frameon=False, bbox_to_anchor=(0.5, 0.005))
-    fig.suptitle("P4 · within-regime funding differences (vs neutral): "
-                 "12 contrasts × event/contract", fontsize=11)
-    fig.text(0.5, 0.04,
-             "Difference = FE-adjusted (contract + month) minus neutral; "
-             "positive = higher than neutral.  Bars = 95% CI.  Only one h per "
-             "panel (return/rev h=1; vol h=24); full 4-h table in the CSVs.",
-             ha="center", fontsize=6.6, color="#4a5568")
-    fig.tight_layout(rect=(0, 0.08, 1, 0.94))
+    fig, axes = plt.subplots(4, 3, figsize=(15.0, 16.5), sharey=True)
+    for i, h in enumerate([1, 4, 8, 24]):
+        for j, (d, unit) in enumerate([(a, "bp"), (c, "pp"), (b, "%")]):
+            ax = axes[i, j]
+            sub = d[d["h"] == h]
+            for w, color, dy in (("event", "#2b6cb0", 0.17),
+                                 ("contract_day", "#c05621", -0.17)):
+                q = sub[sub["weighting"] == w]
+                for _, row in q.iterrows():
+                    y = ypos[(row["regime"], row["contrast"])] + dy
+                    sig = (row["pv"] < 0.05) and (abs(row["td"]) > 1.96)
+                    ax.errorbar(float(row["est"]), y,
+                                xerr=1.96 * float(row["se"]), fmt="o",
+                                color=color, ms=3.0, lw=0.8, capsize=1.2,
+                                mfc=color if sig else "white", mec=color,
+                                mew=0.5, zorder=3)
+            ax.axvline(0, color="0.35", lw=0.8, zorder=1)
+            ax.set_xlim(*xlim[unit])
+            ax.set_ylim(-0.7, len(order) - 0.3)
+            ax.grid(axis="x", lw=0.3, alpha=0.4)
+            ax.tick_params(labelsize=6.5)
+            ax.set_xlabel(unit, fontsize=7.5)
+            if j == 0:
+                ax.set_yticks(range(len(order)))
+                ax.set_yticklabels(labels, fontsize=5.8)
+                ax.set_ylabel(f"h = {h}", fontsize=9.5)
+                for k in (2.5, 5.5, 8.5):
+                    ax.axhline(k, color="0.85", lw=0.6, zorder=0)
+            if i == 0:
+                ax.set_title(["Return", "Reversal", "Volatility"][j],
+                             fontsize=12, pad=6)
+
+    handles = [Line2D([0], [0], color="#2b6cb0", lw=1.4, label="event weight"),
+               Line2D([0], [0], color="#c05621", lw=1.4, label="contract-day weight"),
+               Line2D([0], [0], color="0.25", ls="", marker="o", ms=4.5,
+                      markerfacecolor="0.25", label="BH12 + drop5"),
+               Line2D([0], [0], color="0.25", ls="", marker="o", ms=4.5,
+                      markerfacecolor="white", label="not significant")]
+    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=9,
+               frameon=False, bbox_to_anchor=(0.5, 0.012))
+    fig.suptitle("Phase 4 panorama: within-regime funding contrasts at every horizon",
+                 fontsize=15)
+    fig.text(0.5, 0.038,
+             "Rows are regime x funding-state contrasts against neutral, grouped by "
+             "regime; bars are 95% intervals from two-way clustering; intervals wider "
+             "than the axis are clipped.", ha="center", fontsize=8, color="#4a5568")
+    fig.tight_layout(rect=(0, 0.062, 1, 0.962))
     OUT.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT / "f03_difference_forest.png", dpi=200,
-                bbox_inches="tight")
+    fig.savefig(OUT / "f03_difference_forest.png", dpi=170, bbox_inches="tight")
     plt.close(fig)
     print(f"wrote {OUT / 'f03_difference_forest.png'}")
 
@@ -305,4 +297,4 @@ if __name__ == "__main__":
     f_p4_5()
     f_p4_1_level()
     f_p4_2_level()
-    f_p4_3_difference()
+    f_p4_difference_panorama()

@@ -7,7 +7,8 @@ Protocol is frozen by phase5_simple_strategy/GUIDANCE.md sec.4-5:
   gaps    <=2 missing bars -> next available bar; >2 -> skip (counted)
   delist  last tradable bar close
   overlap one position per contract, first one wins, no adds
-  sizing  10% of 100k per unit; gross <= 10 units (= 1x)
+  sizing  2% of equity per signal (UNIT * s * equity at entry), so the
+           equity path compounds; gross <= 10 units (= 1x)
   costs   taker 0.05%/side + 5bp slippage/side, both legs
   funding actual settlement timestamps inside (entry, exit], whole amount,
           long RECEIVES when the rate is negative; missing points = 0 carry
@@ -150,47 +151,6 @@ def load_funding(sym2code: dict) -> Funding:
                    d["funding_interval_hours"].to_numpy("float64"))
 
 
-def trailing_vol(mkt: "Market", window: int = 24) -> np.ndarray:
-    """Causal volatility, aligned to the rows of mkt.
-
-    stdev of the last window hourly log returns of the SAME contract, using
-    only bars that closed at or before the current bar.  lrv is NOT usable here:
-    lrv = log(rv) and rv is the realised vol of the FORWARD window
-    (exp(lrv) == rv to 1e-17, corr(rv, |fwd|) = 0.96 at h=1).
-    """
-    n = len(mkt.keys)
-    code = mkt.keys // H
-    prev_same = np.zeros(n, bool)
-    prev_same[1:] = code[1:] == code[:-1]
-    prev_close = np.full(n, np.nan)
-    prev_close[1:] = mkt.close[:-1]
-    lr = np.where(prev_same, np.log(mkt.close / prev_close), np.nan)
-
-    d = pd.DataFrame(dict(code=code, lr=lr))
-    g = d.groupby("code", sort=False)
-    s1 = g["lr"].apply(lambda s: s.fillna(0.0).cumsum()).to_numpy()
-    s2 = g["lr"].apply(lambda s: (s.fillna(0.0) ** 2).cumsum()).to_numpy()
-    cnt = g.cumcount().to_numpy() + 1.0
-
-    i = np.arange(n)
-    ok = i >= window
-    lo = np.maximum(i - window, 0)
-    c = cnt[i] - np.where(ok, cnt[lo], 0.0)
-    m1 = (s1 - np.where(ok, s1[lo], 0.0)) / np.maximum(c, 1.0)
-    m2 = (s2 - np.where(ok, s2[lo], 0.0)) / np.maximum(c, 1.0)
-    return np.where(ok & (c >= window - 2),
-                    np.sqrt(np.maximum(m2 - m1 * m1, 0.0)), np.nan)
-
-
-def sigma_at(mkt: "Market", sig: np.ndarray, hour, code) -> np.ndarray:
-    """Volatility of the last COMPLETED bar before the entry bar."""
-    idx = mkt.prev(np.asarray(hour) - 1, np.asarray(code))
-    out = np.full(len(idx), np.nan)
-    good = idx >= 0
-    out[good] = sig[idx[good]]
-    return out
-
-
 BASE_COLS = ["symbol", "sym", "hour", "month", "cell", "state", "dir",
              "mkt_vol_lab", "fwd", "y_raw"]
 
@@ -204,8 +164,13 @@ def load_base(h: int = 1) -> pd.DataFrame:
 # --------------------------------------------------------------------------
 def run(events: pd.DataFrame, hold: int, mkt: Market, fund: Funding,
         size: np.ndarray | None = None, max_units: float = MAX_UNITS,
-        seed: int = 20240501) -> tuple[pd.DataFrame, dict]:
-    """Execute one rule x horizon.  events needs columns code and hour."""
+        seed: int = 20240501, direction: int = 1) -> tuple[pd.DataFrame, dict]:
+    """Execute one rule x horizon.  events needs columns code and hour.
+
+    direction +1 is long, -1 is short.  The gate is two-sided, so an arm can in
+    principle be short; sizing, cost and the sequential pass are symmetric, and
+    price PnL, funding PnL and the marked return all flip sign with direction.
+    """
     n = len(events)
     code = events["code"].to_numpy("int64")
     hour = events["hour"].to_numpy("int64")
@@ -249,21 +214,42 @@ def run(events: pd.DataFrame, hold: int, mkt: Market, fund: Funding,
     bad = exit_idx < 0
     exit_px = np.where(bad, np.nan, mkt.close[np.maximum(exit_idx, 0)])
 
-    # ---- sequential pass: one position per contract + gross-exposure budget --
+    # ---- funding inside (entry, exit] ----
+    r_sum, r_n = fund.window(entry_time, exit_time, code)
+    iv = fund.interval_at(entry_time, code)
+    iv = np.where(np.isfinite(iv) & (iv > 0), iv, 8.0)
+    expected = np.floor(exit_time / iv) - np.floor(entry_time / iv)
+    missing = np.maximum(0.0, expected - r_n)
+
+    d = float(1 if direction >= 0 else -1)
+    # PnL per unit of notional: scale-free, so it can be applied to any size.
+    net_ret = d * (exit_px / entry_px - 1.0) - d * r_sum - 2.0 * COST_PER_SIDE
+
+    # ---- sequential pass: one position per contract, gross budget, equity ----
     # Tie-break among simultaneous candidates is RANDOM (fixed seed), not by
     # contract code: a code-ordered queue would systematically prefer the
     # earliest-listed contracts, which is a listing-order bias, not an economic
     # one.  Events cluster in market-wide hours, so this choice matters.
+    #
+    # Sizing compounds: the notional of a trade is UNIT * s * E, where E is the
+    # equity already realised when the trade opens (initial capital plus the PnL
+    # of positions closed before that hour).  Unrealised PnL is not marked into
+    # E, which is the conservative reading of "equity at entry".
     rng = np.random.default_rng(seed)
     order = np.lexsort((rng.random(n), entry_time))
     keep = np.zeros(n, dtype=bool)
+    notional = np.zeros(n)
     units = 0.0
+    realized = 0.0
     open_until: dict[int, int] = {}
     heap: list[tuple[int, float]] = []
+    closed: list[tuple[int, float]] = []
     for i in order:
         if (gap[i] < 0) or bad[i]:
             continue
         t = int(entry_time[i])
+        while closed and closed[0][0] <= t:
+            realized += heapq.heappop(closed)[1]
         while heap and heap[0][0] <= t:
             units -= heapq.heappop(heap)[1]
         c = int(code[i])
@@ -273,30 +259,25 @@ def run(events: pd.DataFrame, hold: int, mkt: Market, fund: Funding,
         if units + s[i] > max_units + 1e-9:
             skip["capacity"] += 1
             continue
+        notional[i] = UNIT * s[i] * (EQUITY0 + realized)
         keep[i] = True
         units += s[i]
         open_until[c] = int(exit_time[i])
         heapq.heappush(heap, (int(exit_time[i]), s[i]))
+        heapq.heappush(closed, (int(exit_time[i]), notional[i] * net_ret[i]))
 
-    # ---- funding inside (entry, exit] ----
-    r_sum, r_n = fund.window(entry_time, exit_time, code)
-    iv = fund.interval_at(entry_time, code)
-    iv = np.where(np.isfinite(iv) & (iv > 0), iv, 8.0)
-    expected = np.floor(exit_time / iv) - np.floor(entry_time / iv)
-    missing = np.maximum(0.0, expected - r_n)
-
-    notional = EQUITY0 * UNIT * s
-    qty = notional / entry_px
+    qty = np.where(keep, notional / np.where(np.isfinite(entry_px), entry_px, 1.0), 0.0)
     trades = pd.DataFrame(dict(
         i=np.arange(n), code=code, hour=hour, entry_time=entry_time,
         exit_time=exit_time, entry_px=entry_px, exit_px=exit_px,
         gap=gap, exit_kind=exit_kind, size=s, notional=notional, qty=qty,
-        price_pnl=qty * (exit_px - entry_px),
-        fund_pnl=-r_sum * notional,
+        direction=np.full(n, d),
+        price_pnl=d * qty * (exit_px - entry_px),
+        fund_pnl=-d * r_sum * notional,
         cost=notional * COST_PER_SIDE * 2.0,
         n_settle=r_n, n_settle_missing=missing, kept=keep,
     ))
-    trades["price_ret"] = trades.exit_px / trades.entry_px - 1.0
+    trades["price_ret"] = d * (trades.exit_px / trades.entry_px - 1.0)
     trades["net_pnl"] = trades.price_pnl + trades.fund_pnl - trades.cost
     skip["n_events"] = n
     skip["n_trades"] = int(keep.sum())
@@ -325,7 +306,7 @@ def daily_frame(trades: pd.DataFrame, mkt: Market, day0: int, day1: int) -> pd.D
         xt = t.exit_time.to_numpy("int64")
         px = t.entry_px.to_numpy("float64")
         xp = t.exit_px.to_numpy("float64")
-        q = t.qty.to_numpy("float64")
+        q = (t.qty * t.direction).to_numpy("float64")
         cl = t.code.to_numpy("int64")
         # Walk every UTC midnight strictly inside (entry, exit): book each
         # segment on the day it ends.  The final leg to the exit price is booked
@@ -353,33 +334,51 @@ def daily_frame(trades: pd.DataFrame, mkt: Market, day0: int, day1: int) -> pd.D
     return out
 
 
+def equity_path(daily: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Compounded equity path and the daily returns that produce it.
+
+    Sizing is a fraction of the equity realised at entry, so the path grows
+    multiplicatively: E_t = E_{t-1} + net_t, with r_t = net_t / E_{t-1}.
+    """
+    net = daily.net.to_numpy("float64")
+    eq = np.empty(len(net) + 1)
+    eq[0] = EQUITY0
+    for i, x in enumerate(net):
+        eq[i + 1] = eq[i] + x
+    r = net / eq[:-1] if len(net) else net
+    return eq[1:], r
+
+
 def metrics(daily: pd.DataFrame, trades: pd.DataFrame, years: float,
             ann: int = 365) -> dict:
     """Headline numbers for one arm x one window.
 
     Sharpe is annualised on 365 days because the venue trades every calendar
-    day (see REPRODUCE.md).  Notional is constant at 10% of the INITIAL equity,
-    so arm-to-arm comparison is not compounded; the equity path is therefore
-    allowed to go below zero and MDD is a peak-to-trough ratio on it.
+    day (see REPRODUCE.md).  Sizing compounds, so the equity path is the
+    product of the daily returns, annual return is its compound growth rate,
+    and turnover and the bp aggregates are quoted against average equity.
     """
-    r = daily.net.to_numpy("float64") / EQUITY0
-    eq = EQUITY0 + daily.net.cumsum().to_numpy()
-    mdd = float(np.min(eq / np.maximum.accumulate(eq) - 1.0))
-    sd = float(np.std(r, ddof=1))
-    mu = float(np.mean(r))
+    eq, r = equity_path(daily)
+    mdd = float(np.min(eq / np.maximum.accumulate(eq) - 1.0)) if len(eq) else 0.0
+    sd = float(np.std(r, ddof=1)) if len(r) > 1 else np.nan
+    mu = float(np.mean(r)) if len(r) else np.nan
     t = trades[trades.kept]
+    avg_eq = float(np.mean(eq)) if len(eq) else EQUITY0
+    total = float(eq[-1] / EQUITY0 - 1.0) if len(eq) else 0.0
+    cagr = ((1.0 + total) ** (1.0 / years) - 1.0
+            if years > 0 and 1.0 + total > 0 else np.nan)
     return dict(
         n_days=int(len(r)), n_trades=int(len(t)),
-        total_ret=float(eq[-1] / EQUITY0 - 1.0) if len(eq) else 0.0,
-        ann_ret=mu * ann, ann_vol=sd * np.sqrt(ann),
-        sharpe=mu / sd * np.sqrt(ann) if sd > 0 else np.nan,
-        t_stat=mu / (sd / np.sqrt(len(r))) if sd > 0 else np.nan,
+        total_ret=total,
+        ann_ret=cagr, ann_vol=sd * np.sqrt(ann),
+        sharpe=mu / sd * np.sqrt(ann) if sd and sd > 0 else np.nan,
+        t_stat=mu / (sd / np.sqrt(len(r))) if sd and sd > 0 else np.nan,
         mdd=mdd,
-        turnover=float(t.notional.sum()) / (EQUITY0 * years) if years > 0 else 0.0,
-        price_bp=float(t.price_pnl.sum()) / EQUITY0 * 1e4,
-        fund_bp=float(t.fund_pnl.sum()) / EQUITY0 * 1e4,
-        cost_bp=float(t.cost.sum()) / EQUITY0 * 1e4,
-        net_bp=float(t.net_pnl.sum()) / EQUITY0 * 1e4,
+        turnover=float(t.notional.sum()) / (avg_eq * years) if years > 0 else 0.0,
+        price_bp=float(t.price_pnl.sum()) / avg_eq * 1e4,
+        fund_bp=float(t.fund_pnl.sum()) / avg_eq * 1e4,
+        cost_bp=float(t.cost.sum()) / avg_eq * 1e4,
+        net_bp=float(t.net_pnl.sum()) / avg_eq * 1e4,
         n_settle=int(t.n_settle.sum()),
         n_settle_missing=int(t.n_settle_missing.sum()),
     )

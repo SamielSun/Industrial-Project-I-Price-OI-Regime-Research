@@ -19,7 +19,7 @@ def main() -> int:
     fund = bt.load_funding(sym2code)
     arm = R.ARM_BY_NAME["A1"]
     ev = R.select(bt.load_base(arm["hold"]), arm)
-    tr, sk = bt.run(ev, arm["hold"], mkt, fund)
+    tr, sk = bt.run(ev, arm["hold"], mkt, fund, direction=arm.get("direction", 1))
     k = tr[tr.kept].reset_index(drop=True)
 
     rng = np.random.default_rng(7)

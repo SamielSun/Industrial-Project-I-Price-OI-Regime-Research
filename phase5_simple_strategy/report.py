@@ -1,4 +1,4 @@
-"""Phase 5 -- render the OOS report (markdown + csv summary).
+"""Phase 5 -- render the results report (markdown + csv summary).
 
 Reads only the tables written by phase5_simple_strategy.gate and phase5_simple_strategy.eval, so the report can
 never disagree with the run that produced it.
@@ -11,7 +11,7 @@ import pandas as pd
 from . import backtest as bt
 
 TBL = bt.DATA / "08_strategy" / "tables"
-OUT = bt.ROOT / "phase5_simple_strategy" / "OOS_REPORT.md"
+OUT = bt.ROOT / "phase5_simple_strategy" / "RESULTS.md"
 COST = bt.COST_BP
 TEXT_COLS = {"arm", "window", "variant", "role", "dim", "key", "sym", "bucket"}
 INT_COLS = {"n", "n_trades", "n_events", "n_settle", "n_settle_missing",
@@ -48,12 +48,12 @@ def main() -> int:
     main_w = rules[(rules.window == "main") & (rules.variant == "base")]
     L = []
     A = L.append
-    A("# Phase 5 -- OOS report (D4)")
+    A("# Phase 5 -- results (D4)")
     A("")
     A("**判定：Phase 5 未通过。**")
     A("")
     A("> **in-sample 声明**：本设计在看过全样本结果之后写定（GUIDANCE.md §8）。")
-    A("> 下列所有数字都是 in-sample，**不构成盲测样本外结论**。切分只用于报告分段稳定性。")
+    A("> 下列所有数字都是 in-sample，**不构成盲测样本外结论**。回测覆盖全样本，不留切分。")
     A("")
     A("---")
     A("")
@@ -76,22 +76,16 @@ def main() -> int:
     A("")
     A("## 1. 主结果（表 1）")
     A("")
-    A("测试窗口 2024-06 .. 2026-08（27 个月）。cost* = 每笔毛边际（bp，分母为名义本金）；成本固定 20bp 往返。")
+    A("全样本 2022-03 .. 2026-08（54 个月）。cost* = 每笔毛边际（bp，分母为名义本金）；成本固定 20bp 往返。")
     A("")
     A(md_table(rules[rules.window == "main"],
                ["arm", "variant", "n_trades", "skip_overlap", "skip_cap", "price_bp",
                 "fund_bp", "cost_bp", "net_bp", "cost_star_bp", "gross_sharpe",
                 "net_sharpe", "ci_lo", "ci_hi", "ann_ret", "ann_vol", "mdd"]))
     A("")
-    A("分折（walk-forward）与最后 3 个月（2026-06..08，属于主测试窗口的 in-sample 子区间，不是留出集）：")
-    A("")
-    A(md_table(rules[rules.window != "main"],
-               ["window", "arm", "variant", "n_trades", "net_bp", "cost_star_bp",
-                "gross_sharpe", "net_sharpe"]))
-    A("")
     A("## 2. baseline 对比（表 2）")
     A("")
-    A("同一测试窗口、同方向、同持有期、同 universe。")
+    A("同一全样本、同方向、同持有期、同 universe。")
     A("")
     own = main_w.assign(arm=main_w["arm"] + " (this arm)")[
         ["arm", "n_trades", "cost_star_bp", "gross_sharpe", "net_sharpe",
@@ -125,8 +119,8 @@ def main() -> int:
     A(md_table(main_w, ["arm", "price_bp", "fund_bp", "cost_bp", "net_bp",
                         "cost_star_bp", "n_settle", "n_settle_missing"]))
     A("")
-    A("**LUNA 敏感性不做。** LUNA 崩盘（2022-05）落在训练窗口，测试窗口内 A1 的格子里 0 笔、")
-    A("B1 的格子里 1 笔，剔除后数值不变 —— 这个敏感性在结构上不可能提供信息，因此不报。")
+    A("**LUNA 敏感性不做。** LUNA 崩盘（2022-05）在全样本内，A1 的格子里 0 笔、B1 的格子里 1 笔，")
+    A("剔除后数值不变 —— 这个敏感性在结构上不可能提供信息，因此不报。")
     A("")
     A("---")
     A("")
@@ -165,7 +159,7 @@ def main() -> int:
     A("")
     A("![f01 累计净值与回撤](../data/08_strategy/figures/f01_equity.png)")
     A("")
-    A("f01 累计净值（实线 = 净，虚线 = 毛）与回撤。测试窗口 2024-06..2026-08，两条臂的 base 变体。")
+    A("f01 累计净值（实线 = 净，虚线 = 毛）与回撤。全样本 2022-03..2026-08，两条臂。")
     A("")
     A("![f02 cost* 对 20bp 成本线](../data/08_strategy/figures/f02_cost_hurdle.png)")
     A("")

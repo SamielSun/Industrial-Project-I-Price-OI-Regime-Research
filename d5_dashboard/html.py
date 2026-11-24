@@ -272,10 +272,12 @@ function paint(i){
   document.getElementById("bsum").textContent = barSummary(day);
   document.getElementById("m1").innerHTML = masterTable(day, syms, idx, A);
   const s1 = sectionHtml(day, syms, idx, 0, 10, A);
+  const s2 = sectionHtml(day, syms, idx, 1, 10, A);
   const s3 = sectionHtml(day, syms, idx, 2, 10, A);
   const s4 = sectionHtml(day, syms, idx, 3, 10, A);
   document.getElementById("n1").textContent = s1.n; document.getElementById("t1").innerHTML = s1.html;
-  document.getElementById("n3").textContent = s3.n; document.getElementById("t3").innerHTML = s3.html;
+  document.getElementById("n2").textContent = s2.n; document.getElementById("t2").innerHTML = s2.html;
+document.getElementById("n3").textContent = s3.n; document.getElementById("t3").innerHTML = s3.html;
   document.getElementById("n4").textContent = s4.n; document.getElementById("t4").innerHTML = s4.html;
   document.getElementById("sc").innerHTML = scatter(day, syms);
   document.getElementById("ext").innerHTML = extremeTable(day, syms);
@@ -352,7 +354,7 @@ PAGE = """<!doctype html>
 <div class="sub"><b>state @ bar</b> is the regime label at that hour &mdash; usually
 <span class="tag quiet">no regime</span>, because a regime is an hourly event flag, not a persistent
 state. <b>last event</b> is the most recent regime inside the 24h window ending at that hour.
-Open a contract in sections 2&ndash;4 to see every event inside the window.</div>
+Open a contract in sections 2&ndash;5 to see every event inside the window.</div>
 <div id="m1"></div>
 
 <h2>2. Long buildup (R1: price up + OI up) &mdash; <span id="n1">0</span> contracts</h2>
@@ -360,16 +362,19 @@ Open a contract in sections 2&ndash;4 to see every event inside the window.</div
 under &ldquo;show all&rdquo;. Price and open interest both above their rolling 90d thresholds.</div>
 <div id="t1"></div>
 
-<h2>3. Short buildup (R3: price down + OI up) &mdash; <span id="n3">0</span> contracts</h2>
+<h2>3. Short covering (R2: price up + OI down) &mdash; <span id="n2">0</span> contracts</h2>
+<div class="sub">Sorted by recency; first 10 shown. Price up with open interest falling, the quadrant retail commentary reads as shorts closing.</div>
+<div id="t2"></div>
+
+<h2>4. Short buildup (R3: price down + OI up) &mdash; <span id="n3">0</span> contracts</h2>
 <div class="sub">Sorted by recency; first 10 shown.</div>
 <div id="t3"></div>
 
-<h2>4. Deleveraging (R4: price down + OI down) &mdash; <span id="n4">0</span> contracts</h2>
-<div class="sub">Sorted by recency; first 10 shown. Strictly R4: R2 (price up + OI down) is
-short covering and is not listed here.</div>
+<h2>5. Deleveraging (R4: price down + OI down) &mdash; <span id="n4">0</span> contracts</h2>
+<div class="sub">Sorted by recency; first 10 shown. Strictly R4; short covering has its own list above.</div>
 <div id="t4"></div>
 
-<h2>5. Funding-adjusted crowding view</h2>
+<h2>6. Funding-adjusted crowding view</h2>
 <div class="sub">x = funding percentile against the contract's own 90d history; y = 24h
 open-interest change. Upper-right = high funding with positions still being added. Dashed
 line marks the 75th percentile.</div>
@@ -379,7 +384,7 @@ line marks the 75th percentile.</div>
 <b>and</b> 24h OI still rising &mdash; crowded longs still being added to.</div>
 <div id="ext"></div>
 
-<h2>6. Realised volatility: level and percentile</h2>
+<h2>7. Realised volatility: level and percentile</h2>
 <div class="sub"><b>ann. vol</b> = standard deviation of the last 24 hourly log returns,
 annualised by &radic;(24&times;365) = 93.6 &mdash; i.e. "if this day were the year". It is a
 one-day estimate, so treat it as a coarse risk gauge, not a forecast.
@@ -390,15 +395,6 @@ This is the one dimension of the price/OI framework that is statistically robust
 volatility rises after these events (16/16 cells, Phase 3). Direction is not.</div>
 <div id="vt"></div>
 
-<footer>
-<b>Not a trading signal.</b> This board is a state monitor. The strategy test in Phase 5
-found no first-moment edge after a 20bp taker round trip: net Sharpe -1.48 (A1) and -0.98
-(B1) on the main test window, and the verdict is not passed. The robust finding is the
-<i>second</i> moment &mdash; see section 6 and <code>phase3_event/GUIDANCE.md</code>.
-<br><br>Regimes are hourly event flags, not persistent states: across the full sample
-<b>12.7%</b> of contract-hours sit in one, and at any single bar only a handful of the 50
-do. Sections 2&ndash;4 are sorted by recency, not by signal strength or expected return.
-</footer>
 <script>window.__D5__={payload:"__PAYLOAD__",asof:"__ASOF__"};</script>
 <script>__JS__</script>
 </body></html>
