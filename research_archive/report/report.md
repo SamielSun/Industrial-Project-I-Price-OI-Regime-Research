@@ -10,11 +10,11 @@ Date: 27 November 2026
 
 ## Abstract
 
-Crypto perpetual futures publish open interest continuously, and quantitative research read it alongside price: price up with open interest up is treated as fresh long positioning, price up with open interest down as short covering, and the two remaining quadrants as fresh shorts and long unwinding. This study tests whether those four regimes carry return or volatility information in Binance USDT-M perpetuals between December 2021 and August 2026, on the monthly top fifty contracts ranked by quote volume. A contract enters a regime when the absolute one-hour price change and the absolute one-hour open-interest change both exceed their own trailing 90-day 70th percentile. The resulting 256,079 regime events are studied with forward returns at one, four, eight and twenty-four hours.
+Cryptocurrencies’ perpetual futures report open interest data continuously. Quantitative research reads price up with open interest up as fresh long positioning, price up with open interest down as short covering, and the two other quadrants as fresh shorts and long unwinding. This study analyses whether the above four regimes contain pricing and volatility information on the 50 most liquid Binance USDT-M perpetuals between December 2021 and August 2026. Regime membership is attained when the absolute value of hourly price change and open interest change both exceed their respective 90-day 70th percentiles. Regime data (256,079 in total) is analysed using one, four, eight and twenty-four hour ahead returns.
 
-The four regimes separate forward volatility cleanly: all sixteen cell-horizon estimates survive two-way clustering and Benjamini–Hochberg correction, and the funding-conditioned replication leaves 83 of 96 realised-volatility contrasts standing after Benjamini–Hochberg correction. Forward direction depends on how the hours are weighted: counting every event-hour equally, six of sixteen estimates are significant after BH correction; counting every contract-day equally, on the same rows and the same regression, the sign reverses in all four cells. The regimes themselves earn nothing at any horizon. Two of 96 funding-conditioned contrasts survive BH correction, the larger at +5.29 bp against a 20 bp round trip.
+The four regimes distinguish forward volatility clearly. All 16 cell-horizon estimators pass Benjamini–Hochberg correction after two-way clustering, with contract and month effects. Furthermore, following conditioning on funding rate, 83 of the 96 log-volatility contrasts also pass Benjamini–Hochberg correction. Forward direction depends on how the hours are weighted. When counting every event-hour equally, 6 of 16 estimates are significant after BH correction, but when counting every contract-day equally, the sign reverses in all four cells. In our study, no regime clears the 20 bp round trip at any horizon.
 
-A filter of four gates, followed by a mapping step, reduces 96 candidate cells to two arms. Both sit in R4, the regime where price and open interest fall together: A1 holds eight hours at negative funding, B1 one hour at high market volatility. Both lose money over the full sample (net Sharpe −0.62 and −1.41), and both fail the same way: 10.38 and 9.26 bp of gross edge against a 20 bp round trip, of which A1 draws 1.59 bp from funding and B1 pays 0.06 bp. Neither is tradable.
+A filter of four gates, followed by a mapping step, reduces 96 candidate cells to two arms (section 6.4). Both sit in R4, the regime where price and open interest fall together: A1 holds eight hours at negative funding, B1 one hour at high market volatility. Both lose money over the full sample (net Sharpe −0.62 and −1.41), and both fail the same way: 10.38 and 9.26 bp of gross edge against a 20 bp round trip. A1 earns 8.79 bp from price and 1.59 bp from funding; B1 earns 9.32 bp from price and pays 0.06 bp in funding. Charged the 20 bp, both are net negative, so neither is tradable.
 
 ---
 
@@ -108,13 +108,13 @@ Volatility forecasting has a benchmark this study does not try to meet. Christen
 
 Two problems arise when one sample is asked many questions: some tests will look significant by chance, and standard errors that ignore shared shocks will be too small.
 
-Harvey and Liu (2020) show that the 1.96 cutoff is too loose in finance, where hundreds of relations are tested. Hou, Xue and Zhang (2020) find that 82% of 452 published anomalies fail a stricter 2.78. Jensen, Kelly and Pedersen (2023) find that most published factors do replicate, so the stricter cutoff also discards real findings. This study applies Benjamini-Hochberg at five per cent inside a family declared at each stage, and reports every result in that family after the correction.
+Harvey and Liu (2020) show that the 1.96 cutoff is too loose in finance, where hundreds of relations are tested. Hou, Xue and Zhang (2020) find that 82% of 452 published anomalies fail a stricter 2.78. Jensen, Kelly and Pedersen (2023) find that most published factors do replicate, so the stricter cutoff also discards real findings. This study applies Benjamini–Hochberg at five per cent inside a family declared at each stage, and reports every result in that family after the correction.
 
 The standard errors follow Cameron, Gelbach and Miller (2011) and Petersen (2009): two-way clustering on contract and calendar month, because observations sharing either are not independent.
 
 ### 2.5 What this study adds
 
-This study holds the three together on a monthly top-fifty universe drawn from 249 contracts, at hourly frequency. Volatility separates cleanly: all sixteen regime-by-horizon estimates survive BH correction. The price–open-interest interaction, meaning whether the effect of open interest depends on the direction of price, is significant at every horizon, with t-statistics from 2.8 to 4.3. Two things fail. The sign of the directional effect changes with the weighting, and the two states that clear the gates earn only about 10 bp gross, which turns negative once the 20 bp round trip is charged.
+This study holds the three together on a monthly top-fifty universe drawn from 249 contracts, at hourly frequency. Volatility separates cleanly: all 16 regime-by-horizon estimators survive BH correction. The price–open-interest interaction, meaning whether the effect of open interest depends on the direction of price, is significant at every horizon, with t-statistics from 2.8 to 4.3. Two things fail. The sign of the directional effect changes with the weighting, and the two states that clear the gates earn only about 10 bp gross, which turns negative once the 20 bp round trip is charged.
 
 ## 3 Market Research
 
@@ -305,13 +305,13 @@ The board is one page showing the fifty contracts in the universe at a chosen ho
 
 ### 6.1 Phase 3: what a regime carries
 
-Volatility is the one result that survives every check. Each cell is compared with the other rows that crossed the same price threshold in the same direction but do not belong to that cell, so the benchmark is the rest of the price move. All sixteen cell-horizon estimates are positive, survive BH correction and survive dropping the five most influential contracts, and Figure 7 shows every one of them above its benchmark. The gain is largest at short horizons and shrinks as the window lengthens.
+Volatility is the one result that survives every check. Each cell is compared with the other rows that crossed the same price threshold in the same direction but do not belong to that cell, so the benchmark is the rest of the price move. All 16 cell-horizon estimators are positive, survive BH correction and survive dropping the five most influential contracts, and Figure 7 shows every one of them above its benchmark. The gain is largest at short horizons and shrinks as the window lengthens.
 
 ![Figure 7](figs/r1_volatility.png)
 
 *Figure 7. Forward realised volatility by cell and horizon, as a percentage of the price-matched benchmark. Bars are 95% intervals; filled markers are |t| > 1.96.*
 
-Figure 8 repeats the layout for direction, and most intervals cross zero. Six of the sixteen increments are significant, two positive and four negative. The larger positive is +2.51 bp, for R1 at one hour; the larger negative is −11.63 bp, for R3 at twenty-four hours. Both are small, and the signs are not consistent across cells.
+Figure 8 repeats the layout for direction, and most intervals cross zero. 6 of the 16 increments are significant, two positive and four negative. The larger positive is +2.51 bp, for R1 at one hour; the larger negative is −11.63 bp, for R3 at twenty-four hours. Both are small, and the signs are not consistent across cells.
 
 ![Figure 8](figs/r1_direction.png)
 
@@ -426,9 +426,9 @@ Raw forward returns measure the market as much as the signal. Across the four ce
 
 ## 7 Conclusion
 
-The question was whether price and open interest together describe regimes with tradable return information. In this market, at this frequency, they do not. The direction of the next hours has no stable sign: six of the sixteen increments are significant when every event-hour counts equally, two positive and four negative, and the sign reverses in every cell when every contract-day counts once, with R1 and R4 turning negative. A portfolio built from the labels loses money at every horizon, and the two cells that clear the gates earn 10.38 and 9.26 bp gross against a 20 bp round trip.
+The question was whether price and open interest together describe regimes with tradable return information. In this market, at this frequency, they do not. The direction of the next hours has no stable sign: 6 of the 16 increments are significant when every event-hour counts equally, two positive and four negative, and the sign reverses in every cell when every contract-day counts once, with R1 and R4 turning negative. A portfolio built from the labels loses money at every horizon, and the two cells that clear the gates earn 10.38 and 9.26 bp gross against a 20 bp round trip.
 
-What the labels do describe is the size of the next move. All sixteen cell-horizon increments in forward volatility are positive and survive correction and the removal of the five most influential contracts; the funding-conditioned replication keeps 83 of 96 contrasts, every one positive, from +6.1% for negative funding to +17.6% for extreme. Both tails sit above the neutral middle, so what matters is distance from neutral rather than the sign of the rate. That is an input to sizing and risk budgets, not a directional arm.
+What the labels do describe is the size of the next move. All 16 cell-horizon increments in forward volatility are positive and survive correction and the removal of the five most influential contracts; the funding-conditioned replication keeps 83 of 96 contrasts, every one positive, from +6.1% for negative funding to +17.6% for extreme. Both tails sit above the neutral middle, so what matters is distance from neutral rather than the sign of the rate. That is an input to sizing and risk budgets, not a directional arm.
 
 **Contributions.**
 

@@ -19,6 +19,7 @@ UNI = [("\u2212", r"$-$"), ("\u2013", "--"), ("\u2014", "---"), ("\u00d7", r"$\t
        ("\u2192", r"$\to$"), ("\u00f7", r"$\div$"), ("\u00b7", r"$\cdot$")]
 
 BT = "\x60"
+URL = re.compile(r"(https?://[^\s,;)]+)")
 
 def breakable_code(s):
     def rep(m):
@@ -27,11 +28,13 @@ def breakable_code(s):
     return re.sub(r"\\texttt\{([^}]*)\}", rep, s)
 
 def inline(s):
+    s = URL.sub(lambda m: "\x01" + m.group(1) + "\x02", s)
     s = esc(s)
     s = re.sub(BT + r"([^" + BT + r"]+)" + BT, lambda m: r"\texttt{" + m.group(1) + "}", s)
     s = re.sub(r"\*\*([^*]+)\*\*", r"\\textbf{\1}", s)
     s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\\emph{\1}", s)
     s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", lambda m: r"\href{" + m.group(2) + "}{" + m.group(1) + "}", s)
+    s = s.replace("\x01", r"\url{").replace("\x02", "}")
     for a, b in UNI:
         s = s.replace(a, b)
     return breakable_code(s)
@@ -47,10 +50,14 @@ preamble = r"""\documentclass[11pt,a4paper]{article}
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{array}
+\usepackage{longtable}
 \usepackage{caption}
 \usepackage{float}
+\usepackage{pdflscape}
+
 \usepackage{enumitem}
 \usepackage{amsmath}
+\usepackage{xurl}
 \usepackage[hidelinks]{hyperref}
 \usepackage{microtype}
 \captionsetup{font=small,labelfont=bf,skip=4pt}
@@ -73,19 +80,21 @@ i = 0
 n = len(lines)
 in_abstract = False
 in_bullets = False
+in_numbered = False
 in_quote = False
+in_refs = False
 
-def flush_bullets():
-    global in_bullets
+def flush_lists():
+    global in_bullets, in_numbered
     if in_bullets:
-        body.append(r"\end{itemize}")
-        in_bullets = False
+        body.append(r"\end{itemize}"); body.append(""); in_bullets = False
+    if in_numbered:
+        body.append(r"\end{enumerate}"); body.append(""); in_numbered = False
 
 def flush_quote():
     global in_quote
     if in_quote:
-        body.append(r"\end{quote}")
-        in_quote = False
+        body.append(r"\end{quote}"); body.append(""); in_quote = False
 
 def render_table(rows, caption=None):
     parsed = [r for r in rows if r.strip().startswith("|")]
@@ -94,12 +103,44 @@ def render_table(rows, caption=None):
     cells = [[c.strip() for c in r.strip().strip("|").split("|")] for r in parsed]
     header, data = cells[0], cells[2:]
     ncol = len(header)
+    if len(data) > 8:
+        # longtable: fixed p-columns, weighted by content length
+        lens = []
+        for c in range(ncol):
+            col = [row[c] for row in data if c < len(row)] + [header[c]]
+            lens.append(max(12, sum(len(x) for x in col) / max(1, len(col))))
+        tot = sum(lens)
+        widths = [max(0.10, min(0.55, 0.92 * l / tot)) for l in lens]
+        scale = 0.90 / sum(widths)
+        widths = [w * scale for w in widths]
+        spec = "".join("p{%.2f\\linewidth}" % w for w in widths)
+        body.append(r"{\footnotesize\setlength{\tabcolsep}{4pt}")
+        body.append(r"\begin{longtable}{" + spec + "}")
+        if caption:
+            body.append(r"\caption{" + inline(caption) + r"}\\")
+        body.append(r"\toprule")
+        body.append(" & ".join(inline(h) for h in header) + r" \\")
+        body.append(r"\midrule")
+        body.append(r"\endfirsthead")
+        body.append(r"\toprule")
+        body.append(" & ".join(inline(h) for h in header) + r" \\")
+        body.append(r"\midrule")
+        body.append(r"\endhead")
+        body.append(r"\bottomrule")
+        body.append(r"\endfoot")
+        for row in data:
+            row = (row + [""] * ncol)[:ncol]
+            body.append(" & ".join(inline(c) for c in row) + r" \\")
+        body.append(r"\end{longtable}")
+        body.append("}")
+        body.append("")
+        return
     specs = []
     for c in range(ncol):
         col = [row[c] for row in data if c < len(row)]
         numeric = bool(col) and all(NUM.match(x) and x for x in col)
         specs.append(r">{\raggedleft\arraybackslash}X" if numeric else r">{\raggedright\arraybackslash}X")
-    body.append(r"\begin{table}[htbp]\centering")
+    body.append(r"\begin{table}[H]\centering")
     if caption:
         body.append(r"\caption{" + inline(caption) + "}")
     body.append(r"\footnotesize")
@@ -113,6 +154,7 @@ def render_table(rows, caption=None):
     body.append(r"\bottomrule")
     body.append(r"\end{tabularx}")
     body.append(r"\end{table}")
+    body.append("")
 
 while i < n:
     line = lines[i]
@@ -121,16 +163,14 @@ while i < n:
         i += 1
         continue
     if s == "## Abstract":
-        flush_bullets(); flush_quote()
+        flush_lists(); flush_quote()
         body.append(r"\begin{abstract}")
         in_abstract = True
         i += 1
         continue
     if in_abstract and s == "---":
         body.append(r"\end{abstract}")
-        body.append(r"\newpage")
-        body.append(r"\tableofcontents")
-        body.append(r"\newpage")
+        body.append(r"\newpage"); body.append(r"\tableofcontents"); body.append(r"\newpage")
         in_abstract = False
         i += 1
         continue
@@ -140,21 +180,27 @@ while i < n:
             i += 1
         continue
     if s.startswith("## "):
-        flush_bullets(); flush_quote()
+        flush_lists(); flush_quote()
         title = s[3:].strip()
         m = re.match(r"^(\d+)\s+(.*)$", title)
         body.append(r"\section{" + inline(m.group(2)) + "}" if m else r"\section*{" + inline(title) + "}")
+        body.append("")
+        in_refs = False
         i += 1
         continue
     if s.startswith("### "):
-        flush_bullets(); flush_quote()
+        flush_lists(); flush_quote()
         title = s[4:].strip()
         m = re.match(r"^(\d+\.\d+)\s+(.*)$", title)
         body.append(r"\subsection{" + inline(m.group(2)) + "}" if m else r"\subsection*{" + inline(title) + "}")
+        body.append("")
+        in_refs = "Appendix A" in title
+        if in_refs:
+            body.append(r"{\small\raggedright\setlength{\parskip}{0.5em}")
         i += 1
         continue
     if line.startswith("    ") and s and not s.startswith("- "):
-        flush_bullets(); flush_quote()
+        flush_lists(); flush_quote()
         block = []
         while i < n and (lines[i].startswith("    ") or not lines[i].strip()):
             if lines[i].startswith("    "):
@@ -163,6 +209,7 @@ while i < n:
         body.append(r"\begin{verbatim}")
         body.extend(block)
         body.append(r"\end{verbatim}")
+        body.append("")
         continue
     mt = re.match(r"^\*\*Table (\d+)\.\s*(.*?)\*\*$", s)
     if mt:
@@ -176,7 +223,7 @@ while i < n:
         render_table(rows, caption)
         continue
     if s.startswith("|") and i + 1 < n and re.match(r"^\|[\s:\-|]+\|$", lines[i+1].strip()):
-        flush_bullets(); flush_quote()
+        flush_lists(); flush_quote()
         rows = []
         while i < n and lines[i].strip().startswith("|"):
             rows.append(lines[i]); i += 1
@@ -184,7 +231,7 @@ while i < n:
         continue
     mi = re.match(r"^!\[[^\]]*\]\(([^)]+)\)$", s)
     if mi:
-        flush_bullets(); flush_quote()
+        flush_lists(); flush_quote()
         path = mi.group(1)
         j = i + 1
         while j < n and not lines[j].strip():
@@ -195,12 +242,25 @@ while i < n:
             cap = lines[j].strip().strip("*")
             k = j
         cap = re.sub(r"^Figure (\d+)\.\s*", "", cap)
-        body.append(r"\begin{figure}[htbp]")
-        body.append(r"\centering")
-        body.append(r"\includegraphics[width=0.92\linewidth]{" + path + "}")
-        if cap:
-            body.append(r"\caption{" + inline(cap) + "}")
-        body.append(r"\end{figure}")
+        if "d5_full" in path:
+            for part in (1, 2):
+                body.append(r"\begin{figure}[H]")
+                body.append(r"\centering")
+                body.append(r"\includegraphics[width=\linewidth,height=0.90\textheight,keepaspectratio]{" + path.replace("d5_full.png", "d5_full_p%d.png" % part) + "}")
+                if cap:
+                    body.append(r"\caption*{Figure 17. " + inline(cap) + " (" + str(part) + " of 2)}")
+                body.append(r"\end{figure}")
+                body.append("")
+            i = k + 1
+            continue
+        else:
+            body.append(r"\begin{figure}[H]")
+            body.append(r"\centering")
+            body.append(r"\includegraphics[width=0.92\linewidth,height=0.40\textheight,keepaspectratio]{" + path + "}")
+            if cap:
+                body.append(r"\caption{" + inline(cap) + "}")
+            body.append(r"\end{figure}")
+        body.append("")
         i = k + 1
         continue
     if s.startswith(">"):
@@ -218,25 +278,42 @@ while i < n:
         continue
     flush_quote()
     if s.startswith("- "):
+        if in_numbered:
+            body.append(r"\end{enumerate}"); in_numbered = False
         if not in_bullets:
             body.append(r"\begin{itemize}"); in_bullets = True
         body.append(r"\item " + inline(s[2:].strip()))
         i += 1
         continue
-    flush_bullets()
+    mo = re.match(r"^\d+\.\s+(.*)$", s)
+    if mo:
+        if in_bullets:
+            body.append(r"\end{itemize}"); in_bullets = False
+        if not in_numbered:
+            body.append(r"\begin{enumerate}"); in_numbered = True
+        body.append(r"\item " + inline(mo.group(1)))
+        i += 1
+        continue
+    flush_lists()
     if s == "---":
-        body.append(r"\bigskip")
+        body.append(r"\bigskip"); body.append("")
         i += 1
         continue
     if not s:
         i += 1
         continue
-    body.append(inline(s))
+    if in_refs:
+        body.append(r"\noindent\hangindent=1.4em\hangafter=1 " + inline(s))
+    else:
+        body.append(inline(s))
+    body.append("")
     i += 1
 
-if in_bullets:
-    body.append(r"\end{itemize}")
+flush_lists()
+if in_refs:
+    body.append("}")
 
 tex = preamble + "\n" + "\n".join(body) + "\n\\end{document}\n"
+(base / "build_tex.py").write_text(Path(__file__).read_text(encoding="utf-8"), encoding="utf-8")
 (base / "report.tex").write_text(tex, encoding="utf-8")
-print("written | tables:", tex.count(r"\begin{table}"), "| figures:", tex.count(r"\begin{figure}"))
+print("written | tables:", tex.count(r"\begin{table}") + tex.count(r"\begin{longtable}"), "| figures:", tex.count(r"\begin{figure}"))
