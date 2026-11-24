@@ -45,3 +45,4 @@ research_archive/report/*.out
 research_archive/report/*.toc
 research_archive/report/*.xdv
 research_archive/report/_*.png
+research_archive/report/report_textonly.*
