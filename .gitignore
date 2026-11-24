@@ -36,3 +36,12 @@ Thumbs.db
 # ---- 版权材料：出版社 PDF 与课程材料，不进公开仓库（本地保留）----
 research_archive/literature/*.pdf
 research_archive/course/
+# ---- LaTeX build artifacts ----
+research_archive/report/*.aux
+research_archive/report/*.fdb_latexmk
+research_archive/report/*.fls
+research_archive/report/*.log
+research_archive/report/*.out
+research_archive/report/*.toc
+research_archive/report/*.xdv
+research_archive/report/_*.png
