@@ -462,15 +462,13 @@ If I ran this again I would fix the gate thresholds in a file the analysis reads
 
 I thank Professor Wu Xixin for supervision throughout the project, and Mr. Jackson Wong and Mr. Gordon Mak at Theo Quant for the original problem statement. Market data were obtained from Binance's public endpoints.
 
-**Use of AI tools.** I acknowledge the use of DeepSeek Harness, an AI coding and writing assistant built on DeepSeek models (deepseek v4.1 flash), for the following support: drafting the prose of this report; writing and debugging the analysis code in the repository; checking numerical claims against the project's output files. The research question, the design of the experiments, the choice of gates and the interpretation of every result are my own. All numbers in this report come from the pipeline in the repository rather than from the AI tool, and every figure and table is produced by that code from the data, not by the tool.
+**Use of AI tools.** I acknowledge the use of DeepSeek Harness, an AI coding and writing assistant built on DeepSeek models (deepseek v4.1 flash), for the following support: drafting the prose of this report; writing and debugging the analysis code; checking numerical claims against the analysis outputs. The research question, the design of the experiments, the choice of gates and the interpretation of every result are my own. All numbers in this report come from the analysis code rather than from the AI tool, and every figure and table is produced by that code from the data, not by the tool.
 
 ---
 
 ## 11 Appendices
 
 ### Appendix A — References
-
-Fourteen research entries, each checked against Crossref or arXiv on 2026-11-19, plus one software citation for the AI tool acknowledged in Section 10. Every DOI and identifier resolves. The machine-readable version is refs.bib.
 
 Brauneis, A., Mestel, R., Riordan, R., & Theissen, E. (2021). How to measure the liquidity of cryptocurrency markets? *Journal of Banking & Finance, 124*, 106041. https://doi.org/10.1016/j.jbankfin.2020.106041
 
@@ -534,7 +532,7 @@ DeepSeek. (2026). *DeepSeek Harness* (accessed 24 November 2026). https://www.de
 
 ### Appendix D — Sample construction
 
-Every row below is a filter on the hourly grid, and each one removes a different kind of observation. The counts are the ones the pipeline prints at run time; the panel figures were re-counted from the parquet files.
+Every row below is a filter on the hourly grid, and each one removes a different kind of observation.
 
 | Stage | Units | What it means |
 |---|---:|---|
