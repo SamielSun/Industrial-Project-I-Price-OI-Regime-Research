@@ -1,5 +1,5 @@
-# Price × Open-Interest Regimes in Binance Perpetual Futures
-## What Positioning Data Does and Does Not Predict
+# Price and Open-Interest Regimes in Crypto Perpetual Futures
+## Do Joint Positioning States Contain Predictive Information Beyond Price Alone?
 
 **FTEC5910 Financial Technology Project I — Final Report**
 Author: Sun Yusu, Student ID 1155267751

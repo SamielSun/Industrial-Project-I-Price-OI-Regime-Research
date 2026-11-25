@@ -65,8 +65,8 @@ preamble = r"""\documentclass[11pt,a4paper]{article}
 \setlength{\parskip}{0.35em}
 \setlength{\parindent}{0pt}
 \renewcommand{\arraystretch}{1.15}
-\title{\textbf{Price $\times$ Open-Interest Regimes in Binance Perpetual Futures}\\[4pt]
-\large What Positioning Data Does and Does Not Predict}
+\title{\textbf{Price and Open-Interest Regimes in Crypto Perpetual Futures}\\[4pt]
+\large Do Joint Positioning States Contain Predictive Information Beyond Price Alone?}
 \author{Sun Yusu\\[2pt]\small Student ID 1155267751\\[6pt]
 \small Academic Supervisor: Professor Wu Xixin\\
 \small Industrial Supervisor: Mr. Jackson Wong}

@@ -59,7 +59,7 @@ Kim's result is the closest external support this project has. Funding-rate meas
 | 6.1 | Headline framing | "The framework is the contribution; the negative result is the evidence" | Rewriting Abstract, §7 and the presentation. Low now, high after the slides exist |
 | 6.2 | The non-member divergence (N30) | Reported in §6.5 as an observation, with no causal claim | If a supervisor reads it as data-mining, it can be cut to one clause. Keeping it is the riskier but more honest choice |
 | 6.3 | One-week horizon | Absent | The pipeline stops at 24 h. Adding it means re-running Phase 3 and invalidating the in-sample declaration |
-| 6.4 | Title | "Price × Open-Interest Regimes in Binance Perpetual Futures" | Free to change until the cover page is fixed |
+| 6.4 | Title | "Price and Open-Interest Regimes in Crypto Perpetual Futures: Do Joint Positioning States Contain Predictive Information Beyond Price Alone?" | Matches the title registered in the planning form |
 
 ## 7. Things the report deliberately does not claim
 
